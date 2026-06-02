@@ -1,11 +1,14 @@
+from typing import cast
+
 import numpy as np
+import numpy.typing as npt
 from scipy.stats import ortho_group, unitary_group
 
 from finitefree.convolutions import symmetric_additive
 from finitefree.core import RealRootedPolynomial
 
 
-def random_symplectic(d: int) -> np.ndarray:
+def random_symplectic(d: int) -> npt.NDArray[np.complex128]:
     """
     Generates a Haar-distributed unitary symplectic matrix in USp(2d)
     using block quaternionic QR decomposition.
@@ -18,7 +21,7 @@ def random_symplectic(d: int) -> np.ndarray:
     d_R_safe = np.where(d_R == 0, 1.0, d_R)
     ph = d_R_safe / np.abs(d_R_safe)
     Q = Q * ph
-    return Q
+    return cast(npt.NDArray[np.complex128], Q)
 
 
 def test_empirical_unitary_validation_beta2() -> None:
