@@ -109,6 +109,14 @@ def test_to_fmpq_mpoly() -> None:
     import flint
     import sympy as sp
 
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed "
+            "python-flint version"
+        )
+
     # Construct a multivariate polynomial P(x, y) = 3 x^2 + 2 x y + 5 y^2
     x, y = sp.symbols("x y")
     mp = MultivariatePolynomial(3 * x**2 + 2 * x * y + 5 * y**2, [x, y])

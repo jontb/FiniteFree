@@ -110,6 +110,12 @@ class MultivariatePolynomial:
         """
         import flint
 
+        if not hasattr(flint, "fmpq_mpoly_ctx"):
+            raise NotImplementedError(
+                "fmpq_mpoly_ctx is not supported in the installed "
+                "version of python-flint."
+            )
+
         names = tuple(x.name for x in self.variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)
 
