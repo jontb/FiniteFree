@@ -31,16 +31,16 @@ jobs:
 
     - name: Verify Code Formatting
       run: |
-        ruff format --check finitefree/ tests/
+        python -m ruff format --check finitefree/ tests/
 
     - name: Run Linting and Static Type Checking
       run: |
-        ruff check finitefree/ tests/
-        mypy finitefree/ tests/
+        python -m ruff check finitefree/ tests/
+        python -m mypy finitefree/ tests/
 
     - name: Test with pytest and coverage
       run: |
-        pytest --cov=finitefree --cov-report=xml tests/
+        python -m pytest --cov=finitefree --cov-report=xml tests/
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
