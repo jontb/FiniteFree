@@ -63,11 +63,13 @@ def showcase_asymptotics() -> None:
         # We want t = 0.5 -> k/d = 0.5 -> k = d//2
         S = FiniteSTransform(p)
         k = d // 2
-        val = S[k-1]
+        val = S[k - 1]
         print(f"   d={d} -> S_p^({d})(-0.5) = {float(val):.4f}")
+
 
 if __name__ == "__main__":
     showcase_asymptotics()
+
 
 def build_hermite_poly(d: int) -> RealRootedPolynomial:
     """
@@ -83,7 +85,7 @@ def build_hermite_poly(d: int) -> RealRootedPolynomial:
         # c = d! / (m! * (d - 2m)! * (-2)^m) -- wait, He_n(x) has integers?
         # Actually He_n has integers. c = (-1)^m * d! / (m! * (d - 2m)! * 2^m)
         num = math.factorial(d)
-        den = math.factorial(m) * math.factorial(d - 2 * m) * (2 ** m)
+        den = math.factorial(m) * math.factorial(d - 2 * m) * (2**m)
         val = ((-1) ** m) * (num // den)
         coeffs[2 * m] = val  # index is 2m, corresponding to x^{d - 2m}
     return RealRootedPolynomial(coeffs, assume_real_rooted=True)
@@ -104,13 +106,11 @@ def build_laguerre_poly(d: int, c_ratio: float = 2.0) -> RealRootedPolynomial:
         k = d - i
         sign = (-1) ** (d + i)
         val = (
-            sign
-            * math.factorial(d)
-            * math.comb(d + alpha, d - i)
-            // math.factorial(i)
+            sign * math.factorial(d) * math.comb(d + alpha, d - i) // math.factorial(i)
         )
         coeffs[k] = val
     return RealRootedPolynomial(coeffs, assume_real_rooted=True)
+
 
 def showcase_semicircle_mp() -> None:
     print("\n3. Wigner Semicircle Law (Hermite Polynomials)")
@@ -137,7 +137,7 @@ def showcase_semicircle_mp() -> None:
         S = FiniteSTransform(p)
         # We want S(-t) for t=0.5 -> index k = d/2
         k = d // 2
-        val = S[k-1]
+        val = S[k - 1]
         print(f"   d={d} -> S_p^({d})(-0.5) = {float(val):.4f}")
 
 
@@ -186,6 +186,25 @@ def showcase_basics() -> None:
     print("   Finite R-Transform (Cumulants) of p(x) = x^2 - 3x + 2:")
     cumulants = FiniteRTransform(p, order=3)
     print(f"   R_2(y) cumulants: {cumulants}")
+
+    print("\n5. Interlacing Monotonicity of Limiting Polynomial (Phi_d)")
+    # Construct two interlacing polynomials p, q of degree 2
+    # p roots: {1, 10} -> x^2 - 11x + 10
+    # q roots: {2, 11} -> x^2 - 13x + 22
+    p_int = RealRootedPolynomial([1, -11, 10], assume_real_rooted=True)
+    q_int = RealRootedPolynomial([1, -13, 22], assume_real_rooted=True)
+    print("   p(x) roots (1, 10) and q(x) roots (2, 11) strictly interlace: p << q")
+
+    phi_p = p_int.phi_d()
+    phi_q = q_int.phi_d()
+    roots_phi_p = phi_p.evaluate_roots_float64()
+    roots_phi_q = phi_q.evaluate_roots_float64()
+    print(f"   Phi_2(p) roots: {list(roots_phi_p)}")
+    print(f"   Phi_2(q) roots: {list(roots_phi_q)}")
+
+    # Verify interlacing: r1 <= s1 <= r2 <= s2
+    interlaces = roots_phi_p[0] <= roots_phi_q[0] <= roots_phi_p[1] <= roots_phi_q[1]
+    print(f"   Phi_2(p) roots and Phi_2(q) roots interlace: {interlaces}")
 
 
 if __name__ == "__main__":

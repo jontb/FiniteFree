@@ -64,3 +64,18 @@ def test_symmetric_additive_interlacing() -> None:
     res = symmetric_additive(p, q, d=2)
     # The result (x^2 - 5) should strictly interlace its derivative
     assert res.verify_root_interlacing(strict=True)
+
+
+def test_ambient_dimension_mismatch() -> None:
+    from finitefree.convolutions import symmetric_additive
+
+    # p(x) = x^2 - 3x + 2 (roots: 1, 2)
+    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
+    # q(x) = x^4 (roots: 0, 0, 0, 0)
+    q = RealRootedPolynomial([1, 0, 0, 0, 0], assume_real_rooted=True)
+
+    # Convolve in ambient dimension d=4
+    res = symmetric_additive(p, q, d=4)
+
+    # Reconstructed polynomial must preserve real-rootedness
+    assert res.verify_real_rootedness()

@@ -4,7 +4,7 @@ from typing import Any, Dict, Sequence, Tuple, Union
 import numpy as np
 import sympy as sp
 
-from .hyperbolic import SymmetricMatrixPencil
+from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 
 
 class MultivariatePolynomial:
@@ -56,8 +56,8 @@ class MultivariatePolynomial:
         self, orders: Sequence[int]
     ) -> "MultivariatePolynomial":
         """
-        Computes mixed partial derivatives.
-        orders: list of derivative order for each variable.
+        Computes mixed partial derivatives exactly and efficiently by
+        performing dictionary-based arithmetic over monomial exponents.
         """
         if len(orders) != len(self.variables):
             raise ValueError(
@@ -65,10 +65,41 @@ class MultivariatePolynomial:
                 f"variable count ({len(self.variables)})."
             )
 
-        deriv_expr = self.expr
-        for x_i, order in zip(self.variables, orders):
-            if order > 0:
-                deriv_expr = sp.diff(deriv_expr, x_i, order)
+        poly = sp.Poly(self.expr, self.variables)
+        coeffs_dict = poly.as_dict()
+
+        new_coeffs = {}
+        for alpha, c in coeffs_dict.items():
+            vanishes = False
+            factor = 1
+            new_alpha = []
+            for a_val, ord_val in zip(alpha, orders):
+                if a_val < ord_val:
+                    vanishes = True
+                    break
+                f = 1
+                for k in range(ord_val):
+                    f *= a_val - k
+                factor *= f
+                new_alpha.append(a_val - ord_val)
+
+            if not vanishes:
+                new_coeffs[tuple(new_alpha)] = c * factor
+
+        if not new_coeffs:
+            deriv_expr = sp.Integer(0)
+        else:
+            terms = []
+            for alpha, coeff in new_coeffs.items():
+                factors = []
+                for x, a in zip(self.variables, alpha):
+                    if a > 0:
+                        factors.append(x**a)
+                if factors:
+                    terms.append(coeff * sp.Mul(*factors))
+                else:
+                    terms.append(sp.sympify(coeff))
+            deriv_expr = sp.Add(*terms)
 
         return MultivariatePolynomial(deriv_expr, self.variables)
 
@@ -131,7 +162,9 @@ class MultivariatePolynomial:
 
     @classmethod
     def from_symmetric_matrix_pencil_interpolated(
-        cls, pencil: SymmetricMatrixPencil, parallel: bool = False
+        cls,
+        pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil],
+        parallel: bool = False,
     ) -> "MultivariatePolynomial":
         """
         Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)
@@ -146,6 +179,20 @@ class MultivariatePolynomial:
         n = pencil.n
         m = pencil.m
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
+
+        if m == 1:
+            exact_A = []
+            for r in range(n):
+                row = []
+                for c in range(n):
+                    val = sp.sympify(pencil.matrices[0][r, c])
+                    if isinstance(val, (int, float, np.number)):
+                        val = sp.Rational(val)
+                    row.append(val)
+                exact_A.append(row)
+            det_val = sp.Matrix(exact_A).det()
+            expr = det_val * (variables[0] ** n)
+            return cls(expr, variables)
 
         def get_monomial_exponents(dim: int, deg: int) -> list[tuple[int, ...]]:
             if dim == 1:
@@ -183,10 +230,7 @@ class MultivariatePolynomial:
         N = len(exps)
 
         grid_vals = list(range(n + 1))
-        grid_pts = get_grid_points(m - 1, grid_vals)
-        grid_pts.sort(key=sum)
-
-        points = [pt + (1,) for pt in grid_pts[:N]]
+        full_grid_pts = get_grid_points(m - 1, grid_vals)
 
         # Convert all matrices to exact Rational representation to clear denominators
         exact_matrices = []
@@ -230,16 +274,67 @@ class MultivariatePolynomial:
             integer_matrices.append(int_A)
 
         # modular determinant grid evaluations mod p
-        PRIMES = [
-            1000000007,
-            1000000009,
-            1000000021,
-            1000000033,
-            1000000087,
-            1000000093,
-            1000000097,
-            1000000103,
-        ]
+        def prime_generator(start: int = 1000000007) -> Any:
+            curr = start
+            while True:
+                if flint.fmpz(curr).is_probable_prime():
+                    yield curr
+                curr += 1
+
+        def get_inverse_vandermonde_matrices(
+            max_k: int, p: int
+        ) -> dict[int, list[list[int]]]:
+            invs = {}
+            for k in range(1, max_k + 1):
+                V = flint.nmod_mat(k, k, p)
+                for r in range(k):
+                    for c in range(k):
+                        V[r, c] = pow(r, c, p)
+                identity_matrix = flint.nmod_mat(k, k, p)
+                for r in range(k):
+                    identity_matrix[r, r] = 1
+                try:
+                    V_inv = V.solve(identity_matrix)
+                    invs[k] = [[int(V_inv[r, c]) for c in range(k)] for r in range(k)]
+                except Exception as e:
+                    raise ValueError(
+                        f"Vandermonde matrix of size {k} not invertible mod {p}"
+                    ) from e
+            return invs
+
+        def interpolate_full_grid(
+            values: dict[tuple[int, ...], int],
+            v: int,
+            d: int,
+            p: int,
+            inv_vands: dict[int, list[list[int]]],
+        ) -> dict[tuple[int, ...], int]:
+            current_values = dict(values)
+            for step in range(v):
+                from collections import defaultdict
+
+                grouped = defaultdict(list)
+                for pt, val in current_values.items():
+                    vi = pt[step]
+                    rem = pt[:step] + pt[step + 1 :]
+                    grouped[rem].append((vi, val))
+
+                next_values = {}
+                V_inv = inv_vands[d + 1]
+                for rem, vi_vals in grouped.items():
+                    vi_vals.sort(key=lambda x: x[0])
+                    y = [val for _, val in vi_vals]
+                    c = [0] * (d + 1)
+                    for r in range(d + 1):
+                        s = 0
+                        for col in range(d + 1):
+                            s = (s + V_inv[r][col] * y[col]) % p
+                        c[r] = s
+                    for j, coeff in enumerate(c):
+                        new_pt = rem[:step] + (j,) + rem[step:]
+                        next_values[new_pt] = coeff
+                current_values = next_values
+            return current_values
 
         def eval_point_mod_p(pt: tuple[int, ...], p: int) -> int:
             M_pt = flint.nmod_mat(n, n, p)
@@ -250,28 +345,6 @@ class MultivariatePolynomial:
                         val = (val + pt_val * int_A[r][c]) % p
                     M_pt[r, c] = val
             return int(M_pt.det())
-
-        def solve_system_mod_p(p: int) -> list[int]:
-            # Solve modular Vandermonde system V_flint * c_p = y_flint modulo p
-            V_flint = flint.nmod_mat(N, N, p)
-            for r in range(N):
-                pt = points[r]
-                for c in range(N):
-                    exp = exps[c]
-                    term = 1
-                    for pt_val, power in zip(pt, exp):
-                        term = (term * (pt_val**power)) % p
-                    V_flint[r, c] = term
-
-            y_flint = flint.nmod_mat(N, 1, p)
-            for r in range(N):
-                y_flint[r, 0] = eval_point_mod_p(points[r], p)
-
-            try:
-                c_flint = V_flint.solve(y_flint)
-                return [int(c_flint[r, 0]) for r in range(N)]
-            except Exception as e:
-                raise ValueError(f"System not invertible modulo {p}") from e
 
         def crt(modulo_values: list[int], primes: list[int]) -> int:
             n_p = len(primes)
@@ -303,13 +376,20 @@ class MultivariatePolynomial:
                 x -= M
             return x
 
+        primes_gen = prime_generator(1000000007)
         reconstructed = None
         primes_used = []
         coeffs_by_prime = []
 
-        for p in PRIMES:
+        while True:
+            p = next(primes_gen)
             try:
-                c_p = solve_system_mod_p(p)
+                inv_vands = get_inverse_vandermonde_matrices(n + 1, p)
+                values = {}
+                for pt in full_grid_pts:
+                    values[pt] = eval_point_mod_p(pt + (1,), p)
+                interpolated = interpolate_full_grid(values, m - 1, n, p, inv_vands)
+                c_p = [interpolated.get(exp[:-1], 0) for exp in exps]
             except ValueError:
                 continue
 
@@ -326,13 +406,9 @@ class MultivariatePolynomial:
                     reconstructed is not None
                     and current_reconstruction == reconstructed
                 ):
+                    reconstructed = current_reconstruction
                     break
                 reconstructed = current_reconstruction
-        else:
-            if reconstructed is None:
-                raise ValueError(
-                    "Modular determinant interpolation failed to stabilize."
-                )
 
         c_coeffs = []
         denom_scale = D**n
@@ -350,8 +426,245 @@ class MultivariatePolynomial:
         return cls(expr, variables)
 
     @classmethod
+    def from_symmetric_matrix_pencil_sparse(
+        cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
+    ) -> "MultivariatePolynomial":
+        """
+        Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)
+        by evaluating the determinants modulo prime numbers exactly using fast
+        C-level modular matrix mathematics and reconstructing exact coefficients
+        over Q using Zippel's sparse interpolation algorithm.
+        """
+        import math
+        import random
+
+        import flint
+
+        n = pencil.n
+        m = pencil.m
+        variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
+
+        if m == 1:
+            exact_A = []
+            for r in range(n):
+                row = []
+                for c in range(n):
+                    val = sp.sympify(pencil.matrices[0][r, c])
+                    if isinstance(val, (int, float, np.number)):
+                        val = sp.Rational(val)
+                    row.append(val)
+                exact_A.append(row)
+            det_val = sp.Matrix(exact_A).det()
+            expr = det_val * (variables[0] ** n)
+            return cls(expr, variables)
+
+        exact_matrices = []
+        for A in pencil.matrices:
+            exact_A = []
+            for r in range(n):
+                row = []
+                for c in range(n):
+                    val = sp.sympify(A[r, c])
+                    if isinstance(val, (int, float, np.number)):
+                        val = sp.Rational(val)
+                    row.append(val)
+                exact_A.append(row)
+            exact_matrices.append(exact_A)
+
+        denominators = []
+        for exact_A in exact_matrices:
+            for r in range(n):
+                for c in range(n):
+                    val = exact_A[r][c]
+                    if isinstance(val, sp.Rational):
+                        denominators.append(val.q)
+                    else:
+                        denominators.append(1)
+
+        D = 1
+        for den in denominators:
+            D = (D * den) // math.gcd(D, den)
+
+        integer_matrices = []
+        for exact_A in exact_matrices:
+            int_A = []
+            for r in range(n):
+                row = []
+                for c in range(n):
+                    val = exact_A[r][c] * D
+                    row.append(int(val))
+                int_A.append(row)
+            integer_matrices.append(int_A)
+
+        def eval_point_mod_p(pt: tuple[int, ...], p: int) -> int:
+            M_pt = flint.nmod_mat(n, n, p)
+            for r in range(n):
+                for c in range(n):
+                    val = 0
+                    for pt_val, int_A in zip(pt, integer_matrices):
+                        val = (val + pt_val * int_A[r][c]) % p
+                    M_pt[r, c] = val
+            return int(M_pt.det())
+
+        def zippel_mod_p(p: int) -> dict[tuple[int, ...], int]:
+            rand_gen = random.Random(42)
+            S: dict[tuple[int, ...], int] = {(): 1}
+
+            for i in range(1, m):
+                t = [rand_gen.randint(2, p - 2) for _ in range(m - 1 - i)]
+                candidates = []
+                for beta in S:
+                    sum_beta = sum(beta)
+                    for j in range(n - sum_beta + 1):
+                        candidates.append(beta + (j,))
+
+                K = len(candidates)
+                if K == 0:
+                    break
+
+                solved = False
+                attempts = 0
+                while not solved and attempts < 5:
+                    attempts += 1
+                    test_pts = []
+                    for _ in range(K):
+                        test_pts.append(
+                            tuple(rand_gen.randint(2, p - 2) for _ in range(i))
+                        )
+
+                    V = flint.nmod_mat(K, K, p)
+                    for r_idx in range(K):
+                        pt_val = test_pts[r_idx]
+                        for c_idx in range(K):
+                            exp = candidates[c_idx]
+                            term = 1
+                            for val, power in zip(pt_val, exp):
+                                term = (term * pow(val, power, p)) % p
+                            V[r_idx, c_idx] = term
+
+                    y = flint.nmod_mat(K, 1, p)
+                    for r_idx in range(K):
+                        full_pt = test_pts[r_idx] + tuple(t) + (1,)
+                        y[r_idx, 0] = eval_point_mod_p(full_pt, p)
+
+                    try:
+                        c_flint = V.solve(y)
+                        solved = True
+                        C = [int(c_flint[r_idx, 0]) for r_idx in range(K)]
+                    except Exception:
+                        continue
+
+                if not solved:
+                    raise ValueError(f"Zippel interpolation failed mod {p}")
+
+                S = {}
+                for coeff, exp in zip(C, candidates):
+                    if coeff != 0:
+                        S[exp] = coeff
+
+            return S
+
+        def crt(modulo_values: list[int], primes: list[int]) -> int:
+            n_p = len(primes)
+            mix = list(modulo_values)
+            c = [1] * n_p
+            for i in range(1, n_p):
+                c_val = 1
+                for j in range(i):
+                    c_val = (c_val * primes[j]) % primes[i]
+                c_inv = pow(c_val, -1, primes[i])
+                c[i] = c_inv
+            u = [0] * n_p
+            u[0] = mix[0] % primes[0]
+            for i in range(1, n_p):
+                val = u[0]
+                p_prod = 1
+                for j in range(1, i):
+                    p_prod = (p_prod * primes[j - 1]) % primes[i]
+                    val = (val + u[j] * p_prod) % primes[i]
+                u[i] = ((mix[i] - val) * c[i]) % primes[i]
+            x = u[0]
+            p_prod = 1
+            M = primes[0]
+            for i in range(1, n_p):
+                p_prod *= primes[i - 1]
+                x += u[i] * p_prod
+                M *= primes[i]
+            if x > M // 2:
+                x -= M
+            return x
+
+        def prime_generator(start: int = 1000000007) -> Any:
+            curr = start
+            while True:
+                if flint.fmpz(curr).is_probable_prime():
+                    yield curr
+                curr += 1
+
+        primes_gen = prime_generator(1000000007)
+        reconstructed = None
+        primes_used = []
+        coeffs_by_prime = []
+        exps = []
+
+        while True:
+            p = next(primes_gen)
+            try:
+                S_p = zippel_mod_p(p)
+            except ValueError:
+                continue
+
+            for exp in S_p:
+                if exp not in exps:
+                    exps.append(exp)
+
+            coeffs_by_prime.append(S_p)
+            primes_used.append(p)
+
+            if len(primes_used) >= 2:
+                current_reconstruction = {}
+                for exp in exps:
+                    vals = []
+                    for k in range(len(primes_used)):
+                        vals.append(coeffs_by_prime[k].get(exp, 0))
+                    current_reconstruction[exp] = crt(vals, primes_used)
+
+                if (
+                    reconstructed is not None
+                    and current_reconstruction == reconstructed
+                ):
+                    reconstructed = current_reconstruction
+                    break
+                reconstructed = current_reconstruction
+
+        c_coeffs = {}
+        denom_scale = D**n
+        for exp, val in reconstructed.items():
+            if val % denom_scale == 0:
+                c_coeffs[exp] = val // denom_scale
+            else:
+                c_coeffs[exp] = sp.Rational(val, denom_scale)
+
+        expr = sp.Integer(0)
+        for exp, coeff in c_coeffs.items():
+            monom_factors = []
+            for i in range(m - 1):
+                if exp[i] > 0:
+                    monom_factors.append(variables[i] ** exp[i])
+            power_last = n - sum(exp)
+            if power_last > 0:
+                monom_factors.append(variables[-1] ** power_last)
+
+            if monom_factors:
+                expr += coeff * sp.Mul(*monom_factors)
+            else:
+                expr += coeff
+
+        return cls(expr, variables)
+
+    @classmethod
     def from_symmetric_matrix_pencil(
-        cls, pencil: SymmetricMatrixPencil
+        cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
     ) -> "MultivariatePolynomial":
         """
         Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)

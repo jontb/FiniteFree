@@ -1,5 +1,4 @@
 import math
-from typing import Any
 
 import numpy as np
 import sympy as sp
@@ -21,23 +20,16 @@ def symmetric_additive(
 
     import flint
 
-    e_p = p.normalized_coeffs()
-    e_q = q.normalized_coeffs()
+    e_p = p.normalized_coeffs(d)
+    e_q = q.normalized_coeffs(d)
 
     A_coeffs = []
     B_coeffs = []
 
-    e_p_pad = [0] * (d + 1)
-    for idx, val in enumerate(e_p):
-        e_p_pad[idx] = val
-    e_q_pad = [0] * (d + 1)
-    for idx, val in enumerate(e_q):
-        e_q_pad[idx] = val
-
     for k in range(d + 1):
         fact = math.factorial(k)
 
-        val_p = e_p_pad[k]
+        val_p = e_p[k]
         if isinstance(val_p, sp.Rational):
             A_coeffs.append(flint.fmpq(int(val_p.p), int(val_p.q) * fact))
         else:
@@ -47,7 +39,7 @@ def symmetric_additive(
             else:
                 A_coeffs.append(flint.fmpq(int(val_p), fact))
 
-        val_q = e_q_pad[k]
+        val_q = e_q[k]
         if isinstance(val_q, sp.Rational):
             B_coeffs.append(flint.fmpq(int(val_q.p), int(val_q.q) * fact))
         else:
@@ -86,16 +78,13 @@ def multiplicative(
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
 
-    e_p = p.normalized_coeffs()
-    e_q = q.normalized_coeffs()
-
-    def get_e(arr: NDArray[np.object_], idx: int) -> Any:
-        return arr[idx] if idx < len(arr) else 0
+    e_p = p.normalized_coeffs(d)
+    e_q = q.normalized_coeffs(d)
 
     e_res = np.zeros(d + 1, dtype=object)
 
     for k in range(d + 1):
-        e_res[k] = get_e(e_p, k) * get_e(e_q, k)
+        e_res[k] = e_p[k] * e_q[k]
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)
 
@@ -113,8 +102,8 @@ def asymmetric_additive(
 
     import flint
 
-    e_p = p.normalized_coeffs()
-    e_q = q.normalized_coeffs()
+    e_p = p.normalized_coeffs(d)
+    e_q = q.normalized_coeffs(d)
 
     def to_fmpq(arr: NDArray[np.object_]) -> list[flint.fmpq]:
         res = []

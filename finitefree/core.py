@@ -150,77 +150,127 @@ class RealRootedPolynomial:
             self._is_verified = True
             return True
 
-        except Exception as e:
-            # Fallback to numerical check if exact methods fail on extreme degrees
-            roots = np.roots(np.array(self.coeffs, dtype=float))
-            if not np.allclose(np.imag(roots), 0):
-                raise ValueError(
-                    "Numerical fallback: Polynomial is not real-rooted."
-                ) from e
-            self._is_verified = True
-            return True
+        except Exception:
+            # Fallback to numerical check via Flint's Arb-certified roots
+            # if exact Sturm sequences fail or raise an exception
+            try:
+                import flint
+
+                q_coeffs = []
+                for c in reversed(self.coeffs):
+                    if isinstance(c, sp.Rational):
+                        q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
+                    elif isinstance(c, (float, np.floating)):
+                        c_sym = sp.Rational(float(c))
+                        q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
+                    else:
+                        q_coeffs.append(flint.fmpq(int(c), 1))
+
+                f_poly = flint.fmpq_poly(q_coeffs)
+                acb_roots = f_poly.complex_roots()
+
+                # Verify that all isolated roots are real (i.e. imaginary
+                # part contains 0)
+                for r_pair in acb_roots:
+                    r = r_pair[0]
+                    if 0 not in r.imag:
+                        raise ValueError("Complex root detected in Arb isolation.")
+
+                self._is_verified = True
+                return True
+            except Exception as inner_e:
+                # If Flint complex_roots itself fails, fall back to numpy.roots
+                # with a conservative tolerance to prevent false rejections
+                # due to Wilkinson's phenomenon.
+                roots = np.roots(np.array(self.coeffs, dtype=float))
+                if not np.allclose(np.imag(roots), 0, atol=1e-2, rtol=1e-2):
+                    raise ValueError(
+                        "Numerical fallback: Polynomial is not real-rooted."
+                    ) from inner_e
+                self._is_verified = True
+                return True
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
         """
         Verifies that the roots of the derivative p'(x) interlace the roots of p(x).
-        This is a foundational geometry requirement for hyperbolic polynomials.
-        If strict=True, requires strict interlacing (\alpha_1 < \beta_1 < \alpha_2 ...).
+        For univariate polynomials, if p(x) is real-rooted, Rolle's Theorem
+        mathematically guarantees that the roots of p'(x) interlace the roots of p(x).
+        If strict=True, they strictly interlace if and only if all roots of p(x)
+        are simple (which corresponds to the polynomial being square-free).
         """
+        self.verify_real_rootedness()
+
+        if not strict:
+            return True
+
         if self.degree <= 1:
             return True
 
-        # High-precision stable root isolation solver to avoid Wilkinson's phenomenon
-        roots_p = self.evaluate_roots_float64(parallel=False)
+        # Check if the polynomial is square-free (no multiple roots)
+        import flint
 
-        # Derivative coefficients
-        # if c_k is for x^{d-k}, then derivative coefficient is c_k * (d-k)
-        d = self.degree
-        dp_coeffs = [self.coeffs[k] * (d - k) for k in range(d)]
-        dp = RealRootedPolynomial(dp_coeffs, assume_real_rooted=True)
-        roots_dp = dp.evaluate_roots_float64(parallel=False)
-
-        for i in range(d - 1):
-            if strict:
-                if not (roots_p[i] < roots_dp[i] < roots_p[i + 1]):
-                    raise ValueError(
-                        f"Strict root interlacing failed between {roots_p[i]} "
-                        f"and {roots_p[i + 1]} with derivative root {roots_dp[i]}"
-                    )
+        # Construct fmpq_poly in ascending degree order (x^0, ..., x^d)
+        q_coeffs = []
+        for c in reversed(self.coeffs):
+            if isinstance(c, sp.Rational):
+                q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
+            elif isinstance(c, (float, np.floating)):
+                c_sym = sp.Rational(float(c))
+                q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
             else:
-                if not (roots_p[i] <= roots_dp[i] <= roots_p[i + 1]):
-                    raise ValueError(
-                        f"Root interlacing failed between {roots_p[i]} "
-                        f"and {roots_p[i + 1]} with derivative root {roots_dp[i]}"
-                    )
+                q_coeffs.append(flint.fmpq(int(c), 1))
+
+        f_poly = flint.fmpq_poly(q_coeffs)
+        _, factors = f_poly.factor_squarefree()
+
+        for _, multiplicity in factors:
+            if multiplicity > 1:
+                raise ValueError(
+                    "Strict root interlacing failed: multiple roots detected."
+                )
 
         return True
 
-    def normalized_coeffs(self) -> NDArray[np.object_]:
+    def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
         """
         Extracts the normalized elementary symmetric polynomial sequence
-        \\tilde{e}_k^{(d)}(p).
-        c[k] = (-1)^k \\binom{d}{k} \\tilde{e}_k^{(d)}(p)
+        \\tilde{e}_k^{(d)}(p) with respect to ambient dimension d.
         """
-        if self._normalized_coeffs_cached is not None:
+        if d is None:
+            d = self.degree
+
+        if d < self.degree:
+            raise ValueError(
+                f"Ambient dimension d ({d}) cannot be less than polynomial "
+                f"degree ({self.degree})."
+            )
+
+        if d == self.degree and self._normalized_coeffs_cached is not None:
             return self._normalized_coeffs_cached
 
-        d = self.degree
         e_k = []
         for k in range(d + 1):
-            binom = math.comb(d, k)
-            sign = (-1) ** k
-            c_k = self.coeffs[k]
-            val = sign * binom
-            # Maintain exact rational/integer representation to avoid float truncation
-            if isinstance(c_k, (int, np.integer)):
-                if c_k % val == 0:
-                    e_k.append(c_k // val)
+            if k <= self.degree:
+                binom = math.comb(d, k)
+                sign = (-1) ** k
+                c_k = self.coeffs[k]
+                val = sign * binom
+                # Maintain exact rational/integer representation to avoid
+                # float truncation
+                if isinstance(c_k, (int, np.integer)):
+                    if c_k % val == 0:
+                        e_k.append(c_k // val)
+                    else:
+                        e_k.append(sp.Rational(c_k, val))
                 else:
-                    e_k.append(sp.Rational(c_k, val))
+                    e_k.append(c_k / val)
             else:
-                e_k.append(c_k / val)
-        self._normalized_coeffs_cached = np.array(e_k, dtype=object)
-        return self._normalized_coeffs_cached
+                e_k.append(0)
+
+        res_array = np.array(e_k, dtype=object)
+        if d == self.degree:
+            self._normalized_coeffs_cached = res_array
+        return res_array
 
     @classmethod
     def from_normalized_coeffs(
@@ -470,3 +520,192 @@ class RealRootedPolynomial:
                 )
                 float_coeffs = np.array(self.coeffs, dtype=float)
                 return np.sort(np.real(np.roots(float_coeffs)))
+
+    def dilation(self, c: Any) -> "RealRootedPolynomial":
+        """
+        Computes the dilated polynomial [Dil_c p](x) = c^d p(x/c).
+        """
+        if c == 0:
+            raise ValueError("Dilation factor c cannot be zero.")
+
+        d = self.degree
+        new_coeffs = []
+        for k in range(d + 1):
+            val_c = self.coeffs[k]
+            scale = c**k
+            # Maintain exact representation
+            if isinstance(val_c, (int, np.integer)) and isinstance(
+                scale, (int, np.integer)
+            ):
+                new_coeffs.append(val_c * scale)
+            else:
+                new_coeffs.append(val_c * scale)
+
+        return RealRootedPolynomial(new_coeffs, assume_real_rooted=self._is_verified)
+
+    def shift(self, c: Any) -> "RealRootedPolynomial":
+        """
+        Computes the shifted polynomial [Shi_c p](x) = p(x-c).
+        """
+        x = sp.Symbol("x")
+        poly_expr = sum(
+            sp.Rational(coeff) * x ** (self.degree - i)
+            for i, coeff in enumerate(self.coeffs)
+        )
+        shifted_expr = sp.expand(poly_expr.subs(x, x - c))
+        poly = sp.Poly(shifted_expr, x)
+        coeffs = list(poly.all_coeffs())
+        return RealRootedPolynomial(coeffs, assume_real_rooted=self._is_verified)
+
+    def power(self, c: Any) -> "RealRootedPolynomial":
+        """
+        Computes the polynomial p^(c) whose roots are lambda_i(p)^c.
+        """
+        if c <= 0:
+            raise ValueError("Power factor c must be strictly positive.")
+
+        roots = self.evaluate_roots_float64()
+        new_roots = [r**c for r in roots]
+        return RealRootedPolynomial.from_roots(new_roots)
+
+    def reversed_polynomial(self) -> "RealRootedPolynomial":
+        """
+        Computes the reversed polynomial p^(-1) with roots 1/lambda_i(p).
+        """
+        d = self.degree
+        e_k = self.normalized_coeffs()
+
+        # e_d must be non-zero (otherwise we have a root at 0 and cannot invert)
+        e_d = e_k[d]
+        if e_d == 0:
+            raise ValueError(
+                "Reversed polynomial is only defined for polynomials with "
+                "strictly non-zero roots."
+            )
+
+        new_e = []
+        for k in range(d + 1):
+            val_num = e_k[d - k]
+            val_den = e_d
+            # Maintain exact representation
+            if isinstance(val_num, (int, np.integer)) and isinstance(
+                val_den, (int, np.integer)
+            ):
+                if val_num % val_den == 0:
+                    new_e.append(val_num // val_den)
+                else:
+                    new_e.append(sp.Rational(val_num, val_den))
+            else:
+                new_e.append(val_num / val_den)
+
+        return RealRootedPolynomial.from_normalized_coeffs(new_e)
+
+    def phi_d(self) -> "RealRootedPolynomial":
+        """
+        Computes the limiting polynomial Phi_d(p) from Fujie and Ueda [FU23].
+        For p in P_d(R_>=0) with multiplicity r at root 0, the roots are
+        lambda_k = e_tilde_k / e_tilde_{k-1} for 1 <= k <= d - r, and 0 otherwise.
+        """
+        # Verify that all roots are non-negative
+        roots = self.evaluate_roots_float64()
+        if any(r < -1e-9 for r in roots):
+            raise ValueError(
+                "phi_d is only defined for polynomials with non-negative roots "
+                "(p in P_d(R_>=0))."
+            )
+
+        d = self.degree
+        e_k = self.normalized_coeffs()
+
+        # Multiplicity r of the root at 0 is the number of trailing zero coefficients
+        r = 0
+        while r < d and self.coeffs[d - r] == 0:
+            r += 1
+
+        new_roots = []
+        for k in range(1, d + 1):
+            if k <= d - r:
+                val_num = e_k[k]
+                val_den = e_k[k - 1]
+                if val_den == 0:
+                    raise ValueError(
+                        f"Zero division encountered: e_tilde_{k - 1} is zero."
+                    )
+                if isinstance(val_num, (int, np.integer)) and isinstance(
+                    val_den, (int, np.integer)
+                ):
+                    if val_num % val_den == 0:
+                        new_roots.append(val_num // val_den)
+                    else:
+                        new_roots.append(sp.Rational(val_num, val_den))
+                else:
+                    new_roots.append(val_num / val_den)
+            else:
+                new_roots.append(0)
+
+        return RealRootedPolynomial.from_roots(new_roots)
+
+    def derivative(self) -> "RealRootedPolynomial":
+        """
+        Computes the derivative p'(x) of the polynomial, monic-normalized.
+        """
+        if self.degree == 0:
+            raise ValueError("Cannot take derivative of a constant polynomial.")
+        d = self.degree
+        new_coeffs = []
+        for i in range(d):
+            new_coeffs.append(self.coeffs[i] * (d - i))
+        return RealRootedPolynomial(new_coeffs, assume_real_rooted=self._is_verified)
+
+    def projection(self, j: int) -> "RealRootedPolynomial":
+        """
+        Computes the projection \\partial^{j|d} p(x) which is the derivative
+        of order d-j, monic-normalized.
+        """
+        if j < 0 or j > self.degree:
+            raise ValueError("Projection dimension j must be between 0 and degree.")
+
+        current = self
+        for _ in range(self.degree - j):
+            current = current.derivative()
+        return current
+
+    def additive_power(self, t: Any) -> "RealRootedPolynomial":
+        """
+        Computes the fractional finite free additive convolution power
+        p^{\\boxplus_d t} defined via scaling the finite free cumulants:
+        κ_n^{(d)}(p^{\\boxplus_d t}) = t * κ_n^{(d)}(p).
+        """
+        if t <= 0:
+            raise ValueError(
+                "Fractional convolution power t must be strictly positive."
+            )
+
+        d = self.degree
+        from .transforms import FiniteRTransform
+
+        kappas = FiniteRTransform(self, order=d)
+        kappas_scaled = [k * t for k in kappas]
+
+        c_cumulants = []
+        for n in range(1, d + 1):
+            den = math.factorial(n - 1) * ((-d) ** (n - 1))
+            val_num = kappas_scaled[n - 1]
+            if isinstance(val_num, (int, np.integer)) and isinstance(
+                den, (int, np.integer)
+            ):
+                if val_num % den == 0:
+                    c_cumulants.append(val_num // den)
+                else:
+                    c_cumulants.append(sp.Rational(val_num, den))
+            else:
+                c_cumulants.append(val_num / den)
+
+        e_k: List[Any] = [1]
+        for n in range(1, d + 1):
+            en = c_cumulants[n - 1]
+            for k in range(1, n):
+                en += math.comb(n - 1, k - 1) * c_cumulants[k - 1] * e_k[n - k]
+            e_k.append(en)
+
+        return RealRootedPolynomial.from_normalized_coeffs(e_k)

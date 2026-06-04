@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
 import numpy as np
 import sympy as sp
@@ -43,8 +43,8 @@ def FiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
                 f"was encountered at index {k - 1} or {k}."
             )
 
-        val_num = e_k[k]
-        val_den = e_k[k - 1]
+        val_num = e_k[k - 1]
+        val_den = e_k[k]
         # Maintain exact rational/integer representation to avoid float truncation
         if isinstance(val_num, (int, np.integer)) and isinstance(
             val_den, (int, np.integer)
@@ -59,7 +59,9 @@ def FiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
     return s_transform
 
 
-def FiniteRTransform(p: RealRootedPolynomial, order: int = 5) -> List[Any]:
+def FiniteRTransform(
+    p: RealRootedPolynomial, order: int = 5, d: Optional[int] = None
+) -> List[Any]:
     """
     Extracts finite free cumulants κ_n^{(d)}(p) exactly using the classical
     cumulant-moment recurrence (O(n²)), which is equivalent to Möbius
@@ -70,8 +72,9 @@ def FiniteRTransform(p: RealRootedPolynomial, order: int = 5) -> List[Any]:
     """
     import math
 
-    d = p.degree
-    e_k = p.normalized_coeffs()
+    if d is None:
+        d = p.degree
+    e_k = p.normalized_coeffs(d)
 
     # c_n = classical cumulant of the sequence (e_1, e_2, ..., e_n)
     # Using the recurrence: c_n = e_n - sum_{k=1}^{n-1} C(n-1, k-1) * c_k * e_{n-k}
