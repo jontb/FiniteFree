@@ -276,4 +276,3 @@ if __name__ == "__main__":
     visualize_interlacing_preservation()
     elapsed = time.perf_counter() - t_start
     print(f"Static visuals successfully generated in {elapsed:.2f} seconds.")
-

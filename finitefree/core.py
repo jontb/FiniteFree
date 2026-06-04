@@ -64,7 +64,9 @@ class RealRootedPolynomial:
         self.degree: int = len(self.coeffs) - 1
         self._is_verified: bool = assume_real_rooted
         self._normalized_coeffs_cached: Union[NDArray[np.object_], None] = None
-        self._roots_cached: Union[NDArray[np.float64], None] = None
+        self._roots_cached: Union[NDArray[Any], None] = None
+        self._has_non_negative_roots_cached: Union[bool, None] = None
+        self._has_strictly_positive_roots_cached: Union[bool, None] = None
         # Track memory allocation
         PrecisionContext._ALLOCATION_COUNTER += 1
         if PrecisionContext._ALLOCATION_COUNTER >= PrecisionContext._GC_THRESHOLD:
@@ -367,7 +369,7 @@ class RealRootedPolynomial:
         float_coeffs = np.array(self.coeffs, dtype=float)
         return np.poly1d(float_coeffs)
 
-    def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[np.float64]:
+    def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[Any]:
         """
         Computes the roots of the polynomial with high numerical stability.
         Uses a hybrid approach: tries fast companion-matrix or parallelized
@@ -561,6 +563,11 @@ class RealRootedPolynomial:
         """
         Computes the polynomial p^(c) whose roots are lambda_i(p)^c.
         """
+        if not self.has_non_negative_roots:
+            raise ValueError(
+                "Power operation is only defined for polynomials with "
+                "non-negative roots."
+            )
         if c <= 0:
             raise ValueError("Power factor c must be strictly positive.")
 
@@ -607,8 +614,7 @@ class RealRootedPolynomial:
         lambda_k = e_tilde_k / e_tilde_{k-1} for 1 <= k <= d - r, and 0 otherwise.
         """
         # Verify that all roots are non-negative
-        roots = self.evaluate_roots_float64()
-        if any(r < -1e-9 for r in roots):
+        if not self.has_non_negative_roots:
             raise ValueError(
                 "phi_d is only defined for polynomials with non-negative roots "
                 "(p in P_d(R_>=0))."
@@ -709,3 +715,113 @@ class RealRootedPolynomial:
             e_k.append(en)
 
         return RealRootedPolynomial.from_normalized_coeffs(e_k)
+
+    def is_symmetric(self) -> bool:
+        """
+        A polynomial of degree 2d is symmetric if its degree is even and
+        all coefficients for odd powers of x are strictly zero (i.e. p(x) = p(-x)).
+        """
+        d = self.degree
+        if d % 2 != 0:
+            return False
+
+        for k in range(d + 1):
+            if (d - k) % 2 != 0:
+                if self.coeffs[k] != 0:
+                    return False
+        return True
+
+    def square_roots_map(self) -> "RealRootedPolynomial":
+        """
+        The Sq(p) mapping.
+        Given a symmetric polynomial p(x) = sum c_{2k} x^{2k}, constructs
+        and returns the transformed polynomial Sq(p)(x) = sum c_{2k} x^k.
+        This satisfies the identity Sq(p)(x^2) = p(x).
+        """
+        if not self.is_symmetric():
+            raise ValueError(
+                "square_roots_map is only defined for symmetric polynomials."
+            )
+
+        d = self.degree
+        d_new = d // 2
+        new_coeffs = []
+        for j in range(d_new + 1):
+            new_coeffs.append(self.coeffs[2 * j])
+
+        return RealRootedPolynomial(new_coeffs, assume_real_rooted=True)
+
+    @property
+    def has_non_negative_roots(self) -> bool:
+        """
+        Check if all roots of the polynomial are non-negative in O(d) time
+        using sign alternation.
+        """
+        if self._has_non_negative_roots_cached is None:
+            signs = []
+            for j, c in enumerate(self.coeffs):
+                if c != 0:
+                    val = c * (-1) ** (self.degree - j)
+                    signs.append(1 if val > 0 else -1)
+            self._has_non_negative_roots_cached = len(set(signs)) <= 1
+        return self._has_non_negative_roots_cached
+
+    @property
+    def has_strictly_positive_roots(self) -> bool:
+        """
+        Check if all roots of the polynomial are strictly positive in O(d) time
+        using sign alternation.
+        """
+        if self._has_strictly_positive_roots_cached is None:
+            ans = True
+            for c in self.coeffs:
+                if c == 0:
+                    ans = False
+                    break
+            if ans:
+                for i in range(1, self.degree + 1):
+                    if self.coeffs[i] * self.coeffs[i - 1] >= 0:
+                        ans = False
+                        break
+            self._has_strictly_positive_roots_cached = ans
+        return self._has_strictly_positive_roots_cached
+
+
+class UnitaryPolynomial(RealRootedPolynomial):
+    """
+    Represents a polynomial whose roots lie strictly on the unit circle T.
+    Bypasses Sturm sequence real-rootedness verification and supports complex roots.
+    """
+
+    def __init__(
+        self,
+        coeffs: Union[Sequence[Any], NDArray[Any]],
+    ) -> None:
+        # Bypasses real-rootedness verification
+        super().__init__(coeffs, assume_real_rooted=True)
+
+    def verify_real_rootedness(self) -> bool:
+        return False
+
+    def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[Any]:
+        """
+        Computes the complex roots of the unitary polynomial.
+        Evaluates transcendental coefficients numerically using SymPy N(c)
+        to avoid int() / float() casting errors of transcendental terms,
+        and uses companion matrix eigensolver to compute complex roots on T.
+        """
+        if self._roots_cached is not None:
+            return self._roots_cached
+
+        float_coeffs = []
+        for c in self.coeffs:
+            # Safely evaluate transcendental SymPy terms to complex float
+            float_coeffs.append(complex(sp.N(c)))
+
+        raw_roots = np.roots(float_coeffs)
+        # Sort roots by their argument (angle) in [-pi, pi]
+        angles = np.angle(raw_roots)
+        sorted_idx = np.argsort(angles)
+        res = raw_roots[sorted_idx]
+        self._roots_cached = res
+        return res

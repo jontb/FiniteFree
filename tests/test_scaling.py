@@ -100,9 +100,17 @@ def test_from_roots() -> None:
     assert p_scaled.degree == 50
 
     # Verify the roots of the reconstructed polynomial match the original roots exactly
-    reconstructed_roots = p_scaled.evaluate_roots_float64(parallel=True)
-    expected_float_roots = np.sort([float(r) for r in roots_scaled])
-    assert np.allclose(reconstructed_roots, expected_float_roots, atol=1e-7)
+    # using exact multiplication in python-flint (coefficients descending vs ascending)
+    import flint
+
+    expected_poly = flint.fmpq_poly([1])
+    for r in roots_scaled:
+        expected_poly *= flint.fmpq_poly([-flint.fmpq(r.p, r.q), 1])
+
+    flint_expected_coeffs = list(reversed(list(expected_poly)))
+    assert len(p_scaled.coeffs) == len(flint_expected_coeffs)
+    for c, exp_c in zip(p_scaled.coeffs, flint_expected_coeffs):
+        assert c == sp.Rational(int(exp_c.p), int(exp_c.q))
 
 
 def test_to_fmpq_mpoly() -> None:

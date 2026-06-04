@@ -60,6 +60,13 @@ def test_power() -> None:
     with pytest.raises(ValueError, match="Power factor c must be strictly positive"):
         p.power(-1)
 
+    # Error on negative roots
+    p_neg = RealRootedPolynomial([1, 2, 1], assume_real_rooted=True)
+    with pytest.raises(
+        ValueError, match="only defined for polynomials with non-negative roots"
+    ):
+        p_neg.power(2)
+
 
 def test_reversed_polynomial() -> None:
     # p(x) = (x - 1)(x - 2) = x^2 - 3x + 2 (roots 1, 2)

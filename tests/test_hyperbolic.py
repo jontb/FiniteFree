@@ -137,10 +137,8 @@ def test_one_dimensional_pencil() -> None:
     p_sparse = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(pencil)
     assert len(p_sparse.variables) == 1
     # det(x1 * A1) = x1^2 * (2 * 5 - 3 * 3) = 1 * x1^2
-    assert sp.simplify(p_sparse.expr - p_sparse.variables[0]**2) == 0
+    assert sp.simplify(p_sparse.expr - p_sparse.variables[0] ** 2) == 0
 
     p_dense = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(pencil)
     assert len(p_dense.variables) == 1
-    assert sp.simplify(p_dense.expr - p_dense.variables[0]**2) == 0
-
-
+    assert sp.simplify(p_dense.expr - p_dense.variables[0] ** 2) == 0

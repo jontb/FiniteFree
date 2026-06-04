@@ -3,7 +3,7 @@ from typing import Any, Sequence, Tuple
 import flint
 import sympy as sp
 
-from .core import RealRootedPolynomial
+from .core import RealRootedPolynomial, UnitaryPolynomial
 from .multivariate import MultivariatePolynomial
 
 # Global cache for Jack polynomials to prevent redundant recomputations
@@ -27,8 +27,6 @@ def fmpq_poly_to_sympy_coeffs(poly: flint.fmpq_poly) -> list[sp.Rational]:
     for val in reversed(coeffs_asc):
         coeffs.append(sp.Rational(str(val)))
     return coeffs
-
-
 
 
 def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
@@ -255,3 +253,250 @@ def jack_polynomial(
 
     expr = sp.Add(*terms) if terms else sp.Integer(0)
     return MultivariatePolynomial(expr, variables)
+
+
+def hermite_polynomial(n: int, physicist: bool = True) -> RealRootedPolynomial:
+    """
+    Computes the Hermite polynomial (Physicist's H_n(x) or Probabilist's He_n(x))
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0:
+        raise ValueError("n must be non-negative")
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    if physicist:
+        p1 = flint.fmpq_poly([0, 2])
+    else:
+        p1 = flint.fmpq_poly([0, 1])
+
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for k in range(1, n):
+        if physicist:
+            factor = flint.fmpq_poly([0, 2])
+            term_prev = sympy_to_fmpq(2 * k) * p_prev
+            p_next = factor * p_curr - term_prev
+        else:
+            factor = flint.fmpq_poly([0, 1])
+            term_prev = sympy_to_fmpq(k) * p_prev
+            p_next = factor * p_curr - term_prev
+
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )
+
+
+def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
+    """
+    Computes the generalized Laguerre polynomial L_n^(alpha)(x)
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0:
+        raise ValueError("n must be non-negative")
+
+    alpha_sym = sp.Rational(sp.sympify(alpha))
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    p1 = flint.fmpq_poly([sympy_to_fmpq(1 + alpha_sym), sympy_to_fmpq(-1)])
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for k in range(1, n):
+        ak = sympy_to_fmpq(sp.Rational(1, k + 1))
+        factor = flint.fmpq_poly(
+            [sympy_to_fmpq(2 * k + 1 + alpha_sym), sympy_to_fmpq(-1)]
+        )
+        term_prev = sympy_to_fmpq(k + alpha_sym) * p_prev
+
+        p_next = (factor * p_curr - term_prev) * ak
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )
+
+
+def krawtchouk_polynomial(n: int, p: Any, N: int) -> RealRootedPolynomial:
+    """
+    Computes the Krawtchouk polynomial K_n(x; p, N)
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0 or n > N:
+        raise ValueError("n must satisfy 0 <= n <= N")
+    if N <= 0:
+        raise ValueError("N must be a positive integer")
+
+    p_sym = sp.Rational(sp.sympify(p))
+    if p_sym <= 0 or p_sym >= 1:
+        raise ValueError("p must be in the open interval (0, 1)")
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    p1 = flint.fmpq_poly([sympy_to_fmpq(1), sympy_to_fmpq(sp.Rational(-1, N * p_sym))])
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for k in range(1, n):
+        scale = sympy_to_fmpq(sp.Rational(1, (N - k) * p_sym))
+        factor = flint.fmpq_poly(
+            [sympy_to_fmpq(p_sym * (N - 2 * k) + k), sympy_to_fmpq(-1)]
+        )
+        term_prev = sympy_to_fmpq(k * (1 - p_sym)) * p_prev
+
+        p_next = (factor * p_curr - term_prev) * scale
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )
+
+
+def unitary_hermite_polynomial(d: int, t: Any) -> UnitaryPolynomial:
+    """
+    Computes the Unitary Hermite polynomial H_d(z; t) of degree d
+    defined on the unit circle. Uses SymPy exp and binomial coefficients exactly.
+    """
+    if d < 0:
+        raise ValueError("d must be non-negative")
+
+    t_sym = sp.sympify(t)
+
+    coeffs = []
+    for k in range(d, -1, -1):
+        if d > 0:
+            num = -t_sym * k * (d - k)
+            den = 2 * d
+            exp_term = sp.exp(sp.Rational(num, den))
+        else:
+            exp_term = sp.Integer(1)
+        coeff = ((-1) ** k) * sp.binomial(d, k) * exp_term
+        coeffs.append(coeff)
+
+    return UnitaryPolynomial(coeffs)
+
+
+def chebyshev_t_polynomial(n: int) -> RealRootedPolynomial:
+    """
+    Computes the Chebyshev polynomial of the first kind T_n(x) of degree n
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0:
+        raise ValueError("n must be non-negative")
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    p1 = flint.fmpq_poly([0, 1])
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for _ in range(1, n):
+        factor = flint.fmpq_poly([0, 2])
+        p_next = factor * p_curr - p_prev
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )
+
+
+def chebyshev_u_polynomial(n: int) -> RealRootedPolynomial:
+    """
+    Computes the Chebyshev polynomial of the second kind U_n(x) of degree n
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0:
+        raise ValueError("n must be non-negative")
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    p1 = flint.fmpq_poly([0, 2])
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for _ in range(1, n):
+        factor = flint.fmpq_poly([0, 2])
+        p_next = factor * p_curr - p_prev
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )
+
+
+def legendre_polynomial(n: int) -> RealRootedPolynomial:
+    """
+    Computes the Legendre polynomial P_n(x) of degree n
+    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    """
+    if n < 0:
+        raise ValueError("n must be non-negative")
+
+    p0 = flint.fmpq_poly([1])
+    if n == 0:
+        return RealRootedPolynomial([1], assume_real_rooted=True)
+
+    p1 = flint.fmpq_poly([0, 1])
+    if n == 1:
+        return RealRootedPolynomial(
+            fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
+        )
+
+    p_prev = p0
+    p_curr = p1
+
+    for k in range(1, n):
+        # (k+1) P_{k+1}(x) = (2k+1) x P_k(x) - k P_{k-1}(x)
+        ak = sympy_to_fmpq(sp.Rational(1, k + 1))
+        factor = flint.fmpq_poly([0, sympy_to_fmpq(2 * k + 1)])
+        p_next = (factor * p_curr - sympy_to_fmpq(k) * p_prev) * ak
+        p_prev = p_curr
+        p_curr = p_next
+
+    return RealRootedPolynomial(
+        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    )

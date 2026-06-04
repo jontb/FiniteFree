@@ -70,3 +70,7 @@ visuals/*
 !visuals/*.gif
 !visuals/*.png
 
+# Local TODO tracking
+TODO.md
+
+
