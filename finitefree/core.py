@@ -223,13 +223,9 @@ class RealRootedPolynomial:
                 q_coeffs.append(flint.fmpq(int(c), 1))
 
         f_poly = flint.fmpq_poly(q_coeffs)
-        _, factors = f_poly.factor_squarefree()
-
-        for _, multiplicity in factors:
-            if multiplicity > 1:
-                raise ValueError(
-                    "Strict root interlacing failed: multiple roots detected."
-                )
+        g = f_poly.gcd(f_poly.derivative())
+        if g.degree() > 0:
+            raise ValueError("Strict root interlacing failed: multiple roots detected.")
 
         return True
 
