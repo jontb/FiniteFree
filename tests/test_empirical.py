@@ -16,9 +16,7 @@ def random_symplectic(d: int) -> npt.NDArray[np.complex128]:
     X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
     Y = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
     Z = np.block([[X, Y], [-np.conj(Y), np.conj(X)]])
-    U_cols: list[
-        tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]
-    ] = []
+    U_cols: list[tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]] = []
     J = np.block([[np.zeros((d, d)), np.eye(d)], [-np.eye(d), np.zeros((d, d))]])
     for j in range(d):
         v = Z[:, j]
