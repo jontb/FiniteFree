@@ -142,3 +142,116 @@ def test_one_dimensional_pencil() -> None:
     p_dense = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(pencil)
     assert len(p_dense.variables) == 1
     assert sp.simplify(p_dense.expr - p_dense.variables[0] ** 2) == 0
+
+
+def test_exact_hyperbolic_solvers() -> None:
+    # A1 = I_2, A2 = [[0, 1], [1, 0]]
+    A1 = np.array([[1.0, 0.0], [0.0, 1.0]])
+    A2 = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+    pencil = SymmetricMatrixPencil([A1, A2])
+
+    # Exact verify_hyperbolicity
+    assert pencil.verify_hyperbolicity([1.0, 0.0], exact=True) is True
+    assert pencil.verify_hyperbolicity([0.0, 1.0], exact=True) is False
+
+    slp = pencil.characteristic_polynomial_slp()
+    x = [2.0, 1.0]
+
+    # Exact evaluate
+    val = slp.evaluate(x, exact=True)
+    assert val == 3
+
+    # Exact gradient
+    grad = slp.gradient(x, exact=True)
+    assert len(grad) == 2
+    assert grad[0] == 4
+    assert grad[1] == -2
+
+    # Exact Hessian
+    hess = slp.hessian(x, exact=True)
+    assert hess.shape == (2, 2)
+    assert hess[0, 0] == 2
+    assert hess[1, 1] == -2
+    assert hess[0, 1] == 0
+    assert hess[1, 0] == 0
+
+
+def test_interpolated_matrix_pencil() -> None:
+    # Construct a 3x3 matrix pencil (size < 4)
+    m, n = 3, 3
+    matrices = [np.random.randint(-3, 4, size=(n, n)).astype(float) for _ in range(m)]
+    matrices = [A + A.T for A in matrices]
+
+    pencil = SymmetricMatrixPencil(matrices)
+
+    # Compute using both Berkowitz determinant and grid interpolation
+    mp_sym = MultivariatePolynomial.from_symmetric_matrix_pencil(pencil)
+    mp_interp = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(
+        pencil, parallel=True
+    )
+
+    # Verify exact equality of symbolic expressions
+    assert sp.simplify(mp_sym.expr - mp_interp.expr) == 0
+
+
+def test_interpolated_matrix_pencil_large() -> None:
+    # Scale up matrix pencil to 5x5 to challenge the CRT solver
+    m, n = 3, 5
+    matrices = [np.random.randint(-2, 2, size=(n, n)).astype(float) for _ in range(m)]
+    matrices = [A + A.T for A in matrices]
+
+    pencil = SymmetricMatrixPencil(matrices)
+
+    # from_symmetric_matrix_pencil automatically routes to interpolated for n >= 4
+    mp_auto = MultivariatePolynomial.from_symmetric_matrix_pencil(pencil)
+    mp_interp = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(
+        pencil, parallel=False
+    )
+
+    assert sp.simplify(mp_auto.expr - mp_interp.expr) == 0
+
+
+def test_to_fmpq_mpoly() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
+    # Construct a multivariate polynomial P(x, y) = 3 x^2 + 2 x y + 5 y^2
+    x, y = sp.symbols("x y")
+    mp = MultivariatePolynomial(3 * x**2 + 2 * x * y + 5 * y**2, [x, y])
+
+    # Convert to C-level fmpq_mpoly sparse array
+    flint_poly = mp.to_fmpq_mpoly()
+
+    assert isinstance(flint_poly, flint.fmpq_mpoly)
+
+    # Evaluate at x = 2, y = 3
+    assert flint_poly(2, 3) == 69
+
+
+def test_parallel_diagonal_specialization() -> None:
+    # Define simple symmetric matrices for a pencil
+    A1 = np.array([[2.0, 0.0], [0.0, 3.0]], dtype=float)
+    A2 = np.array([[1.0, 0.5], [0.5, 4.0]], dtype=float)
+
+    pencil = SymmetricMatrixPencil([A1, A2])
+
+    # Compute specialization sequentially and in parallel
+    w = [1, 2]
+    b = [0, 1]
+
+    p_seq = pencil.diagonal_specialization(w, b, parallel=False)
+    p_par = pencil.diagonal_specialization(w, b, parallel=True)
+
+    # Coeffs should match exactly
+    np.testing.assert_allclose(
+        np.array(p_seq.coeffs, dtype=float),
+        np.array(p_par.coeffs, dtype=float),
+        rtol=1e-12
+    )
+

@@ -5,6 +5,7 @@ import sympy as sp
 
 from .core import RealRootedPolynomial, UnitaryPolynomial
 from .multivariate import MultivariatePolynomial
+from .utils.conversion import fmpq_poly_to_sympy_coeffs, sympy_to_fmpq
 
 # Global cache for Jack polynomials to prevent redundant recomputations
 # Keyed by (m, partition_tuple, alpha_sym)
@@ -12,21 +13,6 @@ _JACK_CACHE: dict[
     Tuple[int, Tuple[int, ...], sp.Rational],
     dict[Tuple[int, ...], sp.Rational],
 ] = {}
-
-
-def sympy_to_fmpq(val: Any) -> flint.fmpq:
-    """Converts a SymPy rational value exactly to a Flint fmpq."""
-    val = sp.Rational(sp.sympify(val))
-    return flint.fmpq(int(val.p), int(val.q))
-
-
-def fmpq_poly_to_sympy_coeffs(poly: flint.fmpq_poly) -> list[sp.Rational]:
-    """Converts flint.fmpq_poly (ascending) to SymPy coefficients (descending)."""
-    coeffs_asc = poly.coeffs()
-    coeffs = []
-    for val in reversed(coeffs_asc):
-        coeffs.append(sp.Rational(str(val)))
-    return coeffs
 
 
 def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
@@ -52,36 +38,24 @@ def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
             fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
         )
 
+    alpha_fmpq = sympy_to_fmpq(alpha_sym)
+    beta_fmpq = sympy_to_fmpq(beta_sym)
+
     # 3-term recurrence: A_k P_{k+1} = (B_k x + C_k) P_k - D_k P_{k-1}
     p_prev = p0
     p_curr = p1
     for k in range(1, n):
-        ak = sympy_to_fmpq(
-            2
-            * (k + 1)
-            * (k + 1 + alpha_sym + beta_sym)
-            * (2 * k + alpha_sym + beta_sym)
-        )
-        bk = sympy_to_fmpq(
-            (2 * k + alpha_sym + beta_sym + 1)
-            * (2 * k + alpha_sym + beta_sym + 2)
-            * (2 * k + alpha_sym + beta_sym)
-        )
-        ck = sympy_to_fmpq(
-            (2 * k + alpha_sym + beta_sym + 1) * (alpha_sym**2 - beta_sym**2)
-        )
-        dk = sympy_to_fmpq(
-            2 * (k + alpha_sym) * (k + beta_sym) * (2 * k + alpha_sym + beta_sym + 2)
-        )
+        ak = 2 * (k + 1) * (k + 1 + alpha_fmpq + beta_fmpq) * (2 * k + alpha_fmpq + beta_fmpq)
+        bk = (2 * k + alpha_fmpq + beta_fmpq + 1) * (2 * k + alpha_fmpq + beta_fmpq + 2) * (2 * k + alpha_fmpq + beta_fmpq)
+        ck = (2 * k + alpha_fmpq + beta_fmpq + 1) * (alpha_fmpq**2 - beta_fmpq**2)
+        dk = 2 * (k + alpha_fmpq) * (k + beta_fmpq) * (2 * k + alpha_fmpq + beta_fmpq + 2)
 
         factor = flint.fmpq_poly([ck, bk])
         p_next = (factor * p_curr - dk * p_prev) * (1 / ak)
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
-    )
+    return RealRootedPolynomial(p_curr, assume_real_rooted=True)
 
 
 def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomial:
@@ -115,28 +89,43 @@ def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomi
 
         total_poly += coeff_fmpq * neg_x_k
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(total_poly), assume_real_rooted=True
-    )
+    return RealRootedPolynomial(total_poly, assume_real_rooted=True)
+
+
+_CONJUGATE_CACHE: dict[tuple[int, ...], tuple[int, ...]] = {}
 
 
 def get_conjugate(part: tuple[int, ...]) -> tuple[int, ...]:
-    """Computes the conjugate of a partition shape."""
+    """Computes the conjugate of a partition shape with caching."""
     if not part:
         return ()
+    if part in _CONJUGATE_CACHE:
+        return _CONJUGATE_CACHE[part]
     max_val = part[0]
     conj = [0] * max_val
     for val in part:
         for idx in range(val):
             conj[idx] += 1
-    return tuple(conj)
+    res = tuple(conj)
+    _CONJUGATE_CACHE[part] = res
+    return res
+
+
+_BETA_CACHE: dict[Tuple[tuple[int, ...], tuple[int, ...], sp.Rational], Any] = {}
 
 
 def compute_beta(kappa: tuple[int, ...], mu: tuple[int, ...], alpha: Any) -> Any:
-    """Computes the beta_kappa_mu coefficient for the Jack recurrence."""
+    """Computes the beta_kappa_mu coefficient for the Jack recurrence with caching."""
+    if isinstance(alpha, sp.Rational):
+        alpha_sym = alpha
+    else:
+        alpha_sym = sp.Rational(sp.sympify(alpha))
+    cache_key = (kappa, mu, alpha_sym)
+    if cache_key in _BETA_CACHE:
+        return _BETA_CACHE[cache_key]
+
     kappa_conj = get_conjugate(kappa)
     mu_conj = get_conjugate(mu)
-    alpha_sym = sp.Rational(sp.sympify(alpha))
 
     def get_product(nu: tuple[int, ...], nu_conj: tuple[int, ...]) -> Any:
         prod = sp.Integer(1)
@@ -158,7 +147,9 @@ def compute_beta(kappa: tuple[int, ...], mu: tuple[int, ...], alpha: Any) -> Any
 
     num = get_product(kappa, kappa_conj)
     den = get_product(mu, mu_conj)
-    return num / den
+    res = num / den
+    _BETA_CACHE[cache_key] = res
+    return res
 
 
 def get_horizontal_strips(kappa: tuple[int, ...]) -> list[tuple[int, ...]]:
@@ -318,15 +309,15 @@ def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
             fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
         )
 
+    alpha_fmpq = sympy_to_fmpq(alpha_sym)
+
     p_prev = p0
     p_curr = p1
 
     for k in range(1, n):
-        ak = sympy_to_fmpq(sp.Rational(1, k + 1))
-        factor = flint.fmpq_poly(
-            [sympy_to_fmpq(2 * k + 1 + alpha_sym), sympy_to_fmpq(-1)]
-        )
-        term_prev = sympy_to_fmpq(k + alpha_sym) * p_prev
+        ak = flint.fmpq(1, k + 1)
+        factor = flint.fmpq_poly([2 * k + 1 + alpha_fmpq, -1])
+        term_prev = (k + alpha_fmpq) * p_prev
 
         p_next = (factor * p_curr - term_prev) * ak
         p_prev = p_curr
@@ -361,15 +352,15 @@ def krawtchouk_polynomial(n: int, p: Any, N: int) -> RealRootedPolynomial:
             fmpq_poly_to_sympy_coeffs(p1), assume_real_rooted=True
         )
 
+    p_fmpq = sympy_to_fmpq(p_sym)
+
     p_prev = p0
     p_curr = p1
 
     for k in range(1, n):
-        scale = sympy_to_fmpq(sp.Rational(1, (N - k) * p_sym))
-        factor = flint.fmpq_poly(
-            [sympy_to_fmpq(p_sym * (N - 2 * k) + k), sympy_to_fmpq(-1)]
-        )
-        term_prev = sympy_to_fmpq(k * (1 - p_sym)) * p_prev
+        scale = 1 / ((N - k) * p_fmpq)
+        factor = flint.fmpq_poly([p_fmpq * (N - 2 * k) + k, -1])
+        term_prev = (k * (1 - p_fmpq)) * p_prev
 
         p_next = (factor * p_curr - term_prev) * scale
         p_prev = p_curr
@@ -491,9 +482,9 @@ def legendre_polynomial(n: int) -> RealRootedPolynomial:
 
     for k in range(1, n):
         # (k+1) P_{k+1}(x) = (2k+1) x P_k(x) - k P_{k-1}(x)
-        ak = sympy_to_fmpq(sp.Rational(1, k + 1))
-        factor = flint.fmpq_poly([0, sympy_to_fmpq(2 * k + 1)])
-        p_next = (factor * p_curr - sympy_to_fmpq(k) * p_prev) * ak
+        ak = flint.fmpq(1, k + 1)
+        factor = flint.fmpq_poly([0, flint.fmpq(2 * k + 1, 1)])
+        p_next = (factor * p_curr - flint.fmpq(k, 1) * p_prev) * ak
         p_prev = p_curr
         p_curr = p_next
 

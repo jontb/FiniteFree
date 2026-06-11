@@ -8,10 +8,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
@@ -24,25 +26,45 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
 
+    - name: Install System Dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libflint-dev libgmp-dev libmpfr-dev
+
+    - name: Install System Dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install flint gmp mpfr
+        echo "C_INCLUDE_PATH=/opt/homebrew/include" >> $GITHUB_ENV
+        echo "LIBRARY_PATH=/opt/homebrew/lib" >> $GITHUB_ENV
+
     - name: Install Dependencies
       run: |
-        python -m pip install --upgrade pip
+        python -m pip install --upgrade pip setuptools wheel
+        # Force pre-compiled wheels for python-flint on Windows, fallback on others
+        python -m pip install --only-binary=python-flint python-flint || python -m pip install python-flint
         pip install -e .[dev]
 
-    - name: Verify Code Formatting
+    - name: Verify Code Formatting & Linting (Linux only)
+      if: matrix.os == 'ubuntu-latest'
       run: |
         python -m ruff format --check finitefree/ tests/
-
-    - name: Run Linting and Static Type Checking
-      run: |
         python -m ruff check finitefree/ tests/
         python -m mypy finitefree/ tests/
 
-    - name: Test with pytest and coverage
+    - name: Test with pytest and coverage (Cython Enabled)
       run: |
         python -m pytest --cov=finitefree --cov-report=xml tests/
 
-    - name: Upload coverage to Codecov
+    - name: Test with pytest (Cython Disabled Fallback)
+      env:
+        PYFFP_DISABLE_CYTHON: "1"
+      run: |
+        python -m pytest tests/
+
+    - name: Upload coverage to Codecov (Linux only)
+      if: matrix.os == 'ubuntu-latest'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml

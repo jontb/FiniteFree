@@ -1,4 +1,5 @@
-import gc
+import abc
+import functools
 import math
 import warnings
 from typing import Any, List, Sequence, Union
@@ -8,70 +9,111 @@ import numpy as np
 import sympy as sp
 from numpy.typing import NDArray
 
-
-class PrecisionContext:
-    _ALLOCATION_COUNTER: int = 0
-    _GC_THRESHOLD: int = 50
-
-    def __init__(self, degree: int) -> None:
-        self.degree = degree
-        self.original_prec = flint.ctx.prec
-        # Dynamically scale precision based on degree to handle combinatorial explosions
-        self.new_prec: int = max(53, int(degree * 2.5))
-
-    def __enter__(self) -> "PrecisionContext":
-        flint.ctx.prec = self.new_prec
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        flint.ctx.prec = self.original_prec
-        # Optimized threshold-based memory management
-        PrecisionContext._ALLOCATION_COUNTER += 1
-        if PrecisionContext._ALLOCATION_COUNTER >= PrecisionContext._GC_THRESHOLD:
-            gc.collect()
-            PrecisionContext._ALLOCATION_COUNTER = 0
+from .utils.conversion import flint_to_float, fmpq_poly_to_sympy_coeffs, sympy_to_fmpq
+from .utils.precision import PrecisionContext
 
 
-class RealRootedPolynomial:
+class Polynomial(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def variables(self) -> Sequence[Any]:
+        pass
+
+    @abc.abstractmethod
+    def evaluate(self, x: Any) -> Any:
+        pass
+
+
+@functools.lru_cache(maxsize=1024)
+def _get_shift_poly(c_fmpq: Any) -> Any:
+    import flint
+    return flint.fmpq_poly([-c_fmpq, 1])
+
+
+class RealRootedPolynomial(Polynomial):
     def __init__(
         self,
-        coeffs: Union[Sequence[Any], NDArray[Any]],
+        coeffs: Union[Sequence[Any], NDArray[Any], flint.fmpq_poly],
         assume_real_rooted: bool = False,
     ) -> None:
         """
-        coeffs: array of length d+1 where index k corresponds to x^{d-k}.
+        coeffs: array of length d+1 where index k corresponds to x^{d-k}, or a flint.fmpq_poly.
         """
-        self.coeffs: NDArray[np.object_] = np.array(coeffs, dtype=object)
+        import flint
+        if not isinstance(coeffs, flint.fmpq_poly):
+            if len(coeffs) == 0:
+                raise ValueError("Coefficients sequence cannot be empty")
+        else:
+            if coeffs.degree() < 0:
+                raise ValueError("Zero polynomial is not supported")
 
-        if len(self.coeffs) == 0:
-            raise ValueError("Empty polynomial")
+        self._is_flint = False
+        if isinstance(coeffs, flint.fmpq_poly):
+            poly = coeffs
+            self._is_flint = True
+        else:
+            try:
+                q_coeffs = [sympy_to_fmpq(c) for c in reversed(coeffs)]
+                poly = flint.fmpq_poly(q_coeffs)
+                self._is_flint = True
+            except Exception:
+                # Fallback to SymPy object array for non-rational/transcendental coefficients (e.g. UnitaryPolynomial)
+                self.coeffs_sympy = np.array(coeffs, dtype=object)
+                leading_coeff = self.coeffs_sympy[0]
+                if leading_coeff != 1:
+                    coeffs_list = []
+                    for c in self.coeffs_sympy:
+                        coeffs_list.append(c / leading_coeff)
+                    self.coeffs_sympy = np.array(coeffs_list, dtype=object)
+                self._is_flint = False
 
-        leading_coeff = self.coeffs[0]
-        if leading_coeff != 1:
-            coeffs_list = []
-            for c in self.coeffs:
-                if isinstance(c, (int, np.integer)) and isinstance(
-                    leading_coeff, (int, np.integer)
-                ):
-                    if c % leading_coeff == 0:
-                        coeffs_list.append(c // leading_coeff)
-                    else:
-                        coeffs_list.append(sp.Rational(c, leading_coeff))
-                else:
-                    coeffs_list.append(c / leading_coeff)
-            self.coeffs = np.array(coeffs_list, dtype=object)
+        if self._is_flint:
+            leading_coeff = poly.leading_coefficient()
+            if leading_coeff != 0 and leading_coeff != 1:
+                poly = poly * (1 / leading_coeff)
+            self._fmpq_poly = poly
+            self.degree: int = poly.degree() if poly.degree() >= 0 else 0
+        else:
+            self.degree = len(self.coeffs_sympy) - 1
 
-        self.degree: int = len(self.coeffs) - 1
         self._is_verified: bool = assume_real_rooted
-        self._normalized_coeffs_cached: Union[NDArray[np.object_], None] = None
+        self._normalized_coeffs_flint_cached: Union[List[Any], None] = None
+        self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
         self._has_non_negative_roots_cached: Union[bool, None] = None
         self._has_strictly_positive_roots_cached: Union[bool, None] = None
         # Track memory allocation
-        PrecisionContext._ALLOCATION_COUNTER += 1
-        if PrecisionContext._ALLOCATION_COUNTER >= PrecisionContext._GC_THRESHOLD:
-            gc.collect()
-            PrecisionContext._ALLOCATION_COUNTER = 0
+        PrecisionContext.register_allocation()
+
+    @property
+    def coeffs(self) -> NDArray[np.object_]:
+        """Returns the coefficients in descending order as a NumPy array of SymPy Rationals."""
+        if self._is_flint:
+            return np.array(fmpq_poly_to_sympy_coeffs(self._fmpq_poly), dtype=object)
+        return self.coeffs_sympy
+
+    @property
+    def variables(self) -> list[sp.Symbol]:
+        """Returns the symbolic variables of the polynomial (a single list [x])."""
+        return [sp.Symbol("x")]
+
+    def evaluate(self, x: Any) -> Any:
+        """Evaluates the polynomial at the point x."""
+        if self._is_flint:
+            x_fmpq = sympy_to_fmpq(x)
+            return self._fmpq_poly(x_fmpq)
+        sym_x = sp.sympify(x)
+        val_sym = sp.Symbol("x")
+        expr = sum(c * val_sym**(self.degree - i) for i, c in enumerate(self.coeffs_sympy))
+        return expr.subs(val_sym, sym_x)
+
+    def _to_fmpq_poly(self) -> Any:
+        """Converts the polynomial's coefficients to a flint.fmpq_poly in ascending degree order."""
+        if self._is_flint:
+            return self._fmpq_poly
+        import flint
+        q_coeffs = [sympy_to_fmpq(c) for c in reversed(self.coeffs_sympy)]
+        return flint.fmpq_poly(q_coeffs)
 
     def verify_real_rootedness(self) -> bool:
         """
@@ -85,31 +127,27 @@ class RealRootedPolynomial:
             self._is_verified = True
             return True
 
+        if self.degree > 30:
+            return self._verify_real_rootedness_arb()
+
         import flint
 
         try:
-            # Construct fmpq_poly in ascending degree order (x^0, ..., x^d)
-            q_coeffs = []
-            for c in reversed(self.coeffs):
-                if isinstance(c, sp.Rational):
-                    q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
-                elif isinstance(c, (float, np.floating)):
-                    c_sym = sp.Rational(float(c))
-                    q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
-                else:
-                    q_coeffs.append(flint.fmpq(int(c), 1))
-
-            f_poly = flint.fmpq_poly(q_coeffs)
+            f_poly = self._to_fmpq_poly()
             _, factors = f_poly.factor_squarefree()
 
             total_real_roots = 0
             for factor, multiplicity in factors:
-                # Generate Sturm sequence using compiled division modulo in C
-                seq = [factor, factor.derivative()]
-                while not seq[-1].is_zero():
-                    remainder = seq[-2] % seq[-1]
-                    seq.append(-remainder)
-                sturm_seq = seq[:-1]
+                if factor.degree() >= 15:
+                    from .utils.prs import sturm_subresultant_prs
+                    sturm_seq = sturm_subresultant_prs(factor, factor.derivative())
+                else:
+                    # Generate Sturm sequence using compiled division modulo in C
+                    seq = [factor, factor.derivative()]
+                    while not seq[-1].is_zero():
+                        remainder = seq[-2] % seq[-1]
+                        seq.append(-remainder)
+                    sturm_seq = seq[:-1]
 
                 # Evaluate sturm sequence at -inf and +inf
                 def sign_changes_flint(
@@ -153,44 +191,37 @@ class RealRootedPolynomial:
             return True
 
         except Exception:
-            # Fallback to numerical check via Flint's Arb-certified roots
-            # if exact Sturm sequences fail or raise an exception
-            try:
-                import flint
+            return self._verify_real_rootedness_arb()
 
-                q_coeffs = []
-                for c in reversed(self.coeffs):
-                    if isinstance(c, sp.Rational):
-                        q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
-                    elif isinstance(c, (float, np.floating)):
-                        c_sym = sp.Rational(float(c))
-                        q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
-                    else:
-                        q_coeffs.append(flint.fmpq(int(c), 1))
+    def _verify_real_rootedness_arb(self) -> bool:
+        """
+        Verify real-rootedness using Flint's certified root isolation (Arb)
+        with fallback to numerical check when necessary.
+        """
+        try:
+            acb_roots = self._fmpq_poly.complex_roots()
 
-                f_poly = flint.fmpq_poly(q_coeffs)
-                acb_roots = f_poly.complex_roots()
+            # Verify that all isolated roots are real (i.e. imaginary
+            # part contains 0)
+            for r_pair in acb_roots:
+                r = r_pair[0]
+                if 0 not in r.imag:
+                    raise ValueError("Complex root detected in Arb isolation.")
 
-                # Verify that all isolated roots are real (i.e. imaginary
-                # part contains 0)
-                for r_pair in acb_roots:
-                    r = r_pair[0]
-                    if 0 not in r.imag:
-                        raise ValueError("Complex root detected in Arb isolation.")
-
-                self._is_verified = True
-                return True
-            except Exception as inner_e:
-                # If Flint complex_roots itself fails, fall back to numpy.roots
-                # with a conservative tolerance to prevent false rejections
-                # due to Wilkinson's phenomenon.
-                roots = np.roots(np.array(self.coeffs, dtype=float))
-                if not np.allclose(np.imag(roots), 0, atol=1e-2, rtol=1e-2):
-                    raise ValueError(
-                        "Numerical fallback: Polynomial is not real-rooted."
-                    ) from inner_e
-                self._is_verified = True
-                return True
+            self._is_verified = True
+            return True
+        except Exception as inner_e:
+            # If Flint complex_roots itself fails, fall back to numpy.roots
+            # with a conservative tolerance to prevent false rejections
+            # due to Wilkinson's phenomenon.
+            float_coeffs = [flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())]
+            roots = np.roots(np.array(float_coeffs, dtype=float))
+            if not np.allclose(np.imag(roots), 0, atol=1e-2, rtol=1e-2):
+                raise ValueError(
+                    "Numerical fallback: Polynomial is not real-rooted."
+                ) from inner_e
+            self._is_verified = True
+            return True
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
         """
@@ -209,30 +240,49 @@ class RealRootedPolynomial:
             return True
 
         # Check if the polynomial is square-free (no multiple roots)
-        import flint
-
-        # Construct fmpq_poly in ascending degree order (x^0, ..., x^d)
-        q_coeffs = []
-        for c in reversed(self.coeffs):
-            if isinstance(c, sp.Rational):
-                q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
-            elif isinstance(c, (float, np.floating)):
-                c_sym = sp.Rational(float(c))
-                q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
-            else:
-                q_coeffs.append(flint.fmpq(int(c), 1))
-
-        f_poly = flint.fmpq_poly(q_coeffs)
-        g = f_poly.gcd(f_poly.derivative())
+        g = self._fmpq_poly.gcd(self._fmpq_poly.derivative())
         if g.degree() > 0:
             raise ValueError("Strict root interlacing failed: multiple roots detected.")
 
         return True
 
+    def _normalized_coeffs_flint(self, d: Union[int, None] = None) -> list[Any]:
+        """Extracts the normalized elementary symmetric polynomial sequence as flint.fmpq."""
+        if d is None:
+            d = self.degree
+
+        if d < self.degree:
+            raise ValueError(
+                f"Ambient dimension d ({d}) cannot be less than polynomial "
+                f"degree ({self.degree})."
+            )
+
+        if d == self.degree and self._normalized_coeffs_flint_cached is not None:
+            return self._normalized_coeffs_flint_cached
+
+        import flint
+        if self._is_flint:
+            e_k = []
+            for k in range(d + 1):
+                if k <= self.degree:
+                    c_k = self._fmpq_poly[self.degree - k]
+                    binom = math.comb(d, k)
+                    sign = (-1) ** k
+                    val = c_k * flint.fmpq(sign, binom)
+                    e_k.append(val)
+                else:
+                    e_k.append(flint.fmpq(0))
+        else:
+            e_k = [sympy_to_fmpq(c) for c in self.normalized_coeffs(d)]
+
+        if d == self.degree:
+            self._normalized_coeffs_flint_cached = e_k
+        return e_k
+
     def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
         """
         Extracts the normalized elementary symmetric polynomial sequence
-        \\tilde{e}_k^{(d)}(p) with respect to ambient dimension d.
+        \\tilde{e}_k^{(d)}(p) with respect to ambient dimension d as SymPy Rationals.
         """
         if d is None:
             d = self.degree
@@ -243,31 +293,33 @@ class RealRootedPolynomial:
                 f"degree ({self.degree})."
             )
 
-        if d == self.degree and self._normalized_coeffs_cached is not None:
-            return self._normalized_coeffs_cached
+        if d == self.degree and self._normalized_coeffs_sympy_cached is not None:
+            return self._normalized_coeffs_sympy_cached
 
-        e_k = []
-        for k in range(d + 1):
-            if k <= self.degree:
-                binom = math.comb(d, k)
-                sign = (-1) ** k
-                c_k = self.coeffs[k]
-                val = sign * binom
-                # Maintain exact rational/integer representation to avoid
-                # float truncation
-                if isinstance(c_k, (int, np.integer)):
-                    if c_k % val == 0:
-                        e_k.append(c_k // val)
+        if self._is_flint:
+            raw = self._normalized_coeffs_flint(d)
+            e_k = [sp.Rational(int(val.p), int(val.q)) for val in raw]
+        else:
+            e_k = []
+            for k in range(d + 1):
+                if k <= self.degree:
+                    binom = math.comb(d, k)
+                    sign = (-1) ** k
+                    c_k = self.coeffs_sympy[k]
+                    val = sign * binom
+                    if isinstance(c_k, (int, np.integer)):
+                        if c_k % val == 0:
+                            e_k.append(c_k // val)
+                        else:
+                            e_k.append(sp.Rational(c_k, val))
                     else:
-                        e_k.append(sp.Rational(c_k, val))
+                        e_k.append(c_k / val)
                 else:
-                    e_k.append(c_k / val)
-            else:
-                e_k.append(0)
+                    e_k.append(0)
 
         res_array = np.array(e_k, dtype=object)
         if d == self.degree:
-            self._normalized_coeffs_cached = res_array
+            self._normalized_coeffs_sympy_cached = res_array
         return res_array
 
     @classmethod
@@ -277,18 +329,30 @@ class RealRootedPolynomial:
         """
         Reconstructs the polynomial from the normalized sequence
         \\tilde{e}_k^{(d)}(p).
-        Automatically assumes real-rootedness since finite free
-        convolutions preserve it.
         """
+        import flint
         d = len(e_k) - 1
-        c = []
-        for k in range(d + 1):
-            binom = math.comb(d, k)
-            sign = (-1) ** k
-            c.append(e_k[k] * sign * binom)
-        inst = cls(c, assume_real_rooted=True)
-        inst._normalized_coeffs_cached = np.array(e_k, dtype=object)
-        return inst
+        try:
+            q_ek = [sympy_to_fmpq(x) for x in e_k]
+            c_asc = []
+            for j in range(d + 1):
+                k = d - j
+                binom = math.comb(d, k)
+                sign = (-1) ** k
+                val = q_ek[k] * flint.fmpq(sign * binom)
+                c_asc.append(val)
+            poly = flint.fmpq_poly(c_asc)
+            inst = cls(poly, assume_real_rooted=True)
+            inst._normalized_coeffs_flint_cached = q_ek
+            return inst
+        except Exception:
+            c = []
+            for k in range(d + 1):
+                binom = math.comb(d, k)
+                sign = (-1) ** k
+                c.append(e_k[k] * sign * binom)
+            inst = cls(c, assume_real_rooted=True)
+            return inst
 
     @classmethod
     def from_roots(cls, roots: Sequence[Any]) -> "RealRootedPolynomial":
@@ -297,52 +361,39 @@ class RealRootedPolynomial:
         Uses a divide-and-conquer product of C-level fmpq_poly linear factors
         to run in O(d log^2 d) exact time, avoiding slow SymPy symbolic products.
         """
+        from collections import deque
+
         import flint
-        import sympy as sp
 
         if len(roots) == 0:
-            return cls([1], assume_real_rooted=True)
+            return cls(flint.fmpq_poly([1]), assume_real_rooted=True)
 
         factors = []
         for r in roots:
-            if isinstance(r, sp.Rational):
-                val = flint.fmpq(int(r.p), int(r.q))
-            elif isinstance(r, (float, np.floating)):
-                c_sym = sp.Rational(float(r))
-                val = flint.fmpq(int(c_sym.p), int(c_sym.q))
-            elif isinstance(r, flint.fmpq):
-                val = r
-            else:
-                val = flint.fmpq(int(r), 1)
-            # Factor is (x - r) represented in ascending order [-r, 1]
+            val = sympy_to_fmpq(r)
             factors.append(flint.fmpq_poly([-val, 1]))
 
-        def _mult(f_list: List[flint.fmpq_poly]) -> flint.fmpq_poly:
-            if len(f_list) == 1:
-                return f_list[0]
-            mid = len(f_list) // 2
-            return _mult(f_list[:mid]) * _mult(f_list[mid:])
+        queue = deque(factors)
+        while len(queue) > 1:
+            left = queue.popleft()
+            right = queue.popleft()
+            queue.append(left * right)
 
-        poly_flint = _mult(factors)
-        coeffs_asc = poly_flint.coeffs()
-
-        # Convert fmpq back to SymPy Rational or Python int
-        coeffs_desc = []
-        for c in reversed(coeffs_asc):
-            q_den = int(c.q)
-            q_num = int(c.p)
-            if q_den == 1:
-                coeffs_desc.append(q_num)
-            else:
-                coeffs_desc.append(sp.Rational(q_num, q_den))
-
-        inst = cls(coeffs_desc, assume_real_rooted=True)
-        # Cache roots by converting them to float64
-        float_roots = []
-        for r in roots:
-            float_roots.append(float(r))
+        poly_flint = queue[0]
+        inst = cls(poly_flint, assume_real_rooted=True)
+        float_roots = [flint_to_float(r) for r in roots]
         inst._roots_cached = np.sort(np.array(float_roots, dtype=np.float64))
         return inst
+
+
+    def __str__(self) -> str:
+        import sympy as sp
+        x = sp.Symbol("x")
+        expr = sum(c * x**(self.degree - i) for i, c in enumerate(self.coeffs))
+        return f"{self.__class__.__name__}({expr})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def to_numpy_poly1d(self) -> np.poly1d:
         """
@@ -365,6 +416,28 @@ class RealRootedPolynomial:
         float_coeffs = np.array(self.coeffs, dtype=float)
         return np.poly1d(float_coeffs)
 
+    def to_scipy_dist(self) -> Any:
+        """
+        Converts the polynomial's root distribution into a SciPy continuous random variable
+        (scipy.stats.rv_continuous) by fitting a piecewise-linear CDF over the isolated roots.
+        """
+        import scipy.stats
+
+        roots = self.evaluate_roots_float64()
+        if len(roots) < 2:
+            raise ValueError("SciPy continuous distribution requires at least 2 distinct roots.")
+
+        class PolynomialRootDist(scipy.stats.rv_continuous):  # type: ignore[misc]
+            def __init__(self, roots_arr: NDArray[np.float64]) -> None:
+                self.roots_arr = np.sort(roots_arr)
+                self.d_val = len(roots_arr)
+                super().__init__(a=float(self.roots_arr[0]), b=float(self.roots_arr[-1]))
+
+            def _cdf(self, x: Any) -> Any:
+                return np.interp(x, self.roots_arr, np.linspace(0.0, 1.0, self.d_val))
+
+        return PolynomialRootDist(roots)
+
     def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[Any]:
         """
         Computes the roots of the polynomial with high numerical stability.
@@ -382,30 +455,55 @@ class RealRootedPolynomial:
     def _evaluate_roots_float64_uncached(
         self, parallel: bool = False
     ) -> NDArray[np.float64]:
+        # Estimate root scale S to prevent float64 overflow/underflow
+        d = self.degree
+        if d == 0:
+            return np.empty(0, dtype=np.float64)
+        non_zero_scales = []
+
+        for k in range(1, d + 1):
+            val = abs(flint_to_float(self._fmpq_poly[d - k]))
+            if val > 0:
+                non_zero_scales.append(val ** (1.0 / k))
+
+        if non_zero_scales:
+            S = float(np.median(non_zero_scales))
+            min_S = 10 ** (-250.0 / d) if d > 0 else 1.0
+            max_S = 10 ** (250.0 / d) if d > 0 else 1.0
+            S = float(np.clip(S, min_S, max_S))
+            if S <= 0 or not np.isfinite(S):
+                S = 1.0
+        else:
+            S = 1.0
+
+        # Construct scaled float coefficients: c'_k = c_k / S**k
+        scaled_coeffs = np.zeros(d + 1, dtype=np.float64)
+        scaled_coeffs[0] = 1.0
+        for k in range(1, d + 1):
+            scaled_coeffs[k] = flint_to_float(self._fmpq_poly[d - k]) / (S ** k)
+
         # --- Parallel path: Vectorized Aberth-Ehrlich Candidate Seeker ---
         if parallel:
             try:
-                float_coeffs = np.array(self.coeffs, dtype=np.float64)
-                if np.all(np.isfinite(float_coeffs)):
+                if np.all(np.isfinite(scaled_coeffs)):
                     try:
                         import cupy as cp  # type: ignore[import-not-found]
 
                         # GPU Seeker via CuPy
-                        d = len(float_coeffs) - 1
-                        c_0 = float_coeffs[0]
-                        center = -float_coeffs[1] / (d * c_0)
+                        c_0 = scaled_coeffs[0]
+                        center = -scaled_coeffs[1] / (d * c_0)
                         r_vals = [
-                            abs(float_coeffs[k] / c_0) ** (1.0 / k)
+                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
                             for k in range(1, d + 1)
                         ]
                         R = max(r_vals) * 1.5
                         theta = (2.0 * cp.arange(d) + 0.5) * cp.pi / d
                         z = center + R * (cp.cos(theta) + 1j * cp.sin(theta))
-                        dp_coeffs = [float_coeffs[i] * (d - i) for i in range(d)]
+                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
 
                         for _ in range(50):
                             P_z = cp.zeros_like(z, dtype=complex)
-                            for c in float_coeffs:
+                            for c in scaled_coeffs:
                                 P_z = P_z * z + c
                             Dp_z = cp.zeros_like(z, dtype=complex)
                             for c in dp_coeffs:
@@ -420,24 +518,24 @@ class RealRootedPolynomial:
                             z = z - update
                             if cp.max(cp.abs(update)) < 1e-12:
                                 break
-                        return np.sort(np.real(cp.asnumpy(z)))
+                        gpu_roots = np.sort(np.real(cp.asnumpy(z)))
+                        return gpu_roots * S
                     except Exception:
                         # CPU Seeker via NumPy (Vectorized)
-                        d = len(float_coeffs) - 1
-                        c_0 = float_coeffs[0]
-                        center = -float_coeffs[1] / (d * c_0)
+                        c_0 = scaled_coeffs[0]
+                        center = -scaled_coeffs[1] / (d * c_0)
                         r_vals = [
-                            abs(float_coeffs[k] / c_0) ** (1.0 / k)
+                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
                             for k in range(1, d + 1)
                         ]
                         R = max(r_vals) * 1.5
                         theta = (2.0 * np.arange(d) + 0.5) * np.pi / d
                         z = center + R * (np.cos(theta) + 1j * np.sin(theta))
-                        dp_coeffs = [float_coeffs[i] * (d - i) for i in range(d)]
+                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
 
                         for _ in range(50):
                             P_z = np.zeros_like(z, dtype=complex)
-                            for c in float_coeffs:
+                            for c in scaled_coeffs:
                                 P_z = P_z * z + c
                             Dp_z = np.zeros_like(z, dtype=complex)
                             for c in dp_coeffs:
@@ -452,49 +550,46 @@ class RealRootedPolynomial:
                             z = z - update
                             if np.max(np.abs(update)) < 1e-12:
                                 break
-                        return np.sort(np.real(z))
+                        cpu_roots = np.sort(np.real(z))
+                        return cpu_roots * S
             except (OverflowError, ValueError):
-                pass  # Fall through to certified solver
+                pass  # Fall through to companion matrix/certified solver
 
-        # --- Fast path: NumPy companion-matrix eigensolver ---
+        # --- Fast path: NumPy companion-matrix eigensolver with SciPy balancing ---
         try:
-            float_coeffs = np.array(self.coeffs, dtype=np.float64)
-            if not np.all(np.isfinite(float_coeffs)):
+            if not np.all(np.isfinite(scaled_coeffs)):
                 raise OverflowError("Coefficients overflow float64")
-            raw_roots = np.roots(float_coeffs)
+
+            # Construct companion matrix
+            companion = np.zeros((d, d), dtype=np.float64)
+            if d > 1:
+                companion[1:, :-1] = np.eye(d - 1)
+            companion[0, :] = -scaled_coeffs[1:] / scaled_coeffs[0]
+
+            # Balance companion matrix to minimize floating-point errors
+            from scipy.linalg import matrix_balance
+            balanced_companion, _ = matrix_balance(companion, permute=False)
+
+            raw_roots = np.linalg.eigvals(balanced_companion)
             # Check if all roots are real (imaginary parts negligible)
             if np.all(np.abs(raw_roots.imag) < 1e-10 * (np.abs(raw_roots.real) + 1)):
-                return np.sort(raw_roots.real)
+                return np.sort(raw_roots.real) * S
             # Complex roots detected — fall through to certified solver
         except (OverflowError, ValueError, FloatingPointError):
             pass  # Fall through to certified solver
 
         # --- Certified path: Arb-based root isolation ---
         try:
-            # Construct fmpq_poly directly from coefficients.
-            # Reversing coefficients is required since fmpq_poly accepts coefficients
-            # in ascending degree order (x^0, x^1, ..., x^d).
-            q_coeffs = []
-            for c in reversed(self.coeffs):
-                if isinstance(c, sp.Rational):
-                    q_coeffs.append(flint.fmpq(int(c.p), int(c.q)))
-                elif isinstance(c, (float, np.floating)):
-                    c_sym = sp.Rational(float(c))
-                    q_coeffs.append(flint.fmpq(int(c_sym.p), int(c_sym.q)))
-                else:
-                    q_coeffs.append(flint.fmpq(int(c), 1))
-
-            f_poly = flint.fmpq_poly(q_coeffs)
-            acb_roots = f_poly.complex_roots()
+            acb_roots = self._fmpq_poly.complex_roots()
             float_roots = []
             for r_pair in acb_roots:
                 r = r_pair[0]
                 mult = int(r_pair[1])
                 if hasattr(r, "real"):
                     real_attr = "real"
-                    val = float(getattr(r, real_attr))
+                    val = flint_to_float(getattr(r, real_attr))
                 else:
-                    val = float(r)
+                    val = flint_to_float(r)
                 for _ in range(mult):
                     float_roots.append(val)
             return np.sort(np.array(float_roots, dtype=np.float64))
@@ -516,7 +611,7 @@ class RealRootedPolynomial:
                     RuntimeWarning,
                     stacklevel=2,
                 )
-                float_coeffs = np.array(self.coeffs, dtype=float)
+                float_coeffs = [flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())]
                 return np.sort(np.real(np.roots(float_coeffs)))
 
     def dilation(self, c: Any) -> "RealRootedPolynomial":
@@ -526,34 +621,24 @@ class RealRootedPolynomial:
         if c == 0:
             raise ValueError("Dilation factor c cannot be zero.")
 
+        import flint
         d = self.degree
-        new_coeffs = []
-        for k in range(d + 1):
-            val_c = self.coeffs[k]
-            scale = c**k
-            # Maintain exact representation
-            if isinstance(val_c, (int, np.integer)) and isinstance(
-                scale, (int, np.integer)
-            ):
-                new_coeffs.append(val_c * scale)
-            else:
-                new_coeffs.append(val_c * scale)
+        c_fmpq = sympy_to_fmpq(c)
+        new_asc = []
+        for j in range(d + 1):
+            new_asc.append(self._fmpq_poly[j] * (c_fmpq ** (d - j)))
 
-        return RealRootedPolynomial(new_coeffs, assume_real_rooted=self._is_verified)
+        return RealRootedPolynomial(flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified)
 
     def shift(self, c: Any) -> "RealRootedPolynomial":
         """
         Computes the shifted polynomial [Shi_c p](x) = p(x-c).
         """
-        x = sp.Symbol("x")
-        poly_expr = sum(
-            sp.Rational(coeff) * x ** (self.degree - i)
-            for i, coeff in enumerate(self.coeffs)
-        )
-        shifted_expr = sp.expand(poly_expr.subs(x, x - c))
-        poly = sp.Poly(shifted_expr, x)
-        coeffs = list(poly.all_coeffs())
-        return RealRootedPolynomial(coeffs, assume_real_rooted=self._is_verified)
+        c_fmpq = sympy_to_fmpq(c)
+        shift_poly = _get_shift_poly(c_fmpq)
+        res_poly = self._fmpq_poly(shift_poly)
+
+        return RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
 
     def power(self, c: Any) -> "RealRootedPolynomial":
         """
@@ -653,11 +738,8 @@ class RealRootedPolynomial:
         """
         if self.degree == 0:
             raise ValueError("Cannot take derivative of a constant polynomial.")
-        d = self.degree
-        new_coeffs = []
-        for i in range(d):
-            new_coeffs.append(self.coeffs[i] * (d - i))
-        return RealRootedPolynomial(new_coeffs, assume_real_rooted=self._is_verified)
+        res_poly = self._fmpq_poly.derivative()
+        return RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
 
     def projection(self, j: int) -> "RealRootedPolynomial":
         """
@@ -723,7 +805,7 @@ class RealRootedPolynomial:
 
         for k in range(d + 1):
             if (d - k) % 2 != 0:
-                if self.coeffs[k] != 0:
+                if self._fmpq_poly[k] != 0:
                     return False
         return True
 
@@ -741,11 +823,11 @@ class RealRootedPolynomial:
 
         d = self.degree
         d_new = d // 2
-        new_coeffs = []
+        new_asc = []
         for j in range(d_new + 1):
-            new_coeffs.append(self.coeffs[2 * j])
+            new_asc.append(self._fmpq_poly[2 * j])
 
-        return RealRootedPolynomial(new_coeffs, assume_real_rooted=True)
+        return RealRootedPolynomial(flint.fmpq_poly(new_asc), assume_real_rooted=True)
 
     @property
     def has_non_negative_roots(self) -> bool:
@@ -755,7 +837,8 @@ class RealRootedPolynomial:
         """
         if self._has_non_negative_roots_cached is None:
             signs = []
-            for j, c in enumerate(self.coeffs):
+            for j in range(self.degree + 1):
+                c = self._fmpq_poly[self.degree - j]
                 if c != 0:
                     val = c * (-1) ** (self.degree - j)
                     signs.append(1 if val > 0 else -1)
@@ -770,13 +853,15 @@ class RealRootedPolynomial:
         """
         if self._has_strictly_positive_roots_cached is None:
             ans = True
-            for c in self.coeffs:
-                if c == 0:
+            for k in range(self.degree + 1):
+                if self._fmpq_poly[k] == 0:
                     ans = False
                     break
             if ans:
                 for i in range(1, self.degree + 1):
-                    if self.coeffs[i] * self.coeffs[i - 1] >= 0:
+                    c_i = self._fmpq_poly[self.degree - i]
+                    c_prev = self._fmpq_poly[self.degree - (i - 1)]
+                    if c_i * c_prev >= 0:
                         ans = False
                         break
             self._has_strictly_positive_roots_cached = ans
@@ -799,12 +884,15 @@ class UnitaryPolynomial(RealRootedPolynomial):
     def verify_real_rootedness(self) -> bool:
         return False
 
-    def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[Any]:
+    def evaluate_roots_float64(
+        self, parallel: bool = False, gpu: bool = False
+    ) -> NDArray[Any]:
         """
         Computes the complex roots of the unitary polynomial.
         Evaluates transcendental coefficients numerically using SymPy N(c)
         to avoid int() / float() casting errors of transcendental terms,
         and uses companion matrix eigensolver to compute complex roots on T.
+        Supports GPU acceleration via CuPy if gpu=True is specified.
         """
         if self._roots_cached is not None:
             return self._roots_cached
@@ -814,7 +902,23 @@ class UnitaryPolynomial(RealRootedPolynomial):
             # Safely evaluate transcendental SymPy terms to complex float
             float_coeffs.append(complex(sp.N(c)))
 
-        raw_roots = np.roots(float_coeffs)
+        d = len(float_coeffs) - 1
+        if d <= 0:
+            raw_roots = np.array([], dtype=complex)
+        elif gpu:
+            try:
+                import cupy as cp
+                a = np.array(float_coeffs, dtype=complex)
+                companion = cp.zeros((d, d), dtype=complex)
+                if d > 1:
+                    companion[1:, :-1] = cp.eye(d - 1)
+                companion[0, :] = -cp.array(a[1:] / a[0])
+                raw_roots = cp.asnumpy(cp.linalg.eigvals(companion))
+            except Exception:
+                raw_roots = np.roots(float_coeffs)
+        else:
+            raw_roots = np.roots(float_coeffs)
+
         # Sort roots by their argument (angle) in [-pi, pi]
         angles = np.angle(raw_roots)
         sorted_idx = np.argsort(angles)

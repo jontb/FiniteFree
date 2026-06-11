@@ -39,6 +39,11 @@ def test_finite_s_transform() -> None:
     assert np.isclose(float(S[0]), 1 / (3 / 2))  # e_0 / e_1 = 2/3
     assert np.isclose(float(S[1]), (3 / 2) / 2)  # e_1 / e_2 = 3/4
 
+    # Test exact=False float output
+    S_float = FiniteSTransform(p, exact=False)
+    assert S_float.dtype == np.float64
+    assert np.allclose(S_float, [2/3, 3/4])
+
 
 def test_lazy_geometric_properties() -> None:
     # 1. Polynomial containing a root at zero
@@ -249,6 +254,11 @@ def test_symmetric_polynomial_and_s_transform() -> None:
     assert s_sym[0] == sp.Rational(-6, 5)
     assert s_sym[1] == sp.Rational(-5, 24)
 
+    # Test exact=False float output
+    s_sym_float = SymmetricFiniteSTransform(p, exact=False)
+    assert s_sym_float.dtype == np.float64
+    assert np.allclose(s_sym_float, [-6/5, -5/24])
+
     # Non-symmetric polynomial test
     p_non_sym = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
     assert p_non_sym.is_symmetric() is False
@@ -256,3 +266,35 @@ def test_symmetric_polynomial_and_s_transform() -> None:
         p_non_sym.square_roots_map()
     with pytest.raises(ValueError):
         SymmetricFiniteSTransform(p_non_sym)
+
+
+def test_r_transform_recurrence() -> None:
+    # Verify that FiniteRTransform computes exact expected FFP cumulants
+    # p(x) = (x-1)(x-2) = x^2 - 3x + 2 (d=2, e_1 = 3/2, e_2 = 2)
+    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
+    cumulants = FiniteRTransform(p, order=4)
+
+    assert cumulants[0] == sp.Rational(3, 2)
+    assert cumulants[1] == sp.Rational(1, 2)
+    assert cumulants[2] == 0
+    assert cumulants[3] == 0
+
+    # Scaled check: Hermite polynomial of degree 50, computing order 8 cumulants
+    from examples.showcase import build_hermite_poly
+    p_scaled = build_hermite_poly(50)
+    cumulants_scaled = FiniteRTransform(p_scaled, order=8)
+    assert len(cumulants_scaled) == 8
+    assert cumulants_scaled[1] != 0
+    assert cumulants_scaled[7] == 0
+
+
+def test_numerical_finite_r_transform() -> None:
+    # Create a simple polynomial
+    p = RealRootedPolynomial.from_roots([1, 2, 3])
+
+    # Compute cumulants exactly and numerically
+    exact_cumulants = FiniteRTransform(p, order=3, numerical=False)
+    num_cumulants = FiniteRTransform(p, order=3, numerical=True, prec=128)
+
+    for e, n in zip(exact_cumulants, num_cumulants):
+        assert np.isclose(float(e), float(n), rtol=1e-10)

@@ -1,7 +1,18 @@
 from .core import (
-    PrecisionContext,
     RealRootedPolynomial,
     UnitaryPolynomial,
+)
+from .ensembles import (
+    EmpiricalComparison,
+    gue_expected_poly,
+    sample_goe,
+    sample_gse,
+    sample_gue,
+    sample_haar_orthogonal,
+    sample_haar_symplectic,
+    sample_haar_unitary,
+    sample_wishart,
+    wishart_expected_poly,
 )
 from .orthogonal import (
     chebyshev_t_polynomial,
@@ -22,6 +33,7 @@ from .transforms import (
     FiniteTTransform,
     SymmetricFiniteSTransform,
 )
+from .utils.precision import PrecisionContext
 
 __all__ = [
     "PrecisionContext",
@@ -42,4 +54,14 @@ __all__ = [
     "FiniteRTransform",
     "FiniteTTransform",
     "SymmetricFiniteSTransform",
+    "sample_gue",
+    "sample_goe",
+    "sample_gse",
+    "sample_wishart",
+    "sample_haar_unitary",
+    "sample_haar_orthogonal",
+    "sample_haar_symplectic",
+    "gue_expected_poly",
+    "wishart_expected_poly",
+    "EmpiricalComparison",
 ]

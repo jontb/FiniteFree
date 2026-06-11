@@ -141,3 +141,23 @@ def test_unitary_hermite() -> None:
     # Check that magnitude is 1.0
     for r in roots:
         assert np.isclose(np.abs(r), 1.0)
+
+
+def test_convolution_degree_validation() -> None:
+    import pytest
+
+    # Degree 3 polynomial
+    p = RealRootedPolynomial([1, -6, 11, -6], assume_real_rooted=True)
+    # Degree 2 polynomial
+    q = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
+
+    # Calling convolutions with d=2 < p.degree (3) should raise ValueError
+    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+        symmetric_additive(p, q, d=2)
+
+    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+        multiplicative(p, q, d=2)
+
+    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+        asymmetric_additive(p, q, d=2)
+

@@ -1,10 +1,12 @@
+import functools
 import math
 
-import numpy as np
-import sympy as sp
-from numpy.typing import NDArray
-
 from .core import RealRootedPolynomial
+
+
+@functools.lru_cache(maxsize=None)
+def _get_factorial_list(d: int) -> list[int]:
+    return [math.factorial(i) for i in range(d + 1)]
 
 
 def symmetric_additive(
@@ -20,34 +22,19 @@ def symmetric_additive(
 
     import flint
 
-    e_p = p.normalized_coeffs(d)
-    e_q = q.normalized_coeffs(d)
+    e_p = p._normalized_coeffs_flint(d)
+    e_q = q._normalized_coeffs_flint(d)
+
+    # Precompute factorials via cache
+    factorials = _get_factorial_list(d)
 
     A_coeffs = []
     B_coeffs = []
 
     for k in range(d + 1):
-        fact = math.factorial(k)
-
-        val_p = e_p[k]
-        if isinstance(val_p, sp.Rational):
-            A_coeffs.append(flint.fmpq(int(val_p.p), int(val_p.q) * fact))
-        else:
-            if isinstance(val_p, (float, np.floating)):
-                val_p_sym = sp.Rational(float(val_p))
-                A_coeffs.append(flint.fmpq(int(val_p_sym.p), int(val_p_sym.q) * fact))
-            else:
-                A_coeffs.append(flint.fmpq(int(val_p), fact))
-
-        val_q = e_q[k]
-        if isinstance(val_q, sp.Rational):
-            B_coeffs.append(flint.fmpq(int(val_q.p), int(val_q.q) * fact))
-        else:
-            if isinstance(val_q, (float, np.floating)):
-                val_q_sym = sp.Rational(float(val_q))
-                B_coeffs.append(flint.fmpq(int(val_q_sym.p), int(val_q_sym.q) * fact))
-            else:
-                B_coeffs.append(flint.fmpq(int(val_q), fact))
+        fact = factorials[k]
+        A_coeffs.append(e_p[k] / fact)
+        B_coeffs.append(e_q[k] / fact)
 
     A_poly = flint.fmpq_poly(A_coeffs)
     B_poly = flint.fmpq_poly(B_coeffs)
@@ -55,16 +42,8 @@ def symmetric_additive(
 
     e_res = []
     for k in range(d + 1):
-        val_c = C_poly[k]
-        fact = math.factorial(k)
-        val_res = val_c * fact
-
-        p_val = int(val_res.p)
-        q_val = int(val_res.q)
-        if q_val == 1:
-            e_res.append(p_val)
-        else:
-            e_res.append(sp.Rational(p_val, q_val))
+        val_res = C_poly[k] * factorials[k]
+        e_res.append(val_res)
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)
 
@@ -74,17 +53,16 @@ def multiplicative(
 ) -> RealRootedPolynomial:
     r"""
     Computes the finite free multiplicative convolution (p \boxtimes_d q).
-    r"""
+    """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
 
-    e_p = p.normalized_coeffs(d)
-    e_q = q.normalized_coeffs(d)
+    e_p = p._normalized_coeffs_flint(d)
+    e_q = q._normalized_coeffs_flint(d)
 
-    e_res = np.zeros(d + 1, dtype=object)
-
+    e_res = []
     for k in range(d + 1):
-        e_res[k] = e_p[k] * e_q[k]
+        e_res.append(e_p[k] * e_q[k])
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)
 
@@ -94,50 +72,39 @@ def asymmetric_additive(
 ) -> RealRootedPolynomial:
     r"""
     Computes the finite free asymmetric additive convolution (p \uplus_d q)
-    exactly. Optimized via python-flint's compiled C-level exact rational fmpq
-    arithmetic inside the nested summation loops, yielding a ~25x speedup.
+    exactly. Optimized to run in O(d log d) time via a Cauchy product of
+    scaled coefficient sequences using python-flint's compiled C-level fmpq_poly
+    multiplication.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
 
     import flint
 
-    e_p = p.normalized_coeffs(d)
-    e_q = q.normalized_coeffs(d)
+    e_p = p._normalized_coeffs_flint(d)
+    e_q = q._normalized_coeffs_flint(d)
 
-    def to_fmpq(arr: NDArray[np.object_]) -> list[flint.fmpq]:
-        res = []
-        for v in arr:
-            if isinstance(v, sp.Rational):
-                res.append(flint.fmpq(int(v.p), int(v.q)))
-            elif isinstance(v, (float, np.floating)):
-                v_sym = sp.Rational(float(v))
-                res.append(flint.fmpq(int(v_sym.p), int(v_sym.q)))
-            else:
-                res.append(flint.fmpq(int(v), 1))
-        return res
+    # Precompute factorials via cache
+    factorials = _get_factorial_list(d)
 
-    f_p = to_fmpq(e_p)
-    f_q = to_fmpq(e_q)
+    A_coeffs = []
+    B_coeffs = []
 
-    def get_f(arr: list[flint.fmpq], idx: int) -> flint.fmpq:
-        return arr[idx] if idx < len(arr) else flint.fmpq(0, 1)
+    for i in range(d + 1):
+        fact_ratio = factorials[d - i]
+        fact_i = factorials[i]
+        A_coeffs.append(e_p[i] * flint.fmpq(fact_ratio, fact_i))
+        B_coeffs.append(e_q[i] * flint.fmpq(fact_ratio, fact_i))
+
+    # Cauchy product (polynomial multiplication) of scaled sequences in O(d log d)
+    A_poly = flint.fmpq_poly(A_coeffs)
+    B_poly = flint.fmpq_poly(B_coeffs)
+    C_poly = A_poly * B_poly
 
     e_res = []
-
+    fact_d = factorials[d]
     for k in range(d + 1):
-        s_val = flint.fmpq(0, 1)
-        for i in range(k + 1):
-            num = math.comb(k, i) * math.comb(d - k + i, i)
-            den = math.comb(d, i)
-            weight = flint.fmpq(num, den)
-            s_val += weight * get_f(f_p, i) * get_f(f_q, k - i)
-
-        p_val = int(s_val.p)
-        q_val = int(s_val.q)
-        if q_val == 1:
-            e_res.append(p_val)
-        else:
-            e_res.append(sp.Rational(p_val, q_val))
+        val_res = C_poly[k] * flint.fmpq(factorials[k], fact_d * factorials[d - k])
+        e_res.append(val_res)
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)

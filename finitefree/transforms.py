@@ -5,6 +5,7 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial, UnitaryPolynomial
+from .utils.conversion import flint_to_float, sympy_to_fmpq
 
 
 def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
@@ -25,7 +26,7 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
     return (1 / d) * (p_prime / expr)
 
 
-def FiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
+def FiniteSTransform(p: RealRootedPolynomial, exact: bool = True) -> NDArray[Any]:
     """
     Computes the finite S-Transform discretely on {-k/d}.
     Returns a dense array of length d, where index k-1 maps to -k/d.
@@ -37,35 +38,34 @@ def FiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
         )
 
     d = p.degree
-    e_k = p.normalized_coeffs()
+    e_k = p._normalized_coeffs_flint()
 
-    s_transform = np.zeros(d, dtype=object)
+    s_transform = np.zeros(d, dtype=object if exact else np.float64)
 
     for k in range(1, d + 1):
-        if e_k[k - 1] == 0 or e_k[k] == 0:
+        val_num = e_k[k - 1]
+        val_den = e_k[k]
+        if val_num == 0 or val_den == 0:
             raise ValueError(
                 "Strict positivity constraint violated: a zero coefficient "
                 f"was encountered at index {k - 1} or {k}."
             )
 
-        val_num = e_k[k - 1]
-        val_den = e_k[k]
-        # Maintain exact rational/integer representation to avoid float truncation
-        if isinstance(val_num, (int, np.integer)) and isinstance(
-            val_den, (int, np.integer)
-        ):
-            if val_num % val_den == 0:
-                s_transform[k - 1] = val_num // val_den
-            else:
-                s_transform[k - 1] = sp.Rational(val_num, val_den)
+        res = val_num / val_den
+        if exact:
+            s_transform[k - 1] = sp.Rational(int(res.p), int(res.q))
         else:
-            s_transform[k - 1] = val_num / val_den
+            s_transform[k - 1] = flint_to_float(res)
 
     return s_transform
 
 
 def FiniteRTransform(
-    p: RealRootedPolynomial, order: int = 5, d: Optional[int] = None
+    p: RealRootedPolynomial,
+    order: int = 5,
+    d: Optional[int] = None,
+    numerical: bool = False,
+    prec: int = 256,
 ) -> List[Any]:
     """
     Extracts finite free cumulants κ_n^{(d)}(p) exactly using the classical
@@ -77,9 +77,42 @@ def FiniteRTransform(
     """
     import math
 
+    import flint
+
     if d is None:
         d = p.degree
-    e_k = p.normalized_coeffs(d)
+    e_k = p._normalized_coeffs_flint(d)
+
+    if numerical:
+        # Use controlled high-precision Arb floats to avoid rational arithmetic blowup
+        old_prec = flint.ctx.prec
+        flint.ctx.prec = prec
+        try:
+            arb_e = []
+            for v in e_k:
+                val = flint.arb(v)
+                arb_e.append(val)
+
+            c = []
+            cumulants = []
+            for n in range(1, order + 1):
+                if n > d:
+                    cumulants.append(0.0)
+                    c.append(flint.arb(0))
+                    continue
+
+                cn = arb_e[n]
+                for k in range(1, n):
+                    cn -= math.comb(n - 1, k - 1) * c[k - 1] * arb_e[n - k]
+                c.append(cn)
+
+                # Use exact operations on the arb/fmpz before floating to avoid loss of precision
+                kappa_n = cn * math.factorial(n - 1) * ((-d) ** (n - 1))
+                cumulants.append(float(kappa_n))
+
+            return cumulants
+        finally:
+            flint.ctx.prec = old_prec
 
     # c_n = classical cumulant of the sequence (e_1, e_2, ..., e_n)
     # Using the recurrence: c_n = e_n - sum_{k=1}^{n-1} C(n-1, k-1) * c_k * e_{n-k}
@@ -89,17 +122,17 @@ def FiniteRTransform(
     for n in range(1, order + 1):
         if n > d:
             cumulants.append(0)
-            c.append(0)
+            c.append(flint.fmpq(0))
             continue
 
-        # c_n = e_n - sum_{k=1}^{n-1} C(n-1, k-1) * c_k * e_{n-k}
-        cn = e_k[n]  # e_n (0-indexed, e_k[0] = e_0 = 1)
+        cn = e_k[n]
         for k in range(1, n):
             cn -= math.comb(n - 1, k - 1) * c[k - 1] * e_k[n - k]
         c.append(cn)
 
+        # Maintain exact representation
         kappa_n = cn * math.factorial(n - 1) * ((-d) ** (n - 1))
-        cumulants.append(kappa_n)
+        cumulants.append(sp.Rational(int(kappa_n.p), int(kappa_n.q)))
 
     return cumulants
 
@@ -126,8 +159,12 @@ class FiniteTTransform:
 
         # Multiplicity r of the root 0 of p is trailing zeros in coeffs
         self.r = 0
-        while self.r < self.d and p.coeffs[self.d - self.r] == 0:
-            self.r += 1
+        if p._is_flint:
+            while self.r < self.d and p._fmpq_poly[self.r] == 0:
+                self.r += 1
+        else:
+            while self.r < self.d and p.coeffs[self.d - self.r] == 0:
+                self.r += 1
 
     def __call__(self, t: Any) -> Any:
         """
@@ -139,8 +176,10 @@ class FiniteTTransform:
 
         import math
 
-        if isinstance(t, (int, float)):
+        if isinstance(t, (int, float, np.floating)):
             k = int(math.floor(t_val * self.d)) + 1
+        elif isinstance(t, sp.Rational):
+            k = int((t.p * self.d) // t.q) + 1
         else:
             t_sym = sp.sympify(t)
             k = int(sp.floor(t_sym * self.d)) + 1
@@ -151,24 +190,21 @@ class FiniteTTransform:
         if k > self.d:
             k = self.d
 
-        val_num = self.e_k[self.d - k + 1]
-        val_den = self.e_k[self.d - k]
+        val_num = sympy_to_fmpq(self.e_k[self.d - k + 1])
+        val_den = sympy_to_fmpq(self.e_k[self.d - k])
 
         if val_den == 0:
             raise ValueError(
                 f"Zero division encountered: e_tilde_{self.d - k} is zero."
             )
 
-        if isinstance(val_num, (int, np.integer)) and isinstance(
-            val_den, (int, np.integer)
-        ):
-            if val_num % val_den == 0:
-                return val_num // val_den
-            return sp.Rational(val_num, val_den)
-        return val_num / val_den
+        res = val_num / val_den
+        return sp.Rational(int(res.p), int(res.q))
 
 
-def SymmetricFiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
+def SymmetricFiniteSTransform(
+    p: RealRootedPolynomial, exact: bool = True
+) -> NDArray[Any]:
     """
     Computes the symmetric finite S-Transform discretely on {-k/d}.
     p must be symmetric of even degree 2d.
@@ -186,27 +222,27 @@ def SymmetricFiniteSTransform(p: RealRootedPolynomial) -> NDArray[np.object_]:
 
     # Multiplicity 2r of the root 0
     zero_mult = 0
-    while zero_mult < p.degree and p.coeffs[p.degree - zero_mult] == 0:
-        zero_mult += 1
+    if p._is_flint:
+        while zero_mult < p.degree and p._fmpq_poly[zero_mult] == 0:
+            zero_mult += 1
+    else:
+        while zero_mult < p.degree and p.coeffs[p.degree - zero_mult] == 0:
+            zero_mult += 1
     r = zero_mult // 2
 
-    s_transform = np.zeros(d - r, dtype=object)
+    s_transform = np.zeros(d - r, dtype=object if exact else np.float64)
 
     for k in range(1, d - r + 1):
-        val_num = e_k[2 * (k - 1)]
-        val_den = e_k[2 * k]
+        val_num = sympy_to_fmpq(e_k[2 * (k - 1)])
+        val_den = sympy_to_fmpq(e_k[2 * k])
 
         if val_den == 0:
             raise ValueError(f"Zero division encountered: e_tilde_{2 * k} is zero.")
 
-        if isinstance(val_num, (int, np.integer)) and isinstance(
-            val_den, (int, np.integer)
-        ):
-            if val_num % val_den == 0:
-                s_transform[k - 1] = val_num // val_den
-            else:
-                s_transform[k - 1] = sp.Rational(val_num, val_den)
+        res = val_num / val_den
+        if exact:
+            s_transform[k - 1] = sp.Rational(int(res.p), int(res.q))
         else:
-            s_transform[k - 1] = val_num / val_den
+            s_transform[k - 1] = flint_to_float(res)
 
     return s_transform
