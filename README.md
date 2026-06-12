@@ -150,13 +150,65 @@ expected_p = expected_characteristic_polynomial(beta=1, d=5)
 ```
 ## Computational Complexity & Architecture
 
-FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators and eager root validation. 
+FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators, combinatorial partition counts, and eager root validation. It achieves this by executing convolutions, algebraic transforms, and matrix interpolations directly on polynomial coefficient sequences in C, leveraging `python-flint`'s arbitrary-precision integer/rational arithmetic.
 
-### Execution Scaling Insights
-The architectural execution of FiniteFree strictly conforms to theoretically optimal limits:
-- **Lazy Initialization**: Postponing Sturm sequence checks guarantees that object instantiation remains an $O(1)$ operation.
-- **Quadratic Convolution**: Operations such as symmetric additive convolution ($\boxplus_d$) scale at an $O(d^2)$ complexity.
-- **Deferred Verification**: Eager Sturm sequence evaluations scale exponentially at $O(d^3)$, visibly diverging on the benchmark trajectories. The lazy architecture successfully isolates this mathematical penalty from the critical operational path.
+### Architecture Pipeline Schematic
+
+The flowchart below showcases the transition from exact inputs to exact algebraic manipulations, and finally to the decoupled floating-point approximations.
+
+```mermaid
+graph TD
+    subgraph Exact Backend [Exact Backend: Rational Arithmetic Q via FLINT]
+        A[Input Polynomial / Matrix Pencil] --> B[Exact Representation fmpq_poly / fmpq_mpoly]
+        B --> C[Algebraic Transforms / Convolutions]
+        C --> D{Verify Properties?}
+        D -- Sturm Verification --> E[Subresultant PRS Validation]
+        D -- No Verification --> F[Egress Step]
+    end
+
+    subgraph Approximate Frontend [Approximate Frontend: Decoupled Float64 / Arb C]
+        F --> G[Root Extraction]
+        G -- Fast Approximation --> H[Balanced Companion Matrix Eigensolver Float64]
+        G -- Certified Isolation --> I[Arb Complex Interval Bisection C]
+    end
+
+    style Exact Backend fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4
+    style Approximate Frontend fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4
+```
+
+### Complexity Matrix of Key Operations
+
+| Operation | Mathematical Method | Time Complexity | Arithmetic Space |
+| :--- | :--- | :---: | :---: |
+| **Polynomial Multiplication** | C-level FFT / Kronecker substitution | $O(d \log d)$ | Exact $\mathbb{Q}$ |
+| **Root Reconstruction (`from_roots`)** | Binary divide-and-conquer splitting tree | $O(d \log^2 d)$ | Exact $\mathbb{Q}$ |
+| **Symmetric Additive Convolution ($\boxplus_d$)** | EGF coefficient multiplication | $O(d \log d)$ | Exact $\mathbb{Q}$ |
+| **Asymmetric Additive Convolution ($\uplus_d$)** | Cauchy product of scaled sequences | $O(d \log d)$ | Exact $\mathbb{Q}$ |
+| **Multiplicative Convolution ($\boxtimes_d$)** | Pointwise multiplication of normalized coefficients | $O(d)$ | Exact $\mathbb{Q}$ |
+| **Sturm Real-Rootedness Verification** | Subresultant Polynomial Remainders Sequence (PRS) | $O(d^2)$ | Exact $\mathbb{Q}$ |
+| **Certified Root Isolation (Arb)** | Belyi-like complex interval bisection | $O(d^2)$ | Interval $\mathbb{C}$ |
+| **Fast Root Approximation** | Balanced companion matrix eigenvalues | $O(d^2)$ | Float $\mathbb{C}$ |
+| **Finite R-Transform (Cumulants)** | Generating function recurrence relation | $O(d^2)$ | Exact $\mathbb{Q}$ |
+
+### Architectural Design Principles
+
+#### 1. Exact-to-Approximate Hybrid Pipeline
+All algebraic operations, polynomial recurrences, and convolutions are computed in exact rational arithmetic ($\mathbb{Q}$) using GMP/FLINT backends (`fmpq_poly`). Floating-point approximations are deferred entirely to the final egress stage (e.g. root isolation or evaluation), preventing early-stage rounding errors and numerical drift from compounding during intensive convolution chains.
+
+#### 2. Algebraic Domain Verification (Sturm PRS)
+Instead of seeking roots numerically to check domain boundaries (such as verifying real-rootedness of a convolution), the library employs exact algebraic verification. For polynomials of degree $d \le 30$, FiniteFree evaluates Sturm sequences using Euclidean division modulo in C. For higher degrees, it uses a subresultant Polynomial Remainder Sequence (PRS) to compute Sturm sequences without coefficient growth. If certified bounds are needed, it falls back to Flint’s complex interval bisection (Arb).
+
+#### 3. Partition-Free Cumulant Recurrences
+Rather than explicitly constructing combinatorial structures (such as enumerating non-crossing partitions to calculate free cumulants), FiniteFree solves the finite $R$-transform and $S$-transform relationships using direct generating function recurrences. By rewriting the underlying algebraic equations into coefficient-level recurrence relations, the combinatorial explosion is reduced to a deterministic $O(d^2)$ exact rational arithmetic sweep.
+
+#### 4. High-Performance Multivariate Matrix Pencil Interpolation
+To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$, the library avoids symbolic determinant bottlenecks via three complementary strategies:
+* **Cython-Accelerated Modular Determinants**: Matrix evaluations are mapped to machine-precision finite fields $\mathbb{F}_p$ for fast C-level Gaussian elimination.
+* **Chinese Remainder Theorem (CRT) Reconstruction**: Coefficients computed over multiple distinct prime fields are reconstructed back to exact large integers/rationals over $\mathbb{Q}$.
+* **Zippel's Sparse Polynomial Interpolation**: Instead of using an exponential dense grid (which requires $O(n^m)$ points), Zippel's randomized algorithm discovers the non-zero monomial support of the polynomial step-by-step over finite fields, drastically reducing evaluation costs for sparse pencils.
+
+
+
 
 ## Testing Protocol
 
