@@ -90,64 +90,135 @@ This project utilizes `hatchling` as the core build backend conforming to PEP 51
 
 *Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.6.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
 
-## Quickstart
+### Usage Guide
+
+The following sections illustrate the main modular functionality of FiniteFree.
+
+### 1. Polynomial Representation & Transformations
+
+You can construct polynomials exactly from sequences of coefficients or find roots using numerical or certified (Arb) eigensolvers.
 
 ```python
 from finitefree.core import RealRootedPolynomial
-from finitefree.convolutions import symmetric_additive
+import sympy as sp
 
-# Initialize polynomials natively from standard lists
-p = RealRootedPolynomial([1, -3, 2]) # (x-1)(x-2) = x^2 - 3x + 2
-q = RealRootedPolynomial([1, 0, -4]) # x^2 - 4
+# Initialize exactly via rational/integer coefficients: (x - 1)(x - 2) = x^2 - 3x + 2
+p = RealRootedPolynomial([1, -3, 2])
 
-# Execute exact finite free convolution
-result = symmetric_additive(p, q, d=2)
-print(result.coeffs)
-# Output: [1, 0, -5]
+# Dilate roots by 2, shift roots by 1, or square the roots exactly
+p_dilated = p.dilation(2)             # x^2 - 6x + 8 (roots scaled by 2)
+p_shifted = p.shift(1)                # (x - 2)(x - 3) = x^2 - 5x + 6 (roots + 1)
+p_powered = p.power(2)                # (x - 1)(x - 4) = x^2 - 5x + 4 (roots squared)
+p_reversed = p.reversed_polynomial()  # x^2 - 1.5x + 0.5 (reciprocal roots)
 
-# Perform basic transformations
-p_dilated = p.dilation(2)          # [Dil_2 p](x) = x^2 - 6x + 8 (roots scaled by 2)
-p_shifted = p.shift(1)             # [Shi_1 p](x) = (x-2)(x-3) = x^2 - 5x + 6 (shifted by 1)
-p_powered = p.power(2)             # p^(2) = (x-1)(x-4) = x^2 - 5x + 4 (roots squared)
-p_reversed = p.reversed_polynomial() # p^(-1) = x^2 - 1.5x + 0.5 (reciprocal roots)
+# Fast domain properties evaluated via Descartes' Rule of Signs without root-finding
+print(p.has_non_negative_roots)       # True
+print(p.has_strictly_positive_roots)  # True
 
-# Construct orthogonal polynomials exactly
-from finitefree import (
+# Perform certified complex interval root isolation (Arb)
+roots = p.evaluate_roots_float64(exact=True)
+print(roots)  # [1.0, 2.0]
+```
+
+### 2. Finite Free Convolutions
+
+Convolutions map discrete algebraic combinations of roots exactly, preserving real-rootedness.
+
+```python
+from finitefree.core import RealRootedPolynomial
+from finitefree.convolutions import symmetric_additive, asymmetric_additive, multiplicative
+
+# Instantiate two real-rooted polynomials of degree d=2
+p = RealRootedPolynomial([1, -3, 2])  # roots: 1, 2
+q = RealRootedPolynomial([1, 0, -4])  # roots: -2, 2
+
+# Symmetric Additive Convolution (p [+]_d q)
+res_add = symmetric_additive(p, q, d=2)
+print(res_add.coeffs)  # [1, 0, -5]
+
+# Asymmetric Additive Convolution (p [u]_d q) with fractional rank weights
+res_asym = asymmetric_additive(p, q, weights=[sp.Rational(1, 2), sp.Rational(1, 2)], d=2)
+print(res_asym.coeffs)
+
+# Multiplicative Convolution (p [*]_d q)
+res_mult = multiplicative(p, q, d=2)
+print(res_mult.coeffs)  # Hadamard-like projection
+```
+
+### 3. Finite Transforms & Free Cumulants
+
+Finite free probability transforms compute expected spectral properties and algebraic limits without combinatorial partition search.
+
+```python
+from finitefree import FiniteRTransform, FiniteTTransform, SymmetricFiniteSTransform
+from finitefree.orthogonal import laguerre_polynomial
+
+# Initialize a polynomial (must be non-negative rooted for T-transform)
+poly = laguerre_polynomial(n=3, alpha=1)
+
+# Compute Finite Free Cumulants exactly via generating function recurrences (O(d^2))
+# Additivity holds: kappa(p [+] q) = kappa(p) + kappa(q)
+r_transform = FiniteRTransform(poly)
+cumulant_3 = r_transform.get_cumulant(3)
+print(f"3rd Finite Free Cumulant: {cumulant_3}")
+
+# Map inverse limit points using the Fujie-Ueda Finite T-Transform
+t_transform = FiniteTTransform(poly)
+print(t_transform(0.5))
+```
+
+### 4. Orthogonal Families & Ensembles
+
+FiniteFree builds classical and symmetric orthogonal systems exactly via optimized recursive relations.
+
+```python
+from finitefree.orthogonal import (
     jacobi_polynomial,
     hahn_polynomial,
     jack_polynomial,
     hermite_polynomial,
-    laguerre_polynomial,
-    krawtchouk_polynomial,
-    unitary_hermite_polynomial,
-    chebyshev_t_polynomial,
-    chebyshev_u_polynomial,
-    legendre_polynomial,
-    FiniteTTransform,
-    SymmetricFiniteSTransform,
 )
-jacobi_poly = jacobi_polynomial(n=2, alpha=0, beta=0)   # Legendre polynomial P_2(x)
-hahn_poly = hahn_polynomial(n=1, alpha=1, beta=1, N=4)  # Hahn polynomial Q_1(x)
-jack_poly = jack_polynomial(m=2, partition=[2], alpha=3) # Jack polynomial J_[2]^(3)
-hermite_poly = hermite_polynomial(n=2, physicist=False) # Probabilist Hermite He_2(x)
-laguerre_poly = laguerre_polynomial(n=2, alpha=1)       # Generalized Laguerre L_2^(1)(x)
-krawtchouk_poly = krawtchouk_polynomial(n=2, p=0.5, N=4) # Krawtchouk polynomial K_2(x)
-cheb_t = chebyshev_t_polynomial(n=2)                    # Chebyshev T_2(x)
-cheb_u = chebyshev_u_polynomial(n=2)                    # Chebyshev U_2(x)
-legendre_poly = legendre_polynomial(n=3)                # Legendre P_3(x)
-
-# Evaluate Finite T-Transform (valid as laguerre_poly has strictly non-negative roots)
-if laguerre_poly.has_non_negative_roots:
-    t_transform = FiniteTTransform(laguerre_poly)
-    val = t_transform(0.5)
-
-# Sample from random matrix ensembles and retrieve expected polynomials
 from finitefree.ensembles import GOESampler, expected_characteristic_polynomial
 
-goe = GOESampler(d=5)
+# Construct Jacobi, Hahn, and Hermite recurrence relations exactly over Q
+h_prob = hermite_polynomial(n=4, physicist=False)  # Probabilist Hermite He_4
+jacobi = jacobi_polynomial(n=3, alpha=1, beta=1)     # Jacobi P_3^(1, 1)
+hahn   = hahn_polynomial(n=2, alpha=1, beta=1, N=5)  # Hahn Q_2
+
+# High-performance multivariate Jack polynomials using sparse exponent dicts
+jack = jack_polynomial(m=3, partition=[2, 1], alpha=2)
+print(jack.coeffs)
+
+# Compare random matrix characteristic polynomials with theoretical sequences
+goe = GOESampler(d=4)
 M = goe.sample(n_samples=1)[0]
-expected_p = expected_characteristic_polynomial(beta=1, d=5)
+expected_poly = expected_characteristic_polynomial(beta=1, d=4)
+print(expected_poly.coeffs)
 ```
+
+### 5. Multivariate Matrix Pencils
+
+Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation.
+
+```python
+from finitefree.hyperbolic import SymmetricMatrixPencil
+from finitefree.multivariate import MultivariatePolynomial
+import numpy as np
+
+# Define a matrix pencil
+A1 = np.eye(3)
+A2 = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+pencil = SymmetricMatrixPencil([A1, A2])
+
+# Construct the multivariate polynomial exactly using modular determinants and CRT
+poly_crt = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(pencil)
+print(poly_crt.expr)
+
+# Or utilize Zippel's randomized sparse interpolation over finite fields
+poly_sparse = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(pencil)
+print(poly_sparse.expr)
+```
+
 ## Computational Complexity & Architecture
 
 FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators, combinatorial partition counts, and eager root validation. It achieves this by executing convolutions, algebraic transforms, and matrix interpolations directly on polynomial coefficient sequences in C, leveraging `python-flint`'s arbitrary-precision integer/rational arithmetic.
