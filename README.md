@@ -17,7 +17,7 @@ FiniteFree's exact algebraic convolutions and root isolating engines accurately 
 | :---: | :---: |
 | ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) |
 
-| Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 100$) |
+| Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 300$) |
 | :---: | :---: |
 | ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/free_lognormal_convergence.gif) |
 
