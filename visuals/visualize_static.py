@@ -298,9 +298,10 @@ def visualize_free_jacobi_arcsine() -> None:
 
 def visualize_free_lognormal() -> None:
     import flint
-    from finitefree.orthogonal import laguerre_polynomial
+
     from finitefree.convolutions import multiplicative
     from finitefree.core import RealRootedPolynomial
+    from finitefree.orthogonal import laguerre_polynomial
 
     m = 100
     d = 100
@@ -311,25 +312,27 @@ def visualize_free_lognormal() -> None:
     flint.ctx.prec = 512
     lag_poly = laguerre_polynomial(m, n - m)
     q_mn = lag_poly.dilation(flint.fmpq(1, n))
-    
+
     p = RealRootedPolynomial.from_roots([1] * m)
     for _ in range(d):
         p = multiplicative(p, q_mn, m)
-        
+
     roots = p.evaluate_roots_float64()
 
     print("  Calculating analytical Free Log-Normal curve...")
     x = np.linspace(0.01, 5.0, 500)
     eps = 1e-5
     z = x + 1j * eps
-    
-    def F(u, zj):
+
+    from typing import Any
+
+    def F(u: Any, zj: Any) -> Any:
         return (1 + u) / u * np.exp(tau * u) - zj
 
-    def F_prime(u, zj):
+    def F_prime(u: Any, zj: Any) -> Any:
         return np.exp(tau * u) * (tau * u * (1 + u) - 1) / (u**2)
 
-    analytical_roots = []
+    analytical_roots_list: list[Any] = []
     u = -1.0 - z[0] * np.exp(tau)
     for zj in z:
         for _ in range(100):
@@ -338,9 +341,9 @@ def visualize_free_lognormal() -> None:
             u -= diff
             if np.abs(val) < 1e-12:
                 break
-        analytical_roots.append(u)
+        analytical_roots_list.append(u)
 
-    analytical_roots = np.array(analytical_roots)
+    analytical_roots = np.array(analytical_roots_list)
     G = (analytical_roots + 1) / z
     density = -np.imag(G) / np.pi
 

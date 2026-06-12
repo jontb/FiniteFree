@@ -218,18 +218,20 @@ def animate_free_jacobi_arcsine_convergence() -> None:
     except Exception as e:
         print(f"Failed to save Free Jacobi animation as GIF: {e}")
     plt.close()
+
+
 def animate_free_lognormal_convergence() -> None:
     """
     Generates an animated GIF showing the convergence of roots of compound Wishart
     convolutions to the analytical Free Log-Normal distribution.
     """
-    import matplotlib.animation as animation
     import flint
-    from finitefree.orthogonal import laguerre_polynomial
-    from finitefree.convolutions import multiplicative
-    from finitefree.core import RealRootedPolynomial
+    import matplotlib.animation as animation
 
-    degrees = [10, 20, 30, 40, 50, 60, 70, 80, 100]
+    from finitefree.core import RealRootedPolynomial
+    from finitefree.orthogonal import laguerre_polynomial
+
+    degrees = [10, 30, 50, 70, 100, 150, 200, 250, 300]
     tau = 1.0
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -239,29 +241,32 @@ def animate_free_lognormal_convergence() -> None:
     flint.ctx.prec = 512
     for m in degrees:
         d = m
-        n = m * d # so that m * d / n = 1.0
+        n = m * d  # so that m * d / n = 1.0
         lag_poly = laguerre_polynomial(m, n - m)
         q_mn = lag_poly.dilation(flint.fmpq(1, n))
-        
+
         p = RealRootedPolynomial.from_roots([1] * m)
-        for _ in range(d):
-            p = multiplicative(p, q_mn, m)
-            
-        roots = p.evaluate_roots_float64()
+        e_p = p._normalized_coeffs_flint(m)
+        e_q = q_mn._normalized_coeffs_flint(m)
+        e_res = [e_p[k] * (e_q[k] ** d) for k in range(m + 1)]
+        p_opt = RealRootedPolynomial.from_normalized_coeffs(e_res)
+        roots = p_opt.evaluate_roots_float64()
         roots_dict[m] = roots
 
     # Pre-calculate the exact analytical limit curve on a grid
     x_vals = np.linspace(0.01, 5.0, 500)
     eps = 1e-5
     z_vals = x_vals + 1j * eps
-    
-    def F(u, zj):
+
+    from typing import Any
+
+    def F(u: Any, zj: Any) -> Any:
         return (1 + u) / u * np.exp(tau * u) - zj
 
-    def F_prime(u, zj):
+    def F_prime(u: Any, zj: Any) -> Any:
         return np.exp(tau * u) * (tau * u * (1 + u) - 1) / (u**2)
 
-    analytical_roots = []
+    analytical_roots_list: list[Any] = []
     u = -1.0 - z_vals[0] * np.exp(tau)
     for zj in z_vals:
         for _ in range(100):
@@ -270,9 +275,9 @@ def animate_free_lognormal_convergence() -> None:
             u -= diff
             if np.abs(val) < 1e-12:
                 break
-        analytical_roots.append(u)
+        analytical_roots_list.append(u)
 
-    analytical_roots = np.array(analytical_roots)
+    analytical_roots = np.array(analytical_roots_list)
     G = (analytical_roots + 1) / z_vals
     density = -np.imag(G) / np.pi
 
@@ -293,10 +298,12 @@ def animate_free_lognormal_convergence() -> None:
         )
 
         # Plot the analytical limit density
-        ax.plot(x_vals, density, "r-", lw=2.5, label=f"Free Log-Normal Law ($\\tau={tau}$)")
+        ax.plot(
+            x_vals, density, "r-", lw=2.5, label=f"Free Log-Normal Law ($\\tau={tau}$)"
+        )
 
         ax.set_title(
-            f"Free Log-Normal Convergence: Compound Wishart (m=d={m}, n={m*m})",
+            f"Free Log-Normal Convergence: Compound Wishart (m=d={m}, n={m * m})",
             fontsize=12,
             pad=10,
         )
