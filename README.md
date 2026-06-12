@@ -9,6 +9,24 @@ FiniteFree is a precision-focused Python framework designed to operationalize th
 
 To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.
 
+## Visual Spectral Convergence Showcase
+
+FiniteFree's exact algebraic convolutions and root isolating engines accurately recover classical limiting distributions as $d \to \infty$. Below are the visualization assets generated natively by the library:
+
+| Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) |
+| :---: | :---: |
+| ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) |
+
+| Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 100$) |
+| :---: | :---: |
+| ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/free_lognormal_convergence.gif) |
+
+
+| Interlacing Preservation Under Convolutions |
+| :---: |
+| ![Interlacing Preservation](visuals/root_interlacing.png) |
+
+
 ## Features
 
 - **Exact Real-Rooted Polynomial Validation**: Verified lazily via exact rational Sturm sequences.
@@ -130,24 +148,6 @@ goe = GOESampler(d=5)
 M = goe.sample(n_samples=1)[0]
 expected_p = expected_characteristic_polynomial(beta=1, d=5)
 ```
-
-## Visual Spectral Convergence Showcase
-
-FiniteFree's exact algebraic convolutions and root isolating engines accurately recover classical limiting distributions as $d \to \infty$. Below are the visualization assets generated natively by the library:
-
-| Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) |
-| :---: | :---: |
-| ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) |
-
-| Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 100$) |
-| :---: | :---: |
-| ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/free_lognormal_convergence.gif) |
-
-
-| Interlacing Preservation Under Convolutions |
-| :---: |
-| ![Interlacing Preservation](visuals/root_interlacing.png) |
-
 ## Computational Complexity & Architecture
 
 FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators and eager root validation. 
