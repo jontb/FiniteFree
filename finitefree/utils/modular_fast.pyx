@@ -2,10 +2,10 @@
 import numpy as np
 cimport numpy as cnpt
 
-cdef long mod_inv(long a, long m) noexcept nogil:
-    cdef long m0 = m
-    cdef long y = 0, x = 1
-    cdef long q, t
+cdef long long mod_inv(long long a, long long m) noexcept nogil:
+    cdef long long m0 = m
+    cdef long long y = 0, x = 1
+    cdef long long q, t
     
     if m == 1:
         return 0
@@ -25,8 +25,8 @@ cdef long mod_inv(long a, long m) noexcept nogil:
     return x
 
 
-cdef long mod_pow(long base, long exp, long mod) noexcept nogil:
-    cdef long res = 1
+cdef long long mod_pow(long long base, long long exp, long long mod) noexcept nogil:
+    cdef long long res = 1
     base = base % mod
     while exp > 0:
         if exp % 2 == 1:
@@ -36,13 +36,13 @@ cdef long mod_pow(long base, long exp, long mod) noexcept nogil:
     return res
 
 
-def construct_zippel_vandermonde_mod_p(long[:, :] test_pts, long[:, :] candidates, long p):
+def construct_zippel_vandermonde_mod_p(long long[:, :] test_pts, long long[:, :] candidates, long long p):
     cdef int K = test_pts.shape[0]
     cdef int num_vars = test_pts.shape[1]
     cdef int r, c, v
-    cdef long term, val
+    cdef long long term, val
     cdef int power
-    cdef long[:, :] V = np.zeros((K, K), dtype=np.int64)
+    cdef long long[:, :] V = np.zeros((K, K), dtype=np.int64)
     
     with nogil:
         for r in range(K):
@@ -56,18 +56,18 @@ def construct_zippel_vandermonde_mod_p(long[:, :] test_pts, long[:, :] candidate
     return V
 
 
-def modular_det(list A, long p):
+def modular_det(list A, long long p):
     cdef int n = len(A)
-    cdef long det = 1
+    cdef long long det = 1
     cdef int i, r, c, pivot
-    cdef long val, inv, factor
+    cdef long long val, inv, factor
     
     # We use a 2D memoryview for fast typed indexing
-    cdef long[:, :] M = np.zeros((n, n), dtype=np.int64)
+    cdef long long[:, :] M = np.zeros((n, n), dtype=np.int64)
     for i in range(n):
         row = A[i]
         for c in range(n):
-            M[i, c] = (<long>row[c]) % p
+            M[i, c] = (<long long>row[c]) % p
             
     for i in range(n):
         pivot = -1
@@ -100,12 +100,12 @@ def modular_det(list A, long p):
     return det
 
 
-def eval_diagonal_specialization_mod_p(long[:, :] A, long[:, :] B, long p, int deg):
+def eval_diagonal_specialization_mod_p(long long[:, :] A, long long[:, :] B, long long p, int deg):
     cdef int n = A.shape[0]
     cdef int z_val, r, c, i, pivot
-    cdef long val, inv, factor, det
-    cdef long[:, :] temp = np.zeros((n, n), dtype=np.int64)
-    cdef long[:] y = np.zeros(deg + 1, dtype=np.int64)
+    cdef long long val, inv, factor, det
+    cdef long long[:, :] temp = np.zeros((n, n), dtype=np.int64)
+    cdef long long[:] y = np.zeros(deg + 1, dtype=np.int64)
     
     with nogil:
         for z_val in range(deg + 1):
@@ -150,14 +150,14 @@ def eval_diagonal_specialization_mod_p(long[:, :] A, long[:, :] B, long p, int d
     return y
 
 
-def eval_points_grid_mod_p(long[:, :, :] matrices, long[:, :] grid_pts, long p):
+def eval_points_grid_mod_p(long long[:, :, :] matrices, long long[:, :] grid_pts, long long p):
     cdef int num_pts = grid_pts.shape[0]
     cdef int m = grid_pts.shape[1]
     cdef int n = matrices.shape[1]
     cdef int i, r, c, j, pivot, row_i
-    cdef long val, inv, factor, det
-    cdef long[:, :] temp = np.zeros((n, n), dtype=np.int64)
-    cdef long[:] results = np.zeros(num_pts, dtype=np.int64)
+    cdef long long val, inv, factor, det
+    cdef long long[:, :] temp = np.zeros((n, n), dtype=np.int64)
+    cdef long long[:] results = np.zeros(num_pts, dtype=np.int64)
     
     with nogil:
         for i in range(num_pts):
