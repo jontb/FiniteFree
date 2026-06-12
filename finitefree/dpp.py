@@ -4,6 +4,7 @@ from typing import Any, List, Sequence, Union
 import flint
 import numpy as np
 import sympy as sp
+from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial
 
@@ -218,7 +219,7 @@ def sample_discrete(kernel: BaseKernel, state_space: Sequence[Any]) -> List[Any]
     sampled_indices = []
 
     for i in range(k, 0, -1):
-        probs = np.zeros(M)
+        probs: NDArray[np.float64] = np.zeros(M)
         for x_idx in range(M):
             probs[x_idx] = sum(abs(v[x_idx]) ** 2 for v in V) / i
 
