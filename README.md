@@ -66,6 +66,10 @@ FiniteFree's exact algebraic convolutions and root isolating engines accurately 
 - **Random Matrix Ensembles (`finitefree.ensembles`)**:
   - **Matrix Samplers**: Fast generation of invariant random matrices for GOE ($O(d)$, $\beta=1$), GUE ($U(d)$, $\beta=2$), and GSE ($USp(2d)$, $\beta=4$).
   - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
+- **Determinantal Point Processes (`finitefree.dpp`)**:
+  - **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula.
+  - **Gap Probabilities & Observables**: Evaluate exact discrete gap probabilities and approximate continuous Fredholm determinants via Nyström discretization, plus exact $k$-point correlation functions.
+  - **HKPV Sampler**: Execute exact point configuration sampling from projection kernels via eigenvalues and Gram-Schmidt projections.
 
 ## Installation
 
