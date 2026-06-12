@@ -92,8 +92,6 @@ This project utilizes `hatchling` as the core build backend conforming to PEP 51
 
 ### Usage Guide
 
-The following sections illustrate the main modular functionality of FiniteFree.
-
 ### 1. Polynomial Representation & Transformations
 
 You can construct polynomials exactly from sequences of coefficients or find roots using numerical or certified (Arb) eigensolvers.
