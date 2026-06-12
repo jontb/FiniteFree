@@ -32,7 +32,9 @@ def sample_gse(d: int, scale: float = 1.0) -> Any:
     Generates a sample GSE matrix of dimension 2d x 2d (Self-dual, Gaussian entries)
     with Kramers degeneracy, scaled to match the d-dimensional expected characteristic polynomial.
     """
-    X = (np.random.randn(2 * d, 2 * d) + 1j * np.random.randn(2 * d, 2 * d)) / np.sqrt(2.0)
+    X = (np.random.randn(2 * d, 2 * d) + 1j * np.random.randn(2 * d, 2 * d)) / np.sqrt(
+        2.0
+    )
     H = (X + X.conj().T) / 2.0
     J = np.zeros((2 * d, 2 * d))
     J[:d, d:] = np.eye(d)
@@ -92,7 +94,7 @@ def sample_haar_symplectic(d: int) -> NDArray[np.complex128]:
         if j > 0:
             # Vectorized Gram-Schmidt projection step using NumPy matrix-vector products
             U = Q[:, :j]
-            W = Q[:, d:d+j]
+            W = Q[:, d : d + j]
             v = v - U @ (U.conj().T @ v) - W @ (W.conj().T @ v)
         u = v / np.linalg.norm(v)
         w = -J @ np.conj(u)
@@ -141,7 +143,7 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
     f_poly = lag._fmpq_poly
     coeffs_list = list(f_poly)
     scaled_coeffs = []
-    factor_base = flint.fmpq(math.factorial(d) * (-1)**d)
+    factor_base = flint.fmpq(math.factorial(d) * (-1) ** d)
 
     for i, coeff in enumerate(coeffs_list):
         if coeff == 0:
@@ -159,6 +161,7 @@ class EmpiricalComparison:
     """
     Compares analytical Expected Characteristic Polynomials against matrix simulations.
     """
+
     def __init__(
         self,
         analytical_poly: RealRootedPolynomial,
@@ -212,18 +215,38 @@ class EmpiricalComparison:
             import matplotlib.pyplot as plt
         except ImportError:
             import warnings
-            warnings.warn("matplotlib is required for plotting. Skipping plot.", stacklevel=2)
+
+            warnings.warn(
+                "matplotlib is required for plotting. Skipping plot.", stacklevel=2
+            )
             return None
 
         fig, ax = plt.subplots(figsize=(8, 5))
         flat_eigs = self.eigenvalues.flatten()
 
-        ax.hist(flat_eigs, bins=50, density=True, alpha=0.6, color="#1f77b4", edgecolor="none", label="Empirical Eigenvalues")
+        ax.hist(
+            flat_eigs,
+            bins=50,
+            density=True,
+            alpha=0.6,
+            color="#1f77b4",
+            edgecolor="none",
+            label="Empirical Eigenvalues",
+        )
 
         roots = self.analytical_poly.evaluate_roots_float64()
-        ax.vlines(roots, ymin=0, ymax=ax.get_ylim()[1] * 0.1, colors="#d62728", linewidth=1.5, label="Analytical Roots")
+        ax.vlines(
+            roots,
+            ymin=0,
+            ymax=ax.get_ylim()[1] * 0.1,
+            colors="#d62728",
+            linewidth=1.5,
+            label="Analytical Roots",
+        )
 
-        ax.set_title(f"Empirical Spectral Density vs. Analytical Roots (d={self.d}, samples={self.samples})")
+        ax.set_title(
+            f"Empirical Spectral Density vs. Analytical Roots (d={self.d}, samples={self.samples})"
+        )
         ax.set_xlabel("Eigenvalue")
         ax.set_ylabel("Density")
         ax.legend()

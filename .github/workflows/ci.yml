@@ -42,9 +42,10 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        # Force pre-compiled wheels for python-flint on Windows, fallback on others
-        python -m pip install --only-binary=python-flint python-flint || python -m pip install python-flint
-        pip install -e .[dev]
+        # Force pre-compiled wheels for python-flint >= 0.6.0 on Windows, fallback on others
+        python -m pip install --only-binary=python-flint "python-flint>=0.6.0" || python -m pip install "python-flint>=0.6.0"
+        # Standard install (not editable) ensures Cython modules compile and link properly
+        pip install .[dev]
 
     - name: Verify Code Formatting & Linting (Linux only)
       if: matrix.os == 'ubuntu-latest'
@@ -55,13 +56,18 @@ jobs:
 
     - name: Test with pytest and coverage (Cython Enabled)
       run: |
-        python -m pytest --cov=finitefree --cov-report=xml tests/
+        # Compile Cython module in-place so it is available locally in the source tree, including NumPy headers
+        python -m pip install Cython
+        python -c "from setuptools import setup, Extension; from Cython.Build import cythonize; import numpy as np; setup(ext_modules=cythonize(Extension('finitefree.utils.modular_fast', ['finitefree/utils/modular_fast.pyx'], include_dirs=[np.get_include()])), script_args=['build_ext', '--inplace'])"
+        export PYTHONPATH=.
+        python -m pytest --import-mode=importlib --cov=finitefree --cov-report=xml tests/
 
     - name: Test with pytest (Cython Disabled Fallback)
       env:
         PYFFP_DISABLE_CYTHON: "1"
       run: |
-        python -m pytest tests/
+        export PYTHONPATH=.
+        python -m pytest --import-mode=importlib tests/
 
     - name: Upload coverage to Codecov (Linux only)
       if: matrix.os == 'ubuntu-latest'

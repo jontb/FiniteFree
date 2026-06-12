@@ -100,7 +100,7 @@ def test_empirical_gue_expected_poly() -> None:
     comp = EmpiricalComparison(
         analytical_poly=analytical_poly,
         samples=samples,
-        generator=lambda: sample_gue(d)
+        generator=lambda: sample_gue(d),
     )
 
     # Coefficient mean validation (5-sigma confidence)
@@ -118,7 +118,7 @@ def test_empirical_wishart_expected_poly() -> None:
     comp = EmpiricalComparison(
         analytical_poly=analytical_poly,
         samples=samples,
-        generator=lambda: sample_wishart(d, n, beta=2)
+        generator=lambda: sample_wishart(d, n, beta=2),
     )
 
     assert comp.verify_coefficients()
@@ -131,6 +131,7 @@ def test_empirical_unitary_validation_beta2() -> None:
     """
     from finitefree.convolutions import symmetric_additive
     from finitefree.core import RealRootedPolynomial
+
     d = 4
     N = 3000
 
@@ -177,6 +178,7 @@ def test_empirical_orthogonal_validation_beta1() -> None:
     """
     from finitefree.convolutions import symmetric_additive
     from finitefree.core import RealRootedPolynomial
+
     d = 4
     N = 3000
 
@@ -223,6 +225,7 @@ def test_empirical_symplectic_validation_beta4() -> None:
     """
     from finitefree.convolutions import symmetric_additive
     from finitefree.core import RealRootedPolynomial
+
     d = 3
     N = 2000
 
@@ -279,6 +282,6 @@ def test_empirical_symplectic_validation_beta4() -> None:
 
 def test_wishart_sampler_invalid_beta() -> None:
     import pytest
+
     with pytest.raises(ValueError, match="beta must be 1, 2, or 4"):
         sample_wishart(d=3, n=5, beta=3)
-

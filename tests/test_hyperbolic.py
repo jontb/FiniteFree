@@ -35,6 +35,15 @@ def test_straight_line_program_and_pencil() -> None:
 
 
 def test_multivariate_polynomial_homogeneous() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     x, y = sp.symbols("x y")
     # P(x, y) = x^2 + 2*x*y + y^2 (homogeneous degree 2)
     p = MultivariatePolynomial(x**2 + 2 * x * y + y**2, [x, y])
@@ -47,6 +56,15 @@ def test_multivariate_polynomial_homogeneous() -> None:
 
 
 def test_multivariate_directional_and_mixed_derivatives() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     x, y = sp.symbols("x y")
     p = MultivariatePolynomial(x**2 + 2 * x * y + y**2, [x, y])
 
@@ -61,6 +79,15 @@ def test_multivariate_directional_and_mixed_derivatives() -> None:
 
 
 def test_multivariate_normalized_coefficients() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     x, y = sp.symbols("x y")
     p = MultivariatePolynomial(x**2 + 2 * x * y + y**2, [x, y])
 
@@ -75,6 +102,15 @@ def test_multivariate_normalized_coefficients() -> None:
 
 
 def test_multivariate_from_pencil() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # A1 = I_2, A2 = [[0, 1], [1, 0]]
     A1 = np.array([[1.0, 0.0], [0.0, 1.0]])
     A2 = np.array([[0.0, 1.0], [1.0, 0.0]])
@@ -87,6 +123,15 @@ def test_multivariate_from_pencil() -> None:
 
 
 def test_multivariate_from_pencil_sparse() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     A1 = np.array([[1.0, 0.0], [0.0, 1.0]])
     A2 = np.array([[0.0, 1.0], [1.0, 0.0]])
     pencil = SymmetricMatrixPencil([A1, A2])
@@ -116,6 +161,15 @@ def test_diagonal_specialization() -> None:
 
 
 def test_multiplicative_matrix_pencil() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # A1 = [[1, 2], [3, 4]] (asymmetric)
     # A2 = [[0, 1], [0, 0]] (asymmetric)
     A1 = np.array([[1.0, 2.0], [3.0, 4.0]])
@@ -130,6 +184,15 @@ def test_multiplicative_matrix_pencil() -> None:
 
 
 def test_one_dimensional_pencil() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # m = 1 boundary case test
     A1 = np.array([[2.0, 3.0], [3.0, 5.0]])
     pencil = SymmetricMatrixPencil([A1])
@@ -178,6 +241,15 @@ def test_exact_hyperbolic_solvers() -> None:
 
 
 def test_interpolated_matrix_pencil() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # Construct a 3x3 matrix pencil (size < 4)
     m, n = 3, 3
     matrices = [np.random.randint(-3, 4, size=(n, n)).astype(float) for _ in range(m)]
@@ -196,6 +268,15 @@ def test_interpolated_matrix_pencil() -> None:
 
 
 def test_interpolated_matrix_pencil_large() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        import pytest
+
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # Scale up matrix pencil to 5x5 to challenge the CRT solver
     m, n = 3, 5
     matrices = [np.random.randint(-2, 2, size=(n, n)).astype(float) for _ in range(m)]
@@ -217,6 +298,7 @@ def test_to_fmpq_mpoly() -> None:
 
     if not hasattr(flint, "fmpq_mpoly_ctx"):
         import pytest
+
         pytest.skip(
             "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
         )
@@ -252,6 +334,5 @@ def test_parallel_diagonal_specialization() -> None:
     np.testing.assert_allclose(
         np.array(p_seq.coeffs, dtype=float),
         np.array(p_par.coeffs, dtype=float),
-        rtol=1e-12
+        rtol=1e-12,
     )
-

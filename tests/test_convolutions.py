@@ -152,12 +152,17 @@ def test_convolution_degree_validation() -> None:
     q = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
 
     # Calling convolutions with d=2 < p.degree (3) should raise ValueError
-    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+    with pytest.raises(
+        ValueError, match="Polynomial degrees cannot exceed dimension d"
+    ):
         symmetric_additive(p, q, d=2)
 
-    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+    with pytest.raises(
+        ValueError, match="Polynomial degrees cannot exceed dimension d"
+    ):
         multiplicative(p, q, d=2)
 
-    with pytest.raises(ValueError, match="Polynomial degrees cannot exceed dimension d"):
+    with pytest.raises(
+        ValueError, match="Polynomial degrees cannot exceed dimension d"
+    ):
         asymmetric_additive(p, q, d=2)
-

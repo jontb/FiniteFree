@@ -56,6 +56,13 @@ def test_hahn_polynomials() -> None:
 
 
 def test_jack_polynomials() -> None:
+    import flint
+
+    if not hasattr(flint, "fmpq_mpoly_ctx"):
+        pytest.skip(
+            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
+        )
+
     # m = 3 variables, partition [1], alpha = 2
     # J_[1]^(2)(x1, x2, x3) = x1 + x2 + x3
     p1 = jack_polynomial(3, [1], 2)

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from finitefree.core import RealRootedPolynomial, UnitaryPolynomial
 from finitefree.utils.modular import modular_det
@@ -7,11 +8,7 @@ from finitefree.utils.modular import modular_det
 def test_modular_det() -> None:
     # Test modular determinant on a simple 3x3 matrix
     p = 1000000007
-    A = [
-        [2, 1, 3],
-        [1, 5, 2],
-        [3, 2, 4]
-    ]
+    A = [[2, 1, 3], [1, 5, 2], [3, 2, 4]]
     # Classical determinant is 2*(20-4) - 1*(4-6) + 3*(2-15) = 32 + 2 - 39 = -5 = 1000000002 mod p
     det = modular_det(A, p)
     assert det == (p - 5) % p
@@ -48,7 +45,7 @@ def test_to_scipy_dist() -> None:
     # Test CDF evaluations
     assert np.isclose(dist.cdf(1.0), 0.0)
     assert np.isclose(dist.cdf(4.0), 1.0)
-    assert np.isclose(dist.cdf(2.5), 0.5) # middle of roots [1, 2, 3, 4]
+    assert np.isclose(dist.cdf(2.5), 0.5)  # middle of roots [1, 2, 3, 4]
 
     # Test PDF evaluations (density is positive inside support)
     assert dist.pdf(2.0) > 0
@@ -63,7 +60,7 @@ def test_to_scipy_dist() -> None:
 
 
 def test_cython_pencil_evals() -> None:
-    from finitefree.utils.modular_fast import (  # type: ignore[import-untyped]
+    from finitefree.utils.modular_fast import (  # type: ignore[import-untyped, unused-ignore]
         eval_diagonal_specialization_mod_p,
         eval_points_grid_mod_p,
     )
@@ -94,24 +91,51 @@ def test_pure_python_fallback() -> None:
     import subprocess
     import sys
 
-    # Run pytest on all other tests with PYFFP_DISABLE_CYTHON=1
-    env = os.environ.copy()
+    # Prevent recursive subprocess execution to avoid infinite process spawning
+    if (
+        os.environ.get("_PYFFP_SUBPROCESS_RUNNING") == "1"
+        or os.environ.get("PYFFP_DISABLE_CYTHON") == "1"
+    ):
+        return
+
+    # Filter out all pytest-cov environment variables to prevent coverage hangs/recursion loops
+    env = {}
+    for k, v in os.environ.items():
+        if not k.startswith("COV_") and k not in (
+            "PYTEST_CURRENT_TEST",
+            "PYTEST_PLUGINS",
+        ):
+            env[k] = v
+
     env["PYFFP_DISABLE_CYTHON"] = "1"
+    env["_PYFFP_SUBPROCESS_RUNNING"] = "1"
 
-    # Run the entire test suite with fallback enabled, excluding this performance file
-    res = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "tests",
-            "--ignore=tests/test_performance_and_scipy.py",
-        ],
-        env=env,
-        capture_output=True,
-        text=True,
+    # Find the project root directory path dynamically relative to this file
+    project_root = (
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if os.path.basename(os.path.dirname(os.path.abspath(__file__))) == "tests"
+        else os.path.dirname(os.path.abspath(__file__))
     )
-    assert res.returncode == 0, f"Fallback tests failed:\n{res.stdout}\n{res.stderr}"
 
-
-
+    try:
+        res = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests",
+                "--ignore=tests/test_performance_and_scipy.py",
+                "-p",
+                "no:cov",  # Explicitly disable pytest-cov plugin in the subprocess
+            ],
+            cwd=project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,  # Enforce safety timeout of 30 seconds to prevent hangs
+        )
+        assert res.returncode == 0, (
+            f"Fallback tests failed:\n{res.stdout}\n{res.stderr}"
+        )
+    except subprocess.TimeoutExpired as e:
+        pytest.fail(f"Fallback subprocess hung and timed out: {e}")

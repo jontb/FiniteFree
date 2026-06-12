@@ -18,13 +18,16 @@ def sturm_monic_prs(A: flint.fmpq_poly, B: flint.fmpq_poly) -> List[flint.fmpq_p
         if R.is_zero():
             break
 
-        lc = R.leading_coefficient()
+        try:
+            lc = R.leading_coefficient()
+        except AttributeError:
+            lc = R.coeffs()[-1] if R.coeffs() else flint.fmpq(0, 1)
         abs_lc = lc if lc > 0 else -lc
         P_next = -R / abs_lc
         prs.append(P_next)
 
     return prs
 
+
 # Alias for compatibility
 sturm_subresultant_prs = sturm_monic_prs
-

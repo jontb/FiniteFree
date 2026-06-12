@@ -12,8 +12,9 @@ __all__ = [
 ]
 
 try:
-    from .modular_fast import modular_det  # type: ignore[import-untyped]
+    from .modular_fast import modular_det  # type: ignore[import-untyped, unused-ignore]
 except ImportError:
+
     def modular_det(A: list[list[int]], p: int) -> int:
         """Computes the determinant of a matrix A modulo prime p in O(n^3) time."""
         n = len(A)
@@ -38,6 +39,7 @@ except ImportError:
                 for c in range(i, n):
                     M[r][c] = (M[r][c] - factor * M[i][c]) % p
         return det
+
 
 def crt(modulo_values: list[int], primes: list[int]) -> int:
     n_p = len(primes)
@@ -91,5 +93,7 @@ def get_inverse_vandermonde_matrix(k: int, p: int) -> list[list[int]]:
     return [[int(V_inv[r, c]) for c in range(k)] for r in range(k)]
 
 
-def get_inverse_vandermonde_matrices_cached(max_k: int, p: int) -> dict[int, list[list[int]]]:
+def get_inverse_vandermonde_matrices_cached(
+    max_k: int, p: int
+) -> dict[int, list[list[int]]]:
     return {k: get_inverse_vandermonde_matrix(k, p) for k in range(1, max_k + 1)}

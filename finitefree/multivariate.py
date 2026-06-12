@@ -38,7 +38,9 @@ def get_monomials(vars_tuple: tuple[sp.Symbol, ...], deg: int) -> list[sp.Expr]:
 
 
 @functools.lru_cache(maxsize=None)
-def get_grid_points(dim: int, grid_vals_tuple: tuple[int, ...]) -> list[tuple[int, ...]]:
+def get_grid_points(
+    dim: int, grid_vals_tuple: tuple[int, ...]
+) -> list[tuple[int, ...]]:
     if dim == 1:
         return [(val,) for val in grid_vals_tuple]
     pts = []
@@ -60,21 +62,21 @@ class MultivariatePolynomial(Polynomial):
     def evaluate(self, x: Sequence[Any]) -> Any:
         """Evaluates the multivariate polynomial at a point x = (x_1, ..., x_m)."""
         from .utils.conversion import sympy_to_fmpq
+
         if len(x) != len(self.variables):
             raise ValueError(f"Expected {len(self.variables)} values, got {len(x)}")
         x_fmpq = [sympy_to_fmpq(xi) for xi in x]
-        return self._mpoly.evaluate(x_fmpq)  # type: ignore[attr-defined]
+        return self._mpoly.evaluate(x_fmpq)  # type: ignore[attr-defined, unused-ignore]
 
     @property
     def variables(self) -> list[sp.Symbol]:
         return self._variables
 
-    def __init__(
-        self, expr: Any, variables: Sequence[sp.Symbol]
-    ) -> None:
+    def __init__(self, expr: Any, variables: Sequence[sp.Symbol]) -> None:
         import flint
 
         from .utils.conversion import sympy_to_fmpq
+
         self._variables = list(variables)
         names = tuple(x.name for x in self._variables)
         self._ctx = flint.fmpq_mpoly_ctx.get(names=names)
@@ -97,7 +99,7 @@ class MultivariatePolynomial(Polynomial):
             term = sp.Rational(int(c.p), int(c.q))
             for x_i, power in zip(self.variables, exp):
                 if power > 0:
-                    term *= x_i ** power
+                    term *= x_i**power
             res_expr += term
         return res_expr
 
@@ -109,7 +111,7 @@ class MultivariatePolynomial(Polynomial):
 
     def degree(self) -> int:
         """Returns the total degree of the multivariate polynomial."""
-        return self._mpoly.total_degree()
+        return int(self._mpoly.total_degree())
 
     def is_homogeneous(self) -> bool:
         """
@@ -133,6 +135,7 @@ class MultivariatePolynomial(Polynomial):
             )
 
         from .utils.conversion import sympy_to_fmpq
+
         deriv_poly = self._ctx.from_dict({})
         for i, e_i in enumerate(direction):
             if e_i != 0:
@@ -167,6 +170,7 @@ class MultivariatePolynomial(Polynomial):
         where \\binom{d}{\\alpha} is the multinomial coefficient.
         """
         import flint
+
         d = self.degree()
 
         def multinomial_coeff(total: int, alpha: Tuple[int, ...]) -> int:
@@ -413,13 +417,21 @@ class MultivariatePolynomial(Polynomial):
 
                     try:
                         import os
+
                         if os.environ.get("PYFFP_DISABLE_CYTHON") == "1":
-                            raise ImportError("Cython explicitly disabled via environment variable")
+                            raise ImportError(
+                                "Cython explicitly disabled via environment variable"
+                            )
                         import numpy as np  # noqa: I001
-                        from .utils.modular_fast import construct_zippel_vandermonde_mod_p  # type: ignore[import-untyped, unused-ignore]  # noqa: I001
+                        from .utils.modular_fast import (
+                            construct_zippel_vandermonde_mod_p,
+                        )  # type: ignore[import-not-found, import-untyped, unused-ignore]  # noqa: I001
+
                         test_pts_np = np.array(test_pts, dtype=np.int64)
                         candidates_np = np.array(candidates, dtype=np.int64)
-                        V_memview = construct_zippel_vandermonde_mod_p(test_pts_np, candidates_np, p)
+                        V_memview = construct_zippel_vandermonde_mod_p(
+                            test_pts_np, candidates_np, p
+                        )
                         V_np = np.array(V_memview, dtype=np.int64)
                         V_flat = V_np.flatten().tolist()
                         V = flint.nmod_mat(K, K, V_flat, p)
@@ -437,12 +449,18 @@ class MultivariatePolynomial(Polynomial):
                     y = flint.nmod_mat(K, 1, p)
                     try:
                         import os
+
                         if os.environ.get("PYFFP_DISABLE_CYTHON") == "1":
-                            raise ImportError("Cython explicitly disabled via environment variable")
+                            raise ImportError(
+                                "Cython explicitly disabled via environment variable"
+                            )
                         import numpy as np  # noqa: I001
 
-                        from .utils.modular_fast import eval_points_grid_mod_p  # type: ignore[import-untyped, unused-ignore]  # noqa: I001
-                        grid_pts = [test_pts[r_idx] + tuple(t) + (1,) for r_idx in range(K)]
+                        from .utils.modular_fast import eval_points_grid_mod_p  # type: ignore[import-not-found, import-untyped, unused-ignore]  # noqa: I001
+
+                        grid_pts = [
+                            test_pts[r_idx] + tuple(t) + (1,) for r_idx in range(K)
+                        ]
                         grid_pts_np = np.array(grid_pts, dtype=np.int64)
                         matrices_np = np.array(integer_matrices, dtype=np.int64)
                         dets = eval_points_grid_mod_p(matrices_np, grid_pts_np, p)

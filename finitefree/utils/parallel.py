@@ -14,10 +14,11 @@ from .modular import (
 try:
     if os.environ.get("PYFFP_DISABLE_CYTHON") == "1":
         raise ImportError("Cython explicitly disabled via environment variable")
-    from .modular_fast import (  # type: ignore[import-untyped]
+    from .modular_fast import (  # type: ignore[import-untyped, unused-ignore]
         eval_diagonal_specialization_mod_p,
         eval_points_grid_mod_p,
     )
+
     HAS_CYTHON = True
 except ImportError:
     HAS_CYTHON = False
@@ -31,9 +32,14 @@ def _eval_diagonal_specialization_prime_worker(
         B_arr = np.array(B_int, dtype=np.int64)
         y = list(eval_diagonal_specialization_mod_p(A_arr, B_arr, p, deg))
     else:
+
         def eval_mod_p(z_val: int, p_val: int) -> int:
-            M = [[(z_val * A_int[r][c] + B_int[r][c]) % p_val for c in range(n)] for r in range(n)]
+            M = [
+                [(z_val * A_int[r][c] + B_int[r][c]) % p_val for c in range(n)]
+                for r in range(n)
+            ]
             return int(modular_det(M, p_val))
+
         y = [eval_mod_p(k, p) for k in range(deg + 1)]
 
     try:
@@ -59,6 +65,7 @@ def _eval_prime_worker(
         current_values = dict(values)
         for step in range(v):
             from collections import defaultdict
+
             grouped = defaultdict(list)
             for pt, val in current_values.items():
                 vi = pt[step]
@@ -115,7 +122,9 @@ def _eval_prime_worker(
 
 
 class ParallelScheduler:
-    def __init__(self, backend: str = "threads", max_workers: Optional[int] = None) -> None:
+    def __init__(
+        self, backend: str = "threads", max_workers: Optional[int] = None
+    ) -> None:
         self.backend = backend.lower()
         if self.backend not in ("threads", "processes", "sequential"):
             raise ValueError(f"Unknown backend: {backend}")
@@ -124,9 +133,13 @@ class ParallelScheduler:
 
     def __enter__(self) -> "ParallelScheduler":
         if self.backend == "threads":
-            self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+            self._executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.max_workers
+            )
         elif self.backend == "processes":
-            self._executor = concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers)
+            self._executor = concurrent.futures.ProcessPoolExecutor(
+                max_workers=self.max_workers
+            )
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -134,7 +147,9 @@ class ParallelScheduler:
             self._executor.shutdown()
             self._executor = None
 
-    def evaluate(self, worker_func: Callable[..., Any], items: List[Any], *args: Any) -> List[Any]:
+    def evaluate(
+        self, worker_func: Callable[..., Any], items: List[Any], *args: Any
+    ) -> List[Any]:
         """
         Evaluate items using worker_func(item, *args).
         Automatically falls back to sequential execution if no executor is active,

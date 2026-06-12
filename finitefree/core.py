@@ -27,6 +27,7 @@ class Polynomial(abc.ABC):
 @functools.lru_cache(maxsize=1024)
 def _get_shift_poly(c_fmpq: Any) -> Any:
     import flint
+
     return flint.fmpq_poly([-c_fmpq, 1])
 
 
@@ -40,6 +41,7 @@ class RealRootedPolynomial(Polynomial):
         coeffs: array of length d+1 where index k corresponds to x^{d-k}, or a flint.fmpq_poly.
         """
         import flint
+
         if not isinstance(coeffs, flint.fmpq_poly):
             if len(coeffs) == 0:
                 raise ValueError("Coefficients sequence cannot be empty")
@@ -68,7 +70,11 @@ class RealRootedPolynomial(Polynomial):
                 self._is_flint = False
 
         if self._is_flint:
-            leading_coeff = poly.leading_coefficient()
+            try:
+                leading_coeff = poly.leading_coefficient()
+            except AttributeError:
+                # Fallback for older python-flint versions where leading_coefficient() is missing
+                leading_coeff = poly.coeffs()[-1] if poly.coeffs() else flint.fmpq(0, 1)
             if leading_coeff != 0 and leading_coeff != 1:
                 poly = poly * (1 / leading_coeff)
             self._fmpq_poly = poly
@@ -104,7 +110,9 @@ class RealRootedPolynomial(Polynomial):
             return self._fmpq_poly(x_fmpq)
         sym_x = sp.sympify(x)
         val_sym = sp.Symbol("x")
-        expr = sum(c * val_sym**(self.degree - i) for i, c in enumerate(self.coeffs_sympy))
+        expr = sum(
+            c * val_sym ** (self.degree - i) for i, c in enumerate(self.coeffs_sympy)
+        )
         return expr.subs(val_sym, sym_x)
 
     def _to_fmpq_poly(self) -> Any:
@@ -112,6 +120,7 @@ class RealRootedPolynomial(Polynomial):
         if self._is_flint:
             return self._fmpq_poly
         import flint
+
         q_coeffs = [sympy_to_fmpq(c) for c in reversed(self.coeffs_sympy)]
         return flint.fmpq_poly(q_coeffs)
 
@@ -140,6 +149,7 @@ class RealRootedPolynomial(Polynomial):
             for factor, multiplicity in factors:
                 if factor.degree() >= 15:
                     from .utils.prs import sturm_subresultant_prs
+
                     sturm_seq = sturm_subresultant_prs(factor, factor.derivative())
                 else:
                     # Generate Sturm sequence using compiled division modulo in C
@@ -157,7 +167,12 @@ class RealRootedPolynomial(Polynomial):
                     for p in seq_list:
                         if p.is_zero():
                             continue
-                        lead_coeff = p.leading_coefficient()
+                        try:
+                            lead_coeff = p.leading_coefficient()
+                        except AttributeError:
+                            lead_coeff = (
+                                p.coeffs()[-1] if p.coeffs() else flint.fmpq(0, 1)
+                            )
                         s = 1 if lead_coeff > 0 else -1
                         deg = p.degree()
 
@@ -214,7 +229,9 @@ class RealRootedPolynomial(Polynomial):
             # If Flint complex_roots itself fails, fall back to numpy.roots
             # with a conservative tolerance to prevent false rejections
             # due to Wilkinson's phenomenon.
-            float_coeffs = [flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())]
+            float_coeffs = [
+                flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())
+            ]
             roots = np.roots(np.array(float_coeffs, dtype=float))
             if not np.allclose(np.imag(roots), 0, atol=1e-2, rtol=1e-2):
                 raise ValueError(
@@ -261,6 +278,7 @@ class RealRootedPolynomial(Polynomial):
             return self._normalized_coeffs_flint_cached
 
         import flint
+
         if self._is_flint:
             e_k = []
             for k in range(d + 1):
@@ -331,6 +349,7 @@ class RealRootedPolynomial(Polynomial):
         \\tilde{e}_k^{(d)}(p).
         """
         import flint
+
         d = len(e_k) - 1
         try:
             q_ek = [sympy_to_fmpq(x) for x in e_k]
@@ -385,11 +404,11 @@ class RealRootedPolynomial(Polynomial):
         inst._roots_cached = np.sort(np.array(float_roots, dtype=np.float64))
         return inst
 
-
     def __str__(self) -> str:
         import sympy as sp
+
         x = sp.Symbol("x")
-        expr = sum(c * x**(self.degree - i) for i, c in enumerate(self.coeffs))
+        expr = sum(c * x ** (self.degree - i) for i, c in enumerate(self.coeffs))
         return f"{self.__class__.__name__}({expr})"
 
     def __repr__(self) -> str:
@@ -425,20 +444,26 @@ class RealRootedPolynomial(Polynomial):
 
         roots = self.evaluate_roots_float64()
         if len(roots) < 2:
-            raise ValueError("SciPy continuous distribution requires at least 2 distinct roots.")
+            raise ValueError(
+                "SciPy continuous distribution requires at least 2 distinct roots."
+            )
 
         class PolynomialRootDist(scipy.stats.rv_continuous):  # type: ignore[misc]
             def __init__(self, roots_arr: NDArray[np.float64]) -> None:
                 self.roots_arr = np.sort(roots_arr)
                 self.d_val = len(roots_arr)
-                super().__init__(a=float(self.roots_arr[0]), b=float(self.roots_arr[-1]))
+                super().__init__(
+                    a=float(self.roots_arr[0]), b=float(self.roots_arr[-1])
+                )
 
             def _cdf(self, x: Any) -> Any:
                 return np.interp(x, self.roots_arr, np.linspace(0.0, 1.0, self.d_val))
 
         return PolynomialRootDist(roots)
 
-    def evaluate_roots_float64(self, parallel: bool = False, exact: bool = True) -> NDArray[Any]:
+    def evaluate_roots_float64(
+        self, parallel: bool = False, exact: bool = True
+    ) -> NDArray[Any]:
         """
         Computes the roots of the polynomial with high numerical stability.
         By default, uses python-flint's Arb-based certified root isolation (exact=True)
@@ -512,7 +537,7 @@ class RealRootedPolynomial(Polynomial):
         scaled_coeffs = np.zeros(d + 1, dtype=np.float64)
         scaled_coeffs[0] = 1.0
         for k in range(1, d + 1):
-            scaled_coeffs[k] = flint_to_float(self._fmpq_poly[d - k]) / (S ** k)
+            scaled_coeffs[k] = flint_to_float(self._fmpq_poly[d - k]) / (S**k)
 
         # --- Parallel path: Vectorized Aberth-Ehrlich Candidate Seeker ---
         if parallel:
@@ -600,6 +625,7 @@ class RealRootedPolynomial(Polynomial):
 
             # Balance companion matrix to minimize floating-point errors
             from scipy.linalg import matrix_balance
+
             balanced_companion, _ = matrix_balance(companion, permute=False)
 
             raw_roots = np.linalg.eigvals(balanced_companion)
@@ -643,7 +669,9 @@ class RealRootedPolynomial(Polynomial):
                     RuntimeWarning,
                     stacklevel=2,
                 )
-                float_coeffs = [flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())]
+                float_coeffs = [
+                    flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())
+                ]
                 return np.sort(np.real(np.roots(float_coeffs)))
 
     def dilation(self, c: Any) -> "RealRootedPolynomial":
@@ -654,13 +682,16 @@ class RealRootedPolynomial(Polynomial):
             raise ValueError("Dilation factor c cannot be zero.")
 
         import flint
+
         d = self.degree
         c_fmpq = sympy_to_fmpq(c)
         new_asc = []
         for j in range(d + 1):
             new_asc.append(self._fmpq_poly[j] * (c_fmpq ** (d - j)))
 
-        return RealRootedPolynomial(flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified)
+        return RealRootedPolynomial(
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+        )
 
     def shift(self, c: Any) -> "RealRootedPolynomial":
         """
@@ -940,6 +971,7 @@ class UnitaryPolynomial(RealRootedPolynomial):
         elif gpu:
             try:
                 import cupy as cp
+
                 a = np.array(float_coeffs, dtype=complex)
                 companion = cp.zeros((d, d), dtype=complex)
                 if d > 1:

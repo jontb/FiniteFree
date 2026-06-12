@@ -45,10 +45,24 @@ def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
     p_prev = p0
     p_curr = p1
     for k in range(1, n):
-        ak = 2 * (k + 1) * (k + 1 + alpha_fmpq + beta_fmpq) * (2 * k + alpha_fmpq + beta_fmpq)
-        bk = (2 * k + alpha_fmpq + beta_fmpq + 1) * (2 * k + alpha_fmpq + beta_fmpq + 2) * (2 * k + alpha_fmpq + beta_fmpq)
+        ak = (
+            2
+            * (k + 1)
+            * (k + 1 + alpha_fmpq + beta_fmpq)
+            * (2 * k + alpha_fmpq + beta_fmpq)
+        )
+        bk = (
+            (2 * k + alpha_fmpq + beta_fmpq + 1)
+            * (2 * k + alpha_fmpq + beta_fmpq + 2)
+            * (2 * k + alpha_fmpq + beta_fmpq)
+        )
         ck = (2 * k + alpha_fmpq + beta_fmpq + 1) * (alpha_fmpq**2 - beta_fmpq**2)
-        dk = 2 * (k + alpha_fmpq) * (k + beta_fmpq) * (2 * k + alpha_fmpq + beta_fmpq + 2)
+        dk = (
+            2
+            * (k + alpha_fmpq)
+            * (k + beta_fmpq)
+            * (2 * k + alpha_fmpq + beta_fmpq + 2)
+        )
 
         factor = flint.fmpq_poly([ck, bk])
         p_next = (factor * p_curr - dk * p_prev) * (1 / ak)

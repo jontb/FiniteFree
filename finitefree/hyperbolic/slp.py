@@ -43,6 +43,7 @@ class StraightLineProgram:
             raise NotImplementedError("Pencil not provided to SLP")
         if exact:
             import flint
+
             A_exact = self._evaluate_exact(x)  # type: ignore[arg-type]
             det_A = A_exact.det()
             if det_A == 0:
@@ -81,6 +82,7 @@ class StraightLineProgram:
             raise NotImplementedError("Pencil not provided to SLP")
         if exact:
             import flint
+
             A_exact = self._evaluate_exact(x)  # type: ignore[arg-type]
             det_A = A_exact.det()
             if det_A == 0:

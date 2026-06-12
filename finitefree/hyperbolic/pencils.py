@@ -56,6 +56,7 @@ class SymmetricMatrixPencil:
             import flint
 
             from ..utils.conversion import sympy_to_fmpq
+
             self._matrices_exact = []
             for A in self.matrices:
                 mat = flint.fmpq_mat(self.n, self.n)
@@ -68,6 +69,7 @@ class SymmetricMatrixPencil:
     def _get_matrices_sympy(self) -> List[List[List[Any]]]:
         if not hasattr(self, "_matrices_sympy"):
             import sympy as sp
+
             self._matrices_sympy = []
             for mat in self.matrices:
                 row_list = []
@@ -128,7 +130,6 @@ class SymmetricMatrixPencil:
         exactly where A = sum w_i A_i and B = sum b_i A_i.
         Returns a RealRootedPolynomial.
         """
-
 
         if len(w) != self.m or len(b) != self.m:
             raise ValueError(
@@ -226,6 +227,7 @@ class SymmetricMatrixPencil:
         into a StraightLineProgram for efficient gradient/Hessian queries.
         """
         from .slp import StraightLineProgram
+
         return StraightLineProgram(operations=["det"], pencil=self)
 
 
@@ -259,6 +261,7 @@ class MultiplicativeMatrixPencil:
             import flint
 
             from ..utils.conversion import sympy_to_fmpq
+
             self._matrices_exact = []
             for A in self.matrices:
                 mat = flint.fmpq_mat(self.n, self.n)
@@ -271,6 +274,7 @@ class MultiplicativeMatrixPencil:
     def _get_matrices_sympy(self) -> List[List[List[Any]]]:
         if not hasattr(self, "_matrices_sympy"):
             import sympy as sp
+
             self._matrices_sympy = []
             for mat in self.matrices:
                 row_list = []

@@ -69,7 +69,13 @@ FiniteFree's exact algebraic convolutions and root isolating engines accurately 
 
 ## Installation
 
-This project utilizes `hatchling` as the core build backend conforming to PEP 517/621.
+This project utilizes `hatchling` and `hatch-cython` to automatically compile Cython extension modules (`modular_fast.pyx`) on install, conforming to PEP 517/621.
+
+### Requirements
+- **Python**: `3.9` or higher
+- **C Compiler**: A working C compiler (e.g., `gcc` or `clang`) must be available on your system to compile the Cython modules.
+
+### Setup Instructions
 
 1. Clone the repository and initialize a virtual environment:
    ```bash
@@ -77,11 +83,14 @@ This project utilizes `hatchling` as the core build backend conforming to PEP 51
    source .venv/bin/activate
    ```
 2. Install the package locally:
-   ```bash
-   pip install .
-   ```
-
-### Dependencies
+   * **Standard Install**:
+     ```bash
+     pip install .
+     ```
+   * **Development / Testing Install** (includes Cython source compilation in editable mode and dev tools like `pytest`):
+     ```bash
+     pip install -e ".[dev]"
+     ```
 - `numpy >= 1.24`
 - `sympy >= 1.12`
 - `python-flint >= 0.6.0`

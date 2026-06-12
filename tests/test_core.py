@@ -91,10 +91,21 @@ def test_coefficient_scaling_preconditioning() -> None:
     np.testing.assert_allclose(eval_roots, sorted(roots), rtol=1e-5)
 
 
+def _build_hermite_poly(d: int) -> RealRootedPolynomial:
+    import math
+
+    coeffs = [0] * (d + 1)
+    for m in range(d // 2 + 1):
+        num = math.factorial(d)
+        den = math.factorial(m) * math.factorial(d - 2 * m) * (2**m)
+        val = ((-1) ** m) * (num // den)
+        coeffs[2 * m] = val
+    return RealRootedPolynomial(coeffs, assume_real_rooted=True)
+
+
 def test_hybrid_root_isolation() -> None:
-    from examples.showcase import build_hermite_poly
     d = 50
-    p = build_hermite_poly(d)
+    p = _build_hermite_poly(d)
     roots_seq = p.evaluate_roots_float64(parallel=False, exact=False)
     roots_par = p.evaluate_roots_float64(parallel=True, exact=False)
     assert len(roots_seq) == d
@@ -102,9 +113,9 @@ def test_hybrid_root_isolation() -> None:
     assert np.allclose(roots_seq, roots_par, atol=1e-8)
 
 
-
 def test_from_roots() -> None:
     import sympy as sp
+
     # Test reconstruction of exact polynomial from roots
     roots = [sp.Rational(1, 2), sp.Rational(-2, 3), sp.Rational(3, 4)]
     p = RealRootedPolynomial.from_roots(roots)
@@ -161,20 +172,17 @@ def test_exact_roots_default() -> None:
     # Roots reconstructed and evaluated should match exactly under default exact=True
     roots = [1.0, 2.0, 3.0]
     p = RealRootedPolynomial.from_roots(roots)
-    
+
     # We clear the cached roots to make sure the evaluation path is executed
     p._roots_cached = None
     eval_roots_default = p.evaluate_roots_float64()
-    
+
     p._roots_cached = None
     eval_roots_exact = p.evaluate_roots_float64(exact=True)
-    
+
     p._roots_cached = None
     eval_roots_approx = p.evaluate_roots_float64(exact=False)
-    
+
     np.testing.assert_allclose(eval_roots_default, roots)
     np.testing.assert_allclose(eval_roots_exact, roots)
     np.testing.assert_allclose(eval_roots_approx, roots)
-
-
-

@@ -51,7 +51,9 @@ warn_unused_configs = true
 module = [
     "flint.*",
     "scipy.*",
-    "sympy.*"
+    "sympy.*",
+    "matplotlib.*",
+    "finitefree.utils.modular_fast"
 ]
 ignore_missing_imports = true
 

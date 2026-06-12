@@ -42,7 +42,7 @@ def test_finite_s_transform() -> None:
     # Test exact=False float output
     S_float = FiniteSTransform(p, exact=False)
     assert S_float.dtype == np.float64
-    assert np.allclose(S_float, [2/3, 3/4])
+    assert np.allclose(S_float, [2 / 3, 3 / 4])
 
 
 def test_lazy_geometric_properties() -> None:
@@ -257,7 +257,7 @@ def test_symmetric_polynomial_and_s_transform() -> None:
     # Test exact=False float output
     s_sym_float = SymmetricFiniteSTransform(p, exact=False)
     assert s_sym_float.dtype == np.float64
-    assert np.allclose(s_sym_float, [-6/5, -5/24])
+    assert np.allclose(s_sym_float, [-6 / 5, -5 / 24])
 
     # Non-symmetric polynomial test
     p_non_sym = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
@@ -266,6 +266,18 @@ def test_symmetric_polynomial_and_s_transform() -> None:
         p_non_sym.square_roots_map()
     with pytest.raises(ValueError):
         SymmetricFiniteSTransform(p_non_sym)
+
+
+def _build_hermite_poly(d: int) -> RealRootedPolynomial:
+    import math
+
+    coeffs = [0] * (d + 1)
+    for m in range(d // 2 + 1):
+        num = math.factorial(d)
+        den = math.factorial(m) * math.factorial(d - 2 * m) * (2**m)
+        val = ((-1) ** m) * (num // den)
+        coeffs[2 * m] = val
+    return RealRootedPolynomial(coeffs, assume_real_rooted=True)
 
 
 def test_r_transform_recurrence() -> None:
@@ -280,8 +292,7 @@ def test_r_transform_recurrence() -> None:
     assert cumulants[3] == 0
 
     # Scaled check: Hermite polynomial of degree 50, computing order 8 cumulants
-    from examples.showcase import build_hermite_poly
-    p_scaled = build_hermite_poly(50)
+    p_scaled = _build_hermite_poly(50)
     cumulants_scaled = FiniteRTransform(p_scaled, order=8)
     assert len(cumulants_scaled) == 8
     assert cumulants_scaled[1] != 0

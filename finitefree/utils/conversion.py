@@ -11,6 +11,7 @@ def flint_to_float(val: Any) -> float:
             return float(int(val.p)) / float(int(val.q))
         except OverflowError:
             from decimal import Decimal
+
             try:
                 return float(Decimal(int(val.p)) / Decimal(int(val.q)))
             except Exception:
@@ -21,6 +22,7 @@ def flint_to_float(val: Any) -> float:
 def sympy_to_fmpq(val: Any) -> Any:
     """Converts a SymPy rational value exactly to a Flint fmpq."""
     import flint
+
     if isinstance(val, flint.fmpq):
         return val
     if isinstance(val, flint.fmpz):
