@@ -152,30 +152,6 @@ expected_p = expected_characteristic_polynomial(beta=1, d=5)
 
 FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators, combinatorial partition counts, and eager root validation. It achieves this by executing convolutions, algebraic transforms, and matrix interpolations directly on polynomial coefficient sequences in C, leveraging `python-flint`'s arbitrary-precision integer/rational arithmetic.
 
-### Architecture Pipeline Schematic
-
-The flowchart below showcases the transition from exact inputs to exact algebraic manipulations, and finally to the decoupled floating-point approximations.
-
-```mermaid
-graph TD
-    subgraph Exact Backend [Exact Backend: Rational Arithmetic Q via FLINT]
-        A[Input Polynomial / Matrix Pencil] --> B[Exact Representation fmpq_poly / fmpq_mpoly]
-        B --> C[Algebraic Transforms / Convolutions]
-        C --> D{Verify Properties?}
-        D -- Sturm Verification --> E[Subresultant PRS Validation]
-        D -- No Verification --> F[Egress Step]
-    end
-
-    subgraph Approximate Frontend [Approximate Frontend: Decoupled Float64 / Arb C]
-        F --> G[Root Extraction]
-        G -- Fast Approximation --> H[Balanced Companion Matrix Eigensolver Float64]
-        G -- Certified Isolation --> I[Arb Complex Interval Bisection C]
-    end
-
-    style Exact Backend fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4
-    style Approximate Frontend fill:#181825,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4
-```
-
 ### Complexity Matrix of Key Operations
 
 | Operation | Mathematical Method | Time Complexity | Arithmetic Space |
