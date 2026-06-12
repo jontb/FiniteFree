@@ -2,6 +2,14 @@ from .core import (
     RealRootedPolynomial,
     UnitaryPolynomial,
 )
+from .dpp import (
+    BaseKernel,
+    DiscreteFiniteKernel,
+    OrthogonalPolynomialKernel,
+    gap_probability_continuous,
+    gap_probability_discrete,
+    sample_discrete,
+)
 from .ensembles import (
     EmpiricalComparison,
     gue_expected_poly,
@@ -64,4 +72,10 @@ __all__ = [
     "gue_expected_poly",
     "wishart_expected_poly",
     "EmpiricalComparison",
+    "BaseKernel",
+    "DiscreteFiniteKernel",
+    "OrthogonalPolynomialKernel",
+    "gap_probability_discrete",
+    "gap_probability_continuous",
+    "sample_discrete",
 ]

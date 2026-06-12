@@ -226,6 +226,63 @@ poly_sparse = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(pencil)
 print(poly_sparse.expr)
 ```
 
+### 6. Determinantal Point Processes (DPPs)
+
+Construct correlation kernels, evaluate k-point joint intensities exactly, compute Fredholm determinant gap probabilities, and sample point configurations algebraically.
+
+```python
+from finitefree import (
+    DiscreteFiniteKernel,
+    OrthogonalPolynomialKernel,
+    hermite_polynomial,
+    gap_probability_discrete,
+    gap_probability_continuous,
+    sample_discrete,
+)
+import numpy as np
+import math
+
+# --- 1. Discrete DPP Kernel & Exact Gap Probability ---
+# 3x3 projection matrix of rank 2
+K_mat = [
+    [2/3, 1/3, 0.0],
+    [1/3, 2/3, 0.0],
+    [0.0, 0.0, 1.0],
+]
+discrete_kernel = DiscreteFiniteKernel(K_mat)
+
+# Exact gap probability on states {0, 1}: det(I - K_{[0,1]})
+prob_discrete = gap_probability_discrete(discrete_kernel, [0, 1])
+print(f"Exact Gap Probability on {{0,1}}: {prob_discrete}")  # 0
+
+# --- 2. Orthogonal Polynomial Kernel & CD Formula ---
+# Probabilist's Hermite polynomials for GUE / Wigner ensemble DPP
+norms = [1, 1, 2] # h_0, h_1, h_2
+polys = [
+    hermite_polynomial(0, physicist=False),
+    hermite_polynomial(1, physicist=False),
+    hermite_polynomial(2, physicist=False),
+    hermite_polynomial(3, physicist=False),
+]
+hermite_kernel = OrthogonalPolynomialKernel(polys, norms)
+
+# Evaluate kernel off-diagonal and diagonal (CD derivatives)
+print(f"CD Kernel K(0.5, 1.2): {hermite_kernel(0.5, 1.2)}")
+print(f"CD Kernel Diagonal K(0.5, 0.5): {hermite_kernel(0.5, 0.5)}")
+
+# --- 3. Continuous Fredholm Determinant ---
+# Hermite orthogonal polynomial weight function
+def weight_func(x):
+    return math.exp(-x**2 / 2.0) / math.sqrt(2.0 * math.pi)
+
+gap_prob = gap_probability_continuous(hermite_kernel, -1.0, 1.0, n_points=20, weight_func=weight_func)
+print(f"Continuous Gap Probability over [-1.0, 1.0]: {gap_prob}")
+
+# --- 4. HKPV Discrete Sampling ---
+sampled_states = sample_discrete(discrete_kernel, state_space=[0, 1, 2])
+print(f"HKPV Sampled point configuration: {sampled_states}")
+```
+
 ## Computational Complexity & Architecture
 
 FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators, combinatorial partition counts, and eager root validation. It achieves this by executing convolutions, algebraic transforms, and matrix interpolations directly on polynomial coefficient sequences in C, leveraging `python-flint`'s arbitrary-precision integer/rational arithmetic.
