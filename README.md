@@ -135,9 +135,14 @@ expected_p = expected_characteristic_polynomial(beta=1, d=5)
 
 FiniteFree's exact algebraic convolutions and root isolating engines accurately recover classical limiting distributions as $d \to \infty$. Below are the visualization assets generated natively by the library:
 
-| Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) | Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) |
-| :---: | :---: | :---: |
-| ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) | ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) |
+| Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) |
+| :---: | :---: |
+| ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) |
+
+| Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 100$) |
+| :---: | :---: |
+| ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/free_lognormal_convergence.gif) |
+
 
 | Interlacing Preservation Under Convolutions |
 | :---: |

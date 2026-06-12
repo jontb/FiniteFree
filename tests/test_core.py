@@ -87,7 +87,7 @@ def test_coefficient_scaling_preconditioning() -> None:
     # Construct a polynomial with widely spread roots to test scaling
     roots = [1e-3, 1.0, 1e3]
     p = RealRootedPolynomial.from_roots(roots)
-    eval_roots = p.evaluate_roots_float64()
+    eval_roots = p.evaluate_roots_float64(exact=False)
     np.testing.assert_allclose(eval_roots, sorted(roots), rtol=1e-5)
 
 
@@ -95,11 +95,12 @@ def test_hybrid_root_isolation() -> None:
     from examples.showcase import build_hermite_poly
     d = 50
     p = build_hermite_poly(d)
-    roots_seq = p.evaluate_roots_float64(parallel=False)
-    roots_par = p.evaluate_roots_float64(parallel=True)
+    roots_seq = p.evaluate_roots_float64(parallel=False, exact=False)
+    roots_par = p.evaluate_roots_float64(parallel=True, exact=False)
     assert len(roots_seq) == d
     assert len(roots_par) == d
     assert np.allclose(roots_seq, roots_par, atol=1e-8)
+
 
 
 def test_from_roots() -> None:
@@ -154,5 +155,26 @@ def test_polynomial_boundary_cases() -> None:
     # Empty coefficients should raise an error
     with pytest.raises((ValueError, IndexError)):
         RealRootedPolynomial([])
+
+
+def test_exact_roots_default() -> None:
+    # Roots reconstructed and evaluated should match exactly under default exact=True
+    roots = [1.0, 2.0, 3.0]
+    p = RealRootedPolynomial.from_roots(roots)
+    
+    # We clear the cached roots to make sure the evaluation path is executed
+    p._roots_cached = None
+    eval_roots_default = p.evaluate_roots_float64()
+    
+    p._roots_cached = None
+    eval_roots_exact = p.evaluate_roots_float64(exact=True)
+    
+    p._roots_cached = None
+    eval_roots_approx = p.evaluate_roots_float64(exact=False)
+    
+    np.testing.assert_allclose(eval_roots_default, roots)
+    np.testing.assert_allclose(eval_roots_exact, roots)
+    np.testing.assert_allclose(eval_roots_approx, roots)
+
 
 

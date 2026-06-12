@@ -438,27 +438,59 @@ class RealRootedPolynomial(Polynomial):
 
         return PolynomialRootDist(roots)
 
-    def evaluate_roots_float64(self, parallel: bool = False) -> NDArray[Any]:
+    def evaluate_roots_float64(self, parallel: bool = False, exact: bool = True) -> NDArray[Any]:
         """
         Computes the roots of the polynomial with high numerical stability.
-        Uses a hybrid approach: tries fast companion-matrix or parallelized
-        Aberth-Ehrlich numerical solvers first, falling back to python-flint's
-        Arb-based certified root isolation when numerical methods fail or overflow.
+        By default, uses python-flint's Arb-based certified root isolation (exact=True)
+        to prevent numerical drift. If exact=False, or as a fallback, tries fast
+        companion-matrix or parallelized Aberth-Ehrlich numerical solvers.
         Supports lazy caching to avoid redundant C-level solver evaluations.
         """
         if self._roots_cached is not None:
             return self._roots_cached
-        res = self._evaluate_roots_float64_uncached(parallel=parallel)
+        res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
         self._roots_cached = res
         return res
 
     def _evaluate_roots_float64_uncached(
-        self, parallel: bool = False
+        self, parallel: bool = False, exact: bool = True
     ) -> NDArray[np.float64]:
         # Estimate root scale S to prevent float64 overflow/underflow
         d = self.degree
         if d == 0:
             return np.empty(0, dtype=np.float64)
+
+        # --- Certified path: Arb-based root isolation (default) ---
+        if exact:
+            try:
+                acb_roots = self._fmpq_poly.complex_roots()
+                float_roots = []
+                for r_pair in acb_roots:
+                    r = r_pair[0]
+                    mult = int(r_pair[1])
+                    if hasattr(r, "real"):
+                        real_attr = "real"
+                        val = flint_to_float(getattr(r, real_attr))
+                    else:
+                        val = flint_to_float(r)
+                    for _ in range(mult):
+                        float_roots.append(val)
+                return np.sort(np.array(float_roots, dtype=np.float64))
+            except Exception:
+                try:
+                    # Fallback to sympy.nroots
+                    x = sp.Symbol("x")
+                    expr = sum(
+                        sp.Rational(c) * x ** (self.degree - i)
+                        for i, c in enumerate(self.coeffs)
+                    )
+                    roots_complex = sp.nroots(expr, maxsteps=1000)
+                    float_roots = [float(r.as_real_imag()[0]) for r in roots_complex]
+                    return np.sort(np.array(float_roots, dtype=np.float64))
+                except Exception:
+                    # Fall through to numerical solvers if exact solver fails
+                    pass
+
         non_zero_scales = []
 
         for k in range(1, d + 1):
@@ -578,7 +610,7 @@ class RealRootedPolynomial(Polynomial):
         except (OverflowError, ValueError, FloatingPointError):
             pass  # Fall through to certified solver
 
-        # --- Certified path: Arb-based root isolation ---
+        # --- Certified path: Arb-based root isolation fallback (when exact is False but numerical fails) ---
         try:
             acb_roots = self._fmpq_poly.complex_roots()
             float_roots = []
