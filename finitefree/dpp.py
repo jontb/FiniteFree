@@ -17,10 +17,8 @@ def _exact_det(A: List[List[Any]]) -> Any:
 
     # Check if all elements can be converted to flint.fmpq
     try:
-        flint_mat = flint.fmpq_mat(n, n)
-        for i in range(n):
-            for j in range(n):
-                flint_mat[i, j] = flint.fmpq(A[i][j])
+        flattened = [flint.fmpq(val) for row in A for val in row]
+        flint_mat = flint.fmpq_mat(n, n, flattened)
         return flint_mat.det()
     except (TypeError, ValueError):
         # Fallback to sympy
@@ -94,7 +92,18 @@ class OrthogonalPolynomialKernel(BaseKernel):
         else:
             self.leading_coeffs = [sympy_to_exact(k) for k in leading_coeffs]
 
+        # Precompute derivative objects to avoid dynamic instantiation overhead
+        self._pn = self.polys[self.n]
+        self._pn_minus = self.polys[self.n - 1]
+        self._pn_deriv = self._pn.derivative() if self._pn.degree > 0 else None
+        self._pn_minus_deriv = (
+            self._pn_minus.derivative() if self._pn_minus.degree > 0 else None
+        )
+
     def __call__(self, x: Any, y: Any) -> Any:
+        # Check if both are strict exact rationals to avoid converting them to floats for isclose checks
+        is_exact_rational = isinstance(x, flint.fmpq) and isinstance(y, flint.fmpq)
+
         # Convert inputs to exact types first
         x = sympy_to_exact(x)
         y = sympy_to_exact(y)
@@ -104,16 +113,15 @@ class OrthogonalPolynomialKernel(BaseKernel):
         is_diag = x == y
         if (
             not is_diag
+            and not is_exact_rational
             and isinstance(x, (float, np.floating, flint.fmpq))
             and isinstance(y, (float, np.floating, flint.fmpq))
         ):
-            # Convert to float for close comparison
+            # Convert to float for close comparison only if they are not strict exact rationals
             from .utils.conversion import flint_to_float
 
             is_diag = np.isclose(flint_to_float(x), flint_to_float(y))
 
-        pn = self.polys[self.n]
-        pn_minus = self.polys[self.n - 1]
         kn = self.leading_coeffs[self.n]
         kn_minus = self.leading_coeffs[self.n - 1]
         hn_minus = self.norms[self.n - 1]
@@ -121,28 +129,35 @@ class OrthogonalPolynomialKernel(BaseKernel):
         factor = kn_minus / (kn * hn_minus)
 
         if is_diag:
-            pn_val = pn.evaluate(x)
-            pn_minus_val = pn_minus.evaluate(x)
+            pn_val = self._pn.evaluate(x)
+            pn_minus_val = self._pn_minus.evaluate(x)
             pn_deriv_val = (
-                pn.derivative().evaluate(x) * pn.degree if pn.degree > 0 else 0
+                (self._pn_deriv.evaluate(x) * self._pn.degree) if self._pn_deriv else 0
             )
             pn_minus_deriv_val = (
-                pn_minus.derivative().evaluate(x) * pn_minus.degree
-                if pn_minus.degree > 0
+                (self._pn_minus_deriv.evaluate(x) * self._pn_minus.degree)
+                if self._pn_minus_deriv
                 else 0
             )
             return factor * (pn_deriv_val * pn_minus_val - pn_minus_deriv_val * pn_val)
         else:
-            pn_x = pn.evaluate(x)
-            pn_minus_y = pn_minus.evaluate(y)
-            pn_minus_x = pn_minus.evaluate(x)
-            pn_y = pn.evaluate(y)
+            pn_x = self._pn.evaluate(x)
+            pn_minus_y = self._pn_minus.evaluate(y)
+            pn_minus_x = self._pn_minus.evaluate(x)
+            pn_y = self._pn.evaluate(y)
             numerator = pn_x * pn_minus_y - pn_minus_x * pn_y
             return (factor * numerator) / (x - y)
 
 
 def sympy_to_exact(val: Any) -> Any:
     """Converts a value to flint.fmpq or sympy Rational/float."""
+    if isinstance(val, flint.fmpq):
+        return val
+    if isinstance(val, int):
+        return flint.fmpq(val)
+    if isinstance(val, float):
+        num, den = val.as_integer_ratio()
+        return flint.fmpq(num, den)
     try:
         from .utils.conversion import sympy_to_fmpq
 
@@ -199,9 +214,18 @@ def gap_probability_continuous(
     return float(np.linalg.det(matrix))
 
 
-def sample_discrete(kernel: BaseKernel, state_space: Sequence[Any]) -> List[Any]:
+def sample_discrete(
+    kernel: Union[BaseKernel, NDArray[Any]], state_space: Sequence[Any]
+) -> List[Any]:
     """HKPV exact projection kernel sampling algorithm for discrete state spaces."""
-    K_mat = np.array([[float(kernel(x, y)) for y in state_space] for x in state_space])
+    if isinstance(kernel, np.ndarray):
+        K_mat = kernel
+    elif hasattr(kernel, "_K") and isinstance(kernel._K, np.ndarray):
+        K_mat = kernel._K
+    else:
+        K_mat = np.array(
+            [[float(kernel(x, y)) for y in state_space] for x in state_space]
+        )
     M = len(state_space)
 
     # Eigen-decomposition for projection component selection
@@ -213,16 +237,15 @@ def sample_discrete(kernel: BaseKernel, state_space: Sequence[Any]) -> List[Any]
         if np.random.rand() < p:
             selected_indices.append(idx)
 
-    V = [eigenvectors[:, idx] for idx in selected_indices]
-    k = len(V)
+    if not selected_indices:
+        return []
 
+    V_mat = eigenvectors[:, selected_indices].T  # shape (k, M)
+    k = len(selected_indices)
     sampled_indices = []
 
     for i in range(k, 0, -1):
-        probs: NDArray[np.float64] = np.zeros(M)
-        for x_idx in range(M):
-            probs[x_idx] = sum(abs(v[x_idx]) ** 2 for v in V) / i
-
+        probs = np.sum(V_mat**2, axis=0) / i
         probs = np.clip(probs, 0, None)
         total_prob = np.sum(probs)
         if total_prob > 1e-12:
@@ -234,23 +257,18 @@ def sample_discrete(kernel: BaseKernel, state_space: Sequence[Any]) -> List[Any]
         sampled_indices.append(sampled_idx)
 
         if i > 1:
-            best_v_idx = np.argmax([abs(v[sampled_idx]) for v in V])
-            v_star = V[best_v_idx]
+            best_v_idx = np.argmax(np.abs(V_mat[:, sampled_idx]))
+            v_star = V_mat[best_v_idx]
 
-            V.pop(best_v_idx)
+            # Delete the chosen eigenvector row
+            V_remaining = np.delete(V_mat, best_v_idx, axis=0)
 
-            new_V: List[Any] = []
-            for v in V:
-                factor = v[sampled_idx] / v_star[sampled_idx]
-                updated_v = v - factor * v_star
-                # Gram-Schmidt stabilization
-                for prev_v in new_V:
-                    proj = np.dot(updated_v, prev_v)
-                    updated_v = updated_v - proj * prev_v
-                norm = np.linalg.norm(updated_v)
-                if norm > 1e-12:
-                    updated_v /= norm
-                    new_V.append(updated_v)
-            V = new_V
+            # Vectorized projection:
+            factors = V_remaining[:, sampled_idx] / v_star[sampled_idx]
+            V_updated = V_remaining - factors[:, None] * v_star
+
+            # Orthonormalize rows using QR decomposition
+            Q, R = np.linalg.qr(V_updated.T)
+            V_mat = Q.T
 
     return [state_space[idx] for idx in sampled_indices]

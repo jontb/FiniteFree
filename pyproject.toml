@@ -46,6 +46,11 @@ pure = false
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+exclude = [
+    '^scratch/',
+    '^experiments/',
+    '^visuals/'
+]
 
 [[tool.mypy.overrides]]
 module = [

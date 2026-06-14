@@ -9,22 +9,60 @@ FiniteFree is a precision-focused Python framework designed to operationalize th
 
 To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.
 
-## Visual Spectral Convergence Showcase
+## Visual Showcase
 
-FiniteFree's exact algebraic convolutions and root isolating engines accurately recover classical limiting distributions as $d \to \infty$. Below are the visualization assets generated natively by the library:
+The following showcase provides a visual representation of FiniteFree's features, organized by topic:
+
+<details>
+<summary><b>1. Limiting Distributions of Free Convolutions</b></summary>
+<br>
+
+Animates the convergence of root distributions of expectation polynomials towards their theoretical free probability limits as the dimension/degree $d$ scales up to 300. This includes Wigner's Semicircle law via GUE expectation polynomials, the Marchenko-Pastur law via Wishart/Laguerre expectation polynomials, the classical Arcsine law from Jacobi polynomials, and the Free Log-normal limit evaluated via multi-precision compound Wishart multiplicative convolutions.
 
 | Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) |
 | :---: | :---: |
-| ![Wigner Semicircle Convergence](visuals/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/marchenko_pastur_convergence.gif) |
+| ![Wigner Semicircle Convergence](visuals/assets/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/assets/marchenko_pastur_convergence.gif) |
 
 | Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 300$) |
 | :---: | :---: |
-| ![Free Jacobi Arcsine Convergence](visuals/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/free_lognormal_convergence.gif) |
+| ![Free Jacobi Arcsine Convergence](visuals/assets/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/assets/free_lognormal_convergence.gif) |
 
+</details>
 
-| Interlacing Preservation Under Convolutions |
+<details>
+<summary><b>2. Determinantal Point Processes & Spectral Universality</b></summary>
+<br>
+
+Showcases GUE spectral universality and eigenvalue spacing statistics. The Christoffel-Darboux kernel scaling limit animation demonstrates convergence to the Sine kernel in the bulk and the Airy kernel at the edge. The Tracy-Widom plot compares the empirical max eigenvalue CDF from HKPV samples against the continuous Fredholm determinant gap probability. The level repulsion spacing distribution displays GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
+
+| CD Kernel Scaling Limits (Sine & Airy Limits) | Tracy-Widom Edge Convergence ($d=100$) |
+| :---: | :---: |
+| ![Asymptotic Scaling Limits](visuals/assets/asymptotic_kernel_scaling.gif) | ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) |
+
+| Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
 | :---: |
-| ![Interlacing Preservation](visuals/root_interlacing.png) |
+| ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
+
+</details>
+
+<details>
+<summary><b>3. Algebraic Properties</b></summary>
+<br>
+
+Illustrates exact algebraic properties, root interlacing constraints, and geometric distributions of FiniteFree polynomials:
+- **Root Interlacing Preservation**: Verifies that root interlacing relations ($p \prec q$) are strictly preserved under symmetric additive convolution ($p \boxplus_6 r \prec q \boxplus_6 r$) and multiplicative convolution ($p \boxtimes_6 r \prec q \boxtimes_6 r$).
+- **Multivariate Pencil Topography**: Visualizes the log-determinant topography and exact eigenvalue boundaries of random symmetric matrix pencils.
+- **Unitary Eigenvalue Repulsion**: Visualizes roots evolving on the complex unit circle $\mathbb{T}$ under unitary Hermite polynomial flows.
+
+| Interlacing Preservation Under Convolutions | Hyperbolic Matrix Pencil Eigencones & Topography |
+| :---: | :---: |
+| ![Interlacing Preservation](visuals/assets/root_interlacing.png) | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) |
+
+| Unitary Hermite Eigenvalue Repulsion Trajectories on $\mathbb{T}$ |
+| :---: |
+| ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+
+</details>
 
 
 ## Features

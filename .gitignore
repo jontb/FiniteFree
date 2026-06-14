@@ -67,10 +67,11 @@ venv.bak/
 .mypy_cache/
 .ruff_cache/
 
-# Local visual output directory (whitelist key showcase assets)
+# Local visual output directory (whitelist key showcase assets and scripts)
 visuals/*
-!visuals/*.gif
-!visuals/*.png
+!visuals/*.py
+!visuals/assets/
+!visuals/assets/*
 
 # Local TODO tracking
 TODO.md

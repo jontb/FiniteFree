@@ -1,8 +1,9 @@
 import os
 import sys
-
-import matplotlib.pyplot as plt
+import time
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 try:
     sys.set_int_max_str_digits(20000)
@@ -13,7 +14,7 @@ from finitefree import jacobi_polynomial
 from finitefree.convolutions import symmetric_additive
 from finitefree.ensembles import gue_expected_poly, wishart_expected_poly
 
-os.makedirs("visuals", exist_ok=True)
+os.makedirs("visuals/assets", exist_ok=True)
 
 
 def animate_asymptotic_convergence() -> None:
@@ -21,8 +22,6 @@ def animate_asymptotic_convergence() -> None:
     Generates an animated GIF showing the convergence of roots of He_d \boxplus_d He_d
     to the Wigner Semicircle as degree d increases from 10 to 300.
     """
-    import matplotlib.animation as animation
-
     degrees = [10, 30, 50, 70, 100, 150, 200, 250, 300]
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -74,7 +73,7 @@ def animate_asymptotic_convergence() -> None:
 
     ani = animation.FuncAnimation(fig, update, frames=len(degrees), repeat=True)  # type: ignore[arg-type]
 
-    gif_path = "visuals/wigner_semicircle_convergence.gif"
+    gif_path = "visuals/assets/wigner_semicircle_convergence.gif"
     try:
         ani.save(gif_path, writer="pillow", fps=2)
         print(f"Animated GIF saved successfully to {gif_path}")
@@ -88,8 +87,6 @@ def animate_marchenko_pastur_convergence() -> None:
     Generates an animated GIF showing the convergence of roots of Laguerre polynomials
     to the Marchenko-Pastur law as degree d increases from 10 to 300.
     """
-    import matplotlib.animation as animation
-
     degrees = [10, 30, 50, 70, 100, 150, 200, 250, 300]
     c_ratio = 2.0
 
@@ -146,7 +143,7 @@ def animate_marchenko_pastur_convergence() -> None:
 
     ani = animation.FuncAnimation(fig, update, frames=len(degrees), repeat=True)  # type: ignore[arg-type]
 
-    gif_path = "visuals/marchenko_pastur_convergence.gif"
+    gif_path = "visuals/assets/marchenko_pastur_convergence.gif"
     try:
         ani.save(gif_path, writer="pillow", fps=2)
         print(f"Animated GIF saved successfully to {gif_path}")
@@ -161,8 +158,6 @@ def animate_free_jacobi_arcsine_convergence() -> None:
     polynomials to the classical Arcsine law (a degenerate case of the Free Jacobi
     distribution) as degree d increases from 10 to 300.
     """
-    import matplotlib.animation as animation
-
     degrees = [10, 30, 50, 70, 100, 150, 200, 250, 300]
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -211,7 +206,7 @@ def animate_free_jacobi_arcsine_convergence() -> None:
 
     ani = animation.FuncAnimation(fig, update, frames=len(degrees), repeat=True)  # type: ignore[arg-type]
 
-    gif_path = "visuals/free_jacobi_arcsine_convergence.gif"
+    gif_path = "visuals/assets/free_jacobi_arcsine_convergence.gif"
     try:
         ani.save(gif_path, writer="pillow", fps=2)
         print(f"Animated GIF saved successfully to {gif_path}")
@@ -226,7 +221,6 @@ def animate_free_lognormal_convergence() -> None:
     convolutions to the analytical Free Log-Normal distribution.
     """
     import flint
-    import matplotlib.animation as animation
 
     from finitefree.core import RealRootedPolynomial
     from finitefree.orthogonal import laguerre_polynomial
@@ -317,7 +311,7 @@ def animate_free_lognormal_convergence() -> None:
 
     ani = animation.FuncAnimation(fig, update, frames=len(degrees), repeat=True)  # type: ignore[arg-type]
 
-    gif_path = "visuals/free_lognormal_convergence.gif"
+    gif_path = "visuals/assets/free_lognormal_convergence.gif"
     try:
         ani.save(gif_path, writer="pillow", fps=2)
         print(f"Animated GIF saved successfully to {gif_path}")
@@ -327,6 +321,7 @@ def animate_free_lognormal_convergence() -> None:
 
 
 if __name__ == "__main__":
+    t_start = time.perf_counter()
     print("Generating Wigner Semicircle convergence animation...")
     animate_asymptotic_convergence()
     print("Generating Marchenko-Pastur convergence animation...")
@@ -335,4 +330,5 @@ if __name__ == "__main__":
     animate_free_jacobi_arcsine_convergence()
     print("Generating Free Log-Normal convergence animation...")
     animate_free_lognormal_convergence()
-    print("Animations successfully generated in visuals/ directory.")
+    elapsed = time.perf_counter() - t_start
+    print(f"Free limits animations generated in {elapsed:.2f} seconds.")
