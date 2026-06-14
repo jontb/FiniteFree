@@ -1,6 +1,7 @@
 # cython: boundscheck=False, wraparound=False, nonecheck=False, cdivision=True
 import numpy as np
 cimport numpy as cnpt
+from libc.stdlib cimport malloc, free
 
 cdef long long mod_inv(long long a, long long m) noexcept nogil:
     cdef long long m0 = m
@@ -228,7 +229,6 @@ def eval_points_grid_mod_p(long long[:, :, :] matrices, long long[:, :] grid_pts
 
 
 def crt(long long[::1] mix, long long[::1] primes):
-    from libc.stdlib cimport malloc, free
 
     cdef int n_p = primes.shape[0]
     if n_p == 0:

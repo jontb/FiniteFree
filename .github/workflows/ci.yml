@@ -73,6 +73,11 @@ jobs:
         export PYTHONPATH=.
         python -m pytest --import-mode=importlib tests/
 
+    - name: Mark workspace as safe directory (Linux only)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        git config --global --add safe.directory "${{ github.workspace }}"
+
     - name: Upload coverage to Codecov (Linux only)
       if: matrix.os == 'ubuntu-latest'
       uses: codecov/codecov-action@v4
@@ -80,3 +85,4 @@ jobs:
         file: ./coverage.xml
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
+        disable_safe_directory: true
