@@ -245,6 +245,7 @@ def crt(long long[::1] mix, long long[::1] primes):
 
     cdef int i, j
     cdef long long c_val, c_inv, val, p_prod_mod
+    cdef object x, p_prod, M
 
     try:
         c[0] = 1
@@ -271,9 +272,9 @@ def crt(long long[::1] mix, long long[::1] primes):
                 c_val += primes[i]
             u[i] = (c_val * c[i]) % primes[i]
 
-        cdef object x = u[0]
-        cdef object p_prod = 1
-        cdef object M = primes[0]
+        x = u[0]
+        p_prod = 1
+        M = primes[0]
 
         for i in range(1, n_p):
             p_prod = p_prod * primes[i - 1]
