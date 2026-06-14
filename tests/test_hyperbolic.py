@@ -336,3 +336,69 @@ def test_parallel_diagonal_specialization() -> None:
         np.array(p_par.coeffs, dtype=float),
         rtol=1e-12,
     )
+
+
+def test_custom_arithmetic_slp() -> None:
+    from finitefree.hyperbolic.slp import StraightLineProgram
+
+    # Test SLP: P(x0, x1) = x0^2 - x1^2
+    ops = [
+        ("mul", 0, 0),  # v2 = v0 * v0
+        ("mul", 1, 1),  # v3 = v1 * v1
+        ("sub", 2, 3),  # v4 = v2 - v3
+    ]
+    slp = StraightLineProgram(ops)
+    x = np.array([2.0, 1.0])
+
+    # Float evaluation and gradient
+    val_float = slp.evaluate(x)
+    grad_float = slp.gradient(x)
+    assert np.isclose(val_float, 3.0)
+    assert np.allclose(grad_float, [4.0, -2.0])
+
+    # Exact evaluation and gradient
+    val_exact = slp.evaluate(x, exact=True)
+    grad_exact = slp.gradient(x, exact=True)
+    assert val_exact == 3
+    assert grad_exact[0] == 4
+    assert grad_exact[1] == -2
+
+
+def test_exact_characteristic_polynomial_interpolation() -> None:
+    # A1 = I_2, A2 = [[0, 1], [1, 0]]
+    A1 = np.array([[1.0, 0.0], [0.0, 1.0]])
+    A2 = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+    pencil = SymmetricMatrixPencil([A1, A2])
+    x = [2.0, 1.0]
+
+    # Evaluated matrix A(x) = [[2, 1], [1, 2]]
+    # charpoly of A(x) is det(t*I - A(x)) = (t-2)^2 - 1 = t^2 - 4*t + 3
+    p = pencil.characteristic_polynomial(x)
+
+    import flint
+
+    assert isinstance(p, flint.fmpq_poly)
+    assert p.degree() == 2
+    # Coefficients in ascending order: [3, -4, 1]
+    assert list(p) == [flint.fmpq(3), flint.fmpq(-4), flint.fmpq(1)]
+
+
+def test_multiplicative_slp_exact() -> None:
+    A1 = np.array([[1.0, 2.0], [3.0, 4.0]])
+    A2 = np.array([[0.0, 1.0], [0.0, 0.0]])
+    pencil = MultiplicativeMatrixPencil([A1, A2])
+    x = [2.0, 1.0]
+
+    slp = pencil.characteristic_polynomial_slp()
+    # det of [[2, 5], [6, 8]] = 16 - 30 = -14
+    val = slp.evaluate(x, exact=True)
+    assert val == -14
+
+    grad = slp.gradient(x, exact=True)
+    # Gradient checks: det([[x1, 2*x1+x2], [3*x1, 4*x1]]) = -2*x1^2 - 3*x1*x2
+    # grad_x1 = -4*x1 - 3*x2 = -8 - 3 = -11
+    # grad_x2 = -3*x1 = -6
+    assert len(grad) == 2
+    assert grad[0] == -11
+    assert grad[1] == -6

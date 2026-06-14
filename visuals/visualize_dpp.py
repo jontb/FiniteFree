@@ -1,23 +1,17 @@
-import os
 import math
-import numpy as np
-import scipy.special
-import scipy.integrate
-import matplotlib.pyplot as plt
-from scipy.stats import gaussian_kde
+import os
+
 import flint
-import sympy as sp
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.integrate
+import scipy.special
 
 from finitefree import (
     OrthogonalPolynomialKernel,
     hermite_polynomial,
-    gap_probability_continuous,
     sample_discrete,
-    FiniteRTransform,
-    RealRootedPolynomial,
-    gue_expected_poly,
 )
-from finitefree.utils.conversion import flint_to_float
 
 os.makedirs("visuals/assets", exist_ok=True)
 
@@ -31,7 +25,7 @@ def get_hermite_kernel(d: int) -> OrthogonalPolynomialKernel:
 
 def weight_func_hermite(x):
     # Normalized weight function for physicist's Hermite polynomials
-    return np.exp(-x**2) / np.sqrt(np.pi)
+    return np.exp(-(x**2)) / np.sqrt(np.pi)
 
 
 def hermite_function_kernel_matrix(d: int, xs: np.ndarray) -> np.ndarray:
@@ -42,24 +36,31 @@ def hermite_function_kernel_matrix(d: int, xs: np.ndarray) -> np.ndarray:
     """
     M = len(xs)
     phi = np.zeros((d + 1, M))
-    phi[0] = np.exp(-xs**2 / 2.0) / (np.pi ** 0.25)
+    phi[0] = np.exp(-(xs**2) / 2.0) / (np.pi**0.25)
     if d > 0:
         phi[1] = np.sqrt(2.0) * xs * phi[0]
     for k in range(1, d):
-        phi[k+1] = np.sqrt(2.0 / (k + 1)) * xs * phi[k] - np.sqrt(float(k) / (k + 1)) * phi[k-1]
-        
+        phi[k + 1] = (
+            np.sqrt(2.0 / (k + 1)) * xs * phi[k]
+            - np.sqrt(float(k) / (k + 1)) * phi[k - 1]
+        )
+
     # CD formula off-diagonal
-    X, Y = np.meshgrid(xs, xs, indexing='ij')
-    numerator = np.outer(phi[d], phi[d-1]) - np.outer(phi[d-1], phi[d])
+    X, Y = np.meshgrid(xs, xs, indexing="ij")
+    numerator = np.outer(phi[d], phi[d - 1]) - np.outer(phi[d - 1], phi[d])
     diff = X - Y
     np.fill_diagonal(diff, 1.0)
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         K_mat = np.sqrt(d / 2.0) * numerator / diff
-    
+
     # Diagonal: \phi_k' = \sqrt{2k} \phi_{k-1} - x \phi_k
-    phi_d_prime = np.sqrt(2.0 * d) * phi[d-1] - xs * phi[d]
-    phi_d_minus_prime = np.sqrt(2.0 * (d - 1)) * phi[d-2] - xs * phi[d-1] if d > 1 else -xs * phi[0]
-    diag_vals = np.sqrt(d / 2.0) * (phi_d_prime * phi[d-1] - phi_d_minus_prime * phi[d])
+    phi_d_prime = np.sqrt(2.0 * d) * phi[d - 1] - xs * phi[d]
+    phi_d_minus_prime = (
+        np.sqrt(2.0 * (d - 1)) * phi[d - 2] - xs * phi[d - 1] if d > 1 else -xs * phi[0]
+    )
+    diag_vals = np.sqrt(d / 2.0) * (
+        phi_d_prime * phi[d - 1] - phi_d_minus_prime * phi[d]
+    )
     np.fill_diagonal(K_mat, diag_vals)
     return K_mat
 
@@ -79,8 +80,10 @@ def project_kernel_to_rank(K_weighted: np.ndarray, d: int) -> np.ndarray:
 class PrecomputedDiscreteKernel:
     def __init__(self, K):
         self._K = K
+
     def __call__(self, i, j):
         return self._K[int(i)][int(j)]
+
     def matrix(self, xs):
         indices = [int(x) for x in xs]
         return self._K[np.ix_(indices, indices)].tolist()
@@ -88,19 +91,20 @@ class PrecomputedDiscreteKernel:
 
 def animate_asymptotic_kernel_scaling():
     from PIL import Image
+
     print("Generating Asymptotic Kernel Scaling Limits animations...")
     degrees = [10, 20, 30, 45, 60, 80, 100, 130, 160, 200]
     bulk_images = []
     edge_images = []
-    
+
     os.makedirs("visuals/assets/temp_bulk_frames", exist_ok=True)
     os.makedirs("visuals/assets/temp_edge_frames", exist_ok=True)
-    
+
     # Bulk points and theoretical limit
     y_fixed = 0.0
     x_vals = np.linspace(-3.0, 3.0, 300)
     sine_limit = np.sinc(x_vals)
-    
+
     # Edge points and theoretical limit
     y_edge_fixed = 0.0
     x_edge_vals = np.linspace(-4.0, 2.0, 300)
@@ -114,7 +118,7 @@ def animate_asymptotic_kernel_scaling():
             ai_x, aip_x, _, _ = scipy.special.airy(x)
             val = (ai_x * aip_y - aip_x * ai_y) / (x - y_edge_fixed)
         airy_limit.append(val)
-        
+
     for idx, d in enumerate(degrees):
         # 1. Bulk Frame
         fig1, ax1 = plt.subplots(figsize=(6.5, 5.2))
@@ -122,10 +126,18 @@ def animate_asymptotic_kernel_scaling():
         pts = np.concatenate([x_vals / rho_0, [y_fixed / rho_0]])
         K_mat = hermite_function_kernel_matrix(d, pts)
         k_bulk = K_mat[:-1, -1] / rho_0
-        
-        ax1.plot(x_vals, k_bulk, color='#1f77b4', lw=2.0, label=f"Finite Kernel (d={d})")
-        ax1.plot(x_vals, sine_limit, '--', color='black', lw=2.0, label="Sine Kernel Limit")
-        ax1.set_title(f"Bulk Universality (Sine Kernel Limit, d={d})", fontsize=11, fontweight='bold')
+
+        ax1.plot(
+            x_vals, k_bulk, color="#1f77b4", lw=2.0, label=f"Finite Kernel (d={d})"
+        )
+        ax1.plot(
+            x_vals, sine_limit, "--", color="black", lw=2.0, label="Sine Kernel Limit"
+        )
+        ax1.set_title(
+            f"Bulk Universality (Sine Kernel Limit, d={d})",
+            fontsize=11,
+            fontweight="bold",
+        )
         ax1.set_xlabel(r"Rescaled Distance $\pi(x - y)$")
         ax1.set_ylabel("Kernel Value")
         ax1.grid(True, linestyle=":", alpha=0.6)
@@ -135,18 +147,33 @@ def animate_asymptotic_kernel_scaling():
         plt.savefig(frame_path_bulk, dpi=120)
         plt.close()
         bulk_images.append(Image.open(frame_path_bulk))
-        
+
         # 2. Edge Frame
         fig2, ax2 = plt.subplots(figsize=(6.5, 5.2))
         edge = np.sqrt(2.0 * d)
-        scale = 1.0 / (np.sqrt(2.0) * (d ** (1.0/6.0)))
-        pts_edge = np.concatenate([edge + x_edge_vals * scale, [edge + y_edge_fixed * scale]])
+        scale = 1.0 / (np.sqrt(2.0) * (d ** (1.0 / 6.0)))
+        pts_edge = np.concatenate(
+            [edge + x_edge_vals * scale, [edge + y_edge_fixed * scale]]
+        )
         K_mat_edge = hermite_function_kernel_matrix(d, pts_edge)
         k_edge = K_mat_edge[:-1, -1] * scale
-        
-        ax2.plot(x_edge_vals, k_edge, color='#2ca02c', lw=2.0, label=f"Finite Kernel (d={d})")
-        ax2.plot(x_edge_vals, airy_limit, '--', color='black', lw=2.0, label="Airy Kernel Limit")
-        ax2.set_title(f"Edge Universality (Airy Kernel Limit, d={d})", fontsize=11, fontweight='bold')
+
+        ax2.plot(
+            x_edge_vals, k_edge, color="#2ca02c", lw=2.0, label=f"Finite Kernel (d={d})"
+        )
+        ax2.plot(
+            x_edge_vals,
+            airy_limit,
+            "--",
+            color="black",
+            lw=2.0,
+            label="Airy Kernel Limit",
+        )
+        ax2.set_title(
+            f"Edge Universality (Airy Kernel Limit, d={d})",
+            fontsize=11,
+            fontweight="bold",
+        )
         ax2.set_xlabel(r"Rescaled Edge Distance")
         ax2.set_ylabel("Kernel Value")
         ax2.grid(True, linestyle=":", alpha=0.6)
@@ -156,7 +183,7 @@ def animate_asymptotic_kernel_scaling():
         plt.savefig(frame_path_edge, dpi=120)
         plt.close()
         edge_images.append(Image.open(frame_path_edge))
-        
+
     gif_path_bulk = "visuals/assets/asymptotic_kernel_bulk.gif"
     gif_path_edge = "visuals/assets/asymptotic_kernel_edge.gif"
     if bulk_images:
@@ -165,7 +192,7 @@ def animate_asymptotic_kernel_scaling():
             save_all=True,
             append_images=bulk_images[1:],
             duration=300,
-            loop=0
+            loop=0,
         )
     if edge_images:
         edge_images[0].save(
@@ -173,16 +200,16 @@ def animate_asymptotic_kernel_scaling():
             save_all=True,
             append_images=edge_images[1:],
             duration=300,
-            loop=0
+            loop=0,
         )
     print(f"Saved bulk kernel scaling animation to {gif_path_bulk}")
     print(f"Saved edge kernel scaling animation to {gif_path_edge}")
-    
+
     for img in bulk_images:
         img.close()
     for img in edge_images:
         img.close()
-        
+
     # Cleanup
     for idx in range(len(degrees)):
         try:
@@ -197,7 +224,9 @@ def animate_asymptotic_kernel_scaling():
         pass
 
 
-def gap_probability_continuous_vectorized(d: int, a: float, b: float, n_points: int = 35) -> float:
+def gap_probability_continuous_vectorized(
+    d: int, a: float, b: float, n_points: int = 35
+) -> float:
     """
     Approximates the continuous Fredholm determinant gap probability over [a, b] using Nyström discretization
     natively with the vectorized float64 hermite_function_kernel_matrix.
@@ -208,7 +237,7 @@ def gap_probability_continuous_vectorized(d: int, a: float, b: float, n_points: 
     w_mapped = 0.5 * (b - a) * w
 
     K_mat = hermite_function_kernel_matrix(d, pts_mapped)
-    
+
     # K_mat already contains the weight factors exp(-x^2/2 - y^2/2) / pi^0.25
     # So we only need to apply the quadrature weights
     w_sqrt = np.sqrt(w_mapped)
@@ -220,20 +249,20 @@ def gap_probability_continuous_vectorized(d: int, a: float, b: float, n_points: 
 
 def visualize_tracy_widom_convergence():
     print("Generating Tracy-Widom Convergence...")
-    
+
     d = 100
     M = 400
     edge = np.sqrt(2.0 * d)
-    scale = (2.0 ** -0.5) * (d ** (-1.0/6.0))
+    scale = (2.0**-0.5) * (d ** (-1.0 / 6.0))
     state_space = np.linspace(-15.0, 16.5, M)
     delta_x = (state_space[-1] - state_space[0]) / (M - 1)
-    
+
     # Compute and project to rank d
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         K_mat_weighted = hermite_function_kernel_matrix(d, state_space) * delta_x
     K_proj = project_kernel_to_rank(K_mat_weighted, d)
     state_space_indices = list(range(M))
-    
+
     num_samples = 400
     max_eigenvalues = []
     print(f"Sampling {num_samples} DPP configurations via HKPV...")
@@ -242,26 +271,42 @@ def visualize_tracy_widom_convergence():
         if len(conf) > 0:
             vals = [state_space[idx] for idx in conf]
             max_eigenvalues.append(np.max(vals))
-            
+
     max_eigenvalues = np.array(max_eigenvalues)
     rescaled_max = (max_eigenvalues - edge) / scale
-    
+
     # Analytical Fredholm Determinant Tracy-Widom Beta=2
     s_grid = np.linspace(-4.0, 2.5, 30)
     analytical_probs = []
     for s in s_grid:
         s_cont = edge + s * scale
-        prob = gap_probability_continuous_vectorized(d, s_cont, max(s_cont + 1.0, 18.0), n_points=35)
+        prob = gap_probability_continuous_vectorized(
+            d, s_cont, max(s_cont + 1.0, 18.0), n_points=35
+        )
         analytical_probs.append(prob)
-        
+
     sorted_rescaled = np.sort(rescaled_max)
     empirical_cdf = np.arange(1, len(sorted_rescaled) + 1) / len(sorted_rescaled)
-    
+
     plt.figure(figsize=(8, 6))
-    plt.plot(sorted_rescaled, empirical_cdf, label="Empirical CDF (HKPV Sampler)", color="#1f77b4", lw=2)
-    plt.plot(s_grid, analytical_probs, 'o--', label="Analytical Fredholm Determinant (Continuous)", color="#d62728")
-    
-    plt.title(f"Tracy-Widom Convergence (GUE Edge, d={d})", fontsize=13, fontweight='bold')
+    plt.plot(
+        sorted_rescaled,
+        empirical_cdf,
+        label="Empirical CDF (HKPV Sampler)",
+        color="#1f77b4",
+        lw=2,
+    )
+    plt.plot(
+        s_grid,
+        analytical_probs,
+        "o--",
+        label="Analytical Fredholm Determinant (Continuous)",
+        color="#d62728",
+    )
+
+    plt.title(
+        f"Tracy-Widom Convergence (GUE Edge, d={d})", fontsize=13, fontweight="bold"
+    )
     plt.xlabel("Rescaled Max Eigenvalue $s$")
     plt.ylabel(r"$P(\lambda_{\max} \leq s)$")
     plt.xlim(-4.0, 1.0)
@@ -275,49 +320,72 @@ def visualize_tracy_widom_convergence():
 
 def visualize_level_repulsion():
     print("Generating Level Repulsion spacing distribution...")
-    
+
     d = 16
     M = 600
     state_space = np.linspace(-5.5, 5.5, M)
     delta_x = 11.0 / (M - 1)
-    
+
     K_mat_weighted = hermite_function_kernel_matrix(d, state_space) * delta_x
     K_proj = project_kernel_to_rank(K_mat_weighted, d)
     state_space_indices = list(range(M))
-    
+
     unfold_grid = np.linspace(-5.6, 5.6, 2000)
     diag_density = np.diag(hermite_function_kernel_matrix(d, unfold_grid))
-    cdf_vals = scipy.integrate.cumulative_trapezoid(diag_density, unfold_grid, initial=0.0)
-    
+    cdf_vals = scipy.integrate.cumulative_trapezoid(
+        diag_density, unfold_grid, initial=0.0
+    )
+
     def GUE_CDF(x):
         return float(np.interp(x, unfold_grid, cdf_vals))
-        
+
     num_samples = 4000
     spacings = []
-    
+
     print(f"Sampling {num_samples} DPP configurations...")
     for _ in range(num_samples):
         conf = sample_discrete(K_proj, state_space_indices)
         dithered_indices = np.array(conf) + np.random.uniform(-0.5, 0.5, len(conf))
         vals = state_space[0] + dithered_indices * delta_x
         unfolded_vals = np.sort([GUE_CDF(v) for v in vals])
-        middle_vals = unfolded_vals[4:d-4]
+        middle_vals = unfolded_vals[4 : d - 4]
         diffs = np.diff(middle_vals)
         for diff in diffs:
             spacings.append(diff)
-                    
+
     spacings = np.array(spacings)
     mean_spacing = np.mean(spacings)
     normalized_spacings = spacings / mean_spacing
-    
+
     plt.figure(figsize=(8, 6))
-    plt.hist(normalized_spacings, bins=50, density=True, alpha=0.6, color="#2ca02c", edgecolor="none", label="Empirical Spacings")
-    
+    plt.hist(
+        normalized_spacings,
+        bins=50,
+        density=True,
+        alpha=0.6,
+        color="#2ca02c",
+        edgecolor="none",
+        label="Empirical Spacings",
+    )
+
     s_grid = np.linspace(0.0, 3.0, 200)
-    wigner_surmise = (32.0 / (np.pi ** 2)) * (s_grid ** 2) * np.exp(-4.0 * (s_grid ** 2) / np.pi)
-    
-    plt.plot(s_grid, wigner_surmise, '-', color="#d62728", lw=2.5, label="Wigner Surmise (GUE, \u03b2=2)")
-    plt.title("Nearest-Neighbor Spacing Distribution (Bulk Repulsion)", fontsize=13, fontweight='bold')
+    wigner_surmise = (
+        (32.0 / (np.pi**2)) * (s_grid**2) * np.exp(-4.0 * (s_grid**2) / np.pi)
+    )
+
+    plt.plot(
+        s_grid,
+        wigner_surmise,
+        "-",
+        color="#d62728",
+        lw=2.5,
+        label="Wigner Surmise (GUE, \u03b2=2)",
+    )
+    plt.title(
+        "Nearest-Neighbor Spacing Distribution (Bulk Repulsion)",
+        fontsize=13,
+        fontweight="bold",
+    )
     plt.xlabel("Normalized Spacing $s$")
     plt.ylabel("Probability Density")
     plt.xlim(0.0, 3.0)

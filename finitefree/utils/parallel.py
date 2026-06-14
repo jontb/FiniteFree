@@ -132,12 +132,8 @@ class ParallelScheduler:
         self._executor: Optional[concurrent.futures.Executor] = None
 
     def __enter__(self) -> "ParallelScheduler":
-        if self.backend == "threads":
+        if self.backend in ("threads", "processes"):
             self._executor = concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.max_workers
-            )
-        elif self.backend == "processes":
-            self._executor = concurrent.futures.ProcessPoolExecutor(
                 max_workers=self.max_workers
             )
         return self

@@ -10,7 +10,6 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from .utils.conversion import flint_to_float, fmpq_poly_to_sympy_coeffs, sympy_to_fmpq
-from .utils.precision import PrecisionContext
 
 
 class Polynomial(abc.ABC):
@@ -88,8 +87,6 @@ class RealRootedPolynomial(Polynomial):
         self._roots_cached: Union[NDArray[Any], None] = None
         self._has_non_negative_roots_cached: Union[bool, None] = None
         self._has_strictly_positive_roots_cached: Union[bool, None] = None
-        # Track memory allocation
-        PrecisionContext.register_allocation()
 
     @property
     def coeffs(self) -> NDArray[np.object_]:

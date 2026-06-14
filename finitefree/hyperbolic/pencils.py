@@ -230,6 +230,43 @@ class SymmetricMatrixPencil:
 
         return StraightLineProgram(operations=["det"], pencil=self)
 
+    def characteristic_polynomial(self, x: Sequence[Any]) -> flint.fmpq_poly:
+        """
+        Computes the characteristic polynomial det(t*I - A(x)) of the pencil evaluated at x
+        exactly using rational interpolation over Q[t].
+        """
+        import flint
+
+        A_exact = self._evaluate_exact(x)
+        n = self.n
+
+        xs = [flint.fmpq(j) for j in range(n + 1)]
+        ys = []
+        for j in range(n + 1):
+            tj = xs[j]
+            M = flint.fmpq_mat(n, n)
+            for r in range(n):
+                for c in range(n):
+                    if r == c:
+                        M[r, c] = tj - A_exact[r, c]
+                    else:
+                        M[r, c] = -A_exact[r, c]
+            ys.append(M.det())
+
+        # Exact Lagrange interpolation
+        t_var = flint.fmpq_poly([0, 1])
+        poly_sum = flint.fmpq_poly([0])
+        for i in range(n + 1):
+            denom = flint.fmpq(1)
+            L_i = flint.fmpq_poly([1])
+            for j in range(n + 1):
+                if j != i:
+                    L_i *= t_var - xs[j]
+                    denom *= xs[i] - xs[j]
+            poly_sum += L_i * (ys[i] / denom)
+
+        return poly_sum
+
 
 class MultiplicativeMatrixPencil:
     """
@@ -271,6 +308,54 @@ class MultiplicativeMatrixPencil:
                 self._matrices_exact.append(mat)
         return self._matrices_exact
 
+    def _evaluate_exact(self, x: Sequence[Any]) -> Any:
+        import flint
+
+        from ..utils.conversion import sympy_to_fmpq
+
+        A_exact = flint.fmpq_mat(self.n, self.n)
+        exact_mats = self._get_matrices_exact()
+        for xi, Ai in zip(x, exact_mats):
+            A_exact += Ai * sympy_to_fmpq(xi)
+        return A_exact
+
+    def characteristic_polynomial(self, x: Sequence[Any]) -> flint.fmpq_poly:
+        """
+        Computes the characteristic polynomial det(t*I - A(x)) of the pencil evaluated at x
+        exactly using rational interpolation over Q[t].
+        """
+        import flint
+
+        A_exact = self._evaluate_exact(x)
+        n = self.n
+
+        xs = [flint.fmpq(j) for j in range(n + 1)]
+        ys = []
+        for j in range(n + 1):
+            tj = xs[j]
+            M = flint.fmpq_mat(n, n)
+            for r in range(n):
+                for c in range(n):
+                    if r == c:
+                        M[r, c] = tj - A_exact[r, c]
+                    else:
+                        M[r, c] = -A_exact[r, c]
+            ys.append(M.det())
+
+        # Exact Lagrange interpolation
+        t_var = flint.fmpq_poly([0, 1])
+        poly_sum = flint.fmpq_poly([0])
+        for i in range(n + 1):
+            denom = flint.fmpq(1)
+            L_i = flint.fmpq_poly([1])
+            for j in range(n + 1):
+                if j != i:
+                    L_i *= t_var - xs[j]
+                    denom *= xs[i] - xs[j]
+            poly_sum += L_i * (ys[i] / denom)
+
+        return poly_sum
+
     def _get_matrices_sympy(self) -> List[List[List[Any]]]:
         if not hasattr(self, "_matrices_sympy"):
             import sympy as sp
@@ -288,3 +373,12 @@ class MultiplicativeMatrixPencil:
                     row_list.append(col_list)
                 self._matrices_sympy.append(row_list)
         return self._matrices_sympy
+
+    def characteristic_polynomial_slp(self) -> Any:
+        """
+        Converts the characteristic polynomial of the multiplicative matrix pencil
+        into a StraightLineProgram for efficient gradient/Hessian queries.
+        """
+        from .slp import StraightLineProgram
+
+        return StraightLineProgram(operations=["det"], pencil=self)

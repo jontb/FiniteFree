@@ -17,7 +17,11 @@ The following showcase provides a visual representation of FiniteFree's features
 <summary><b>1. Limiting Distributions of Free Convolutions</b></summary>
 <br>
 
-Animates the convergence of root distributions of expectation polynomials towards their theoretical free probability limits as the dimension/degree $d$ scales up to 300. This includes Wigner's Semicircle law via GUE expectation polynomials, the Marchenko-Pastur law via Wishart/Laguerre expectation polynomials, the classical Arcsine law from Jacobi polynomials, and the Free Log-normal limit evaluated via multi-precision compound Wishart multiplicative convolutions.
+Animates the convergence of root distributions of expectation polynomials towards their theoretical free probability limits as the dimension/degree $d$ scales up to 300:
+- **Wigner Semicircle Convergence**: GUE expectation polynomials additive convolution $He_d \boxplus_d He_d$ roots converging to the semicircle distribution.
+- **Marchenko-Pastur Convergence**: Laguerre/Wishart expectation polynomials roots converging to the Marchenko-Pastur law.
+- **Free Jacobi Arcsine Convergence**: Jacobi/Legendre polynomials roots converging to the classical Arcsine limit.
+- **Free Log-Normal Convergence**: Multi-precision compound Wishart multiplicative convolutions roots converging to the free Log-normal distribution.
 
 | Wigner Semicircle Convergence ($He_{d} \boxplus_{d} He_{d}$ as $d \to 300$) | Marchenko-Pastur Convergence (Laguerre as $d \to 300$) |
 | :---: | :---: |
@@ -33,7 +37,11 @@ Animates the convergence of root distributions of expectation polynomials toward
 <summary><b>2. Determinantal Point Processes & Spectral Universality</b></summary>
 <br>
 
-Showcases GUE spectral universality and eigenvalue spacing statistics. The Christoffel-Darboux kernel scaling limit animation demonstrates convergence to the Sine kernel in the bulk and the Airy kernel at the edge. The Tracy-Widom plot compares the empirical max eigenvalue CDF from HKPV samples against the continuous Fredholm determinant gap probability. The level repulsion spacing distribution displays GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
+Showcases GUE spectral universality and eigenvalue spacing statistics:
+- **CD Bulk Scaling Limit**: Christoffel-Darboux kernel bulk scaling limit convergence to the infinite Sine kernel.
+- **CD Edge Scaling Limit**: Christoffel-Darboux kernel edge scaling limit convergence to the infinite Airy kernel.
+- **Tracy-Widom Edge Convergence**: Empirical max eigenvalue CDF from HKPV samples converging to the Tracy-Widom (Fredholm determinant) distribution.
+- **Nearest-Neighbor Level Repulsion**: GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
 
 | CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
 | :---: | :---: |
@@ -61,6 +69,26 @@ Illustrates exact algebraic properties, root interlacing constraints, and geomet
 | Hyperbolic Matrix Pencil Eigencones & Topography | Unitary Hermite Eigenvalue Repulsion Trajectories |
 | :---: | :---: |
 | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) | ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+
+</details>
+
+<details>
+<summary><b>4. Asymptotic Convergence of Finite Free Transforms</b></summary>
+<br>
+
+Visualizes the convergence of exact finite free transforms to their continuous free probability limits as the dimension $d$ scales up to 300:
+- **T-Transform Step Convergence**: Fujie-Ueda Finite T-Transform step function convergence to the continuous free Marchenko-Pastur (MP) limit $T(t)=1+t$.
+- **Asymptotic Decay of Cumulants**: Linearizing additive convolution, showing exact high-order finite free cumulants $\kappa_k(d)$ decaying to zero, leaving only $\kappa_2 \to 1$ (the Wigner semicircle limit).
+- **S-Transform Multiplicativity**: S-transforms of Wishart expectation polynomials, demonstrating exact multiplicativity $S_{p \boxtimes_d q}^{(d)} = S_p^{(d)} S_q^{(d)}$ at all discrete nodes and convergence to the free S-transform limit.
+- **Cauchy Transform Convergence**: Domain coloring of the Finite Cauchy Transform $G_d(z) = \frac{1}{d} \frac{p'_d(z)}{p_d(z)}$, showing the roots (poles) and derivative roots (zeros) coalescing into a continuous branch cut $[-2, 2]$ of the semicircle law.
+
+| Fujie-Ueda T-Transform Convergence | Asymptotic Decay of Cumulants |
+| :---: | :---: |
+| ![T-Transform Convergence](visuals/assets/t_transform_convergence.gif) | ![Cumulant Decay](visuals/assets/cumulant_decay.gif) |
+
+| S-Transform Convergence | Cauchy Transform Convergence |
+| :---: | :---: |
+| ![S-Transform Convergence](visuals/assets/s_transform_convergence.gif) | ![Cauchy Transform Convergence](visuals/assets/cauchy_domain_coloring.gif) |
 
 </details>
 

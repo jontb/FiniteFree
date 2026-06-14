@@ -488,43 +488,6 @@ class MultivariatePolynomial(Polynomial):
 
             return S
 
-        def crt(modulo_values: list[int], primes: list[int]) -> int:
-            n_p = len(primes)
-            mix = list(modulo_values)
-            c = [1] * n_p
-            for i in range(1, n_p):
-                c_val = 1
-                for j in range(i):
-                    c_val = (c_val * primes[j]) % primes[i]
-                c_inv = pow(c_val, -1, primes[i])
-                c[i] = c_inv
-            u = [0] * n_p
-            u[0] = mix[0] % primes[0]
-            for i in range(1, n_p):
-                val = u[0]
-                p_prod = 1
-                for j in range(1, i):
-                    p_prod = (p_prod * primes[j - 1]) % primes[i]
-                    val = (val + u[j] * p_prod) % primes[i]
-                u[i] = ((mix[i] - val) * c[i]) % primes[i]
-            x = u[0]
-            p_prod = 1
-            M = primes[0]
-            for i in range(1, n_p):
-                p_prod *= primes[i - 1]
-                x += u[i] * p_prod
-                M *= primes[i]
-            if x > M // 2:
-                x -= M
-            return x
-
-        def prime_generator(start: int = 1000000007) -> Any:
-            curr = start
-            while True:
-                if flint.fmpz(curr).is_probable_prime():
-                    yield curr
-                curr += 1
-
         primes_gen = prime_generator(1000000007)
         reconstructed = None
         primes_used = []

@@ -42,6 +42,20 @@ except ImportError:
 
 
 def crt(modulo_values: list[int], primes: list[int]) -> int:
+    import os
+
+    if os.environ.get("PYFFP_DISABLE_CYTHON") != "1":
+        try:
+            import numpy as np
+
+            from .modular_fast import crt as crt_fast
+
+            mix_np = np.array(modulo_values, dtype=np.int64)
+            primes_np = np.array(primes, dtype=np.int64)
+            return int(crt_fast(mix_np, primes_np))
+        except (ImportError, AttributeError, ValueError):
+            pass
+
     n_p = len(primes)
     mix = list(modulo_values)
     c = [1] * n_p
