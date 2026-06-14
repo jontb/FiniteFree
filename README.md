@@ -35,13 +35,13 @@ Animates the convergence of root distributions of expectation polynomials toward
 
 Showcases GUE spectral universality and eigenvalue spacing statistics. The Christoffel-Darboux kernel scaling limit animation demonstrates convergence to the Sine kernel in the bulk and the Airy kernel at the edge. The Tracy-Widom plot compares the empirical max eigenvalue CDF from HKPV samples against the continuous Fredholm determinant gap probability. The level repulsion spacing distribution displays GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
 
-| CD Kernel Scaling Limits (Sine & Airy Limits) | Tracy-Widom Edge Convergence ($d=100$) |
+| CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
 | :---: | :---: |
-| ![Asymptotic Scaling Limits](visuals/assets/asymptotic_kernel_scaling.gif) | ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) |
+| ![Asymptotic Bulk Scaling](visuals/assets/asymptotic_kernel_bulk.gif) | ![Asymptotic Edge Scaling](visuals/assets/asymptotic_kernel_edge.gif) |
 
-| Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
-| :---: |
-| ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
+| Tracy-Widom Edge Convergence ($d=100$) | Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
+| :---: | :---: |
+| ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) | ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
 
 </details>
 
@@ -54,13 +54,13 @@ Illustrates exact algebraic properties, root interlacing constraints, and geomet
 - **Multivariate Pencil Topography**: Visualizes the log-determinant topography and exact eigenvalue boundaries of random symmetric matrix pencils.
 - **Unitary Eigenvalue Repulsion**: Visualizes roots evolving on the complex unit circle $\mathbb{T}$ under unitary Hermite polynomial flows.
 
-| Interlacing Preservation Under Convolutions | Hyperbolic Matrix Pencil Eigencones & Topography |
-| :---: | :---: |
-| ![Interlacing Preservation](visuals/assets/root_interlacing.png) | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) |
+| Original Roots ($p \prec q$) | Additive Convolution ($p \boxplus_6 r \prec q \boxplus_6 r$) | Multiplicative Convolution ($p \boxtimes_6 r \prec q \boxtimes_6 r$) |
+| :---: | :---: | :---: |
+| ![Original Roots](visuals/assets/root_interlacing_original.png) | ![Additive Interlacing](visuals/assets/root_interlacing_additive.png) | ![Multiplicative Interlacing](visuals/assets/root_interlacing_multiplicative.png) |
 
-| Unitary Hermite Eigenvalue Repulsion Trajectories on $\mathbb{T}$ |
-| :---: |
-| ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+| Hyperbolic Matrix Pencil Eigencones & Topography | Unitary Hermite Eigenvalue Repulsion Trajectories |
+| :---: | :---: |
+| ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) | ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
 
 </details>
 

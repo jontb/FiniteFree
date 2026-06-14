@@ -88,11 +88,13 @@ class PrecomputedDiscreteKernel:
 
 def animate_asymptotic_kernel_scaling():
     from PIL import Image
-    print("Generating Asymptotic Kernel Scaling Limits animation...")
+    print("Generating Asymptotic Kernel Scaling Limits animations...")
     degrees = [10, 20, 30, 45, 60, 80, 100, 130, 160, 200]
-    frame_images = []
+    bulk_images = []
+    edge_images = []
     
-    os.makedirs("visuals/assets/temp_kernel_frames", exist_ok=True)
+    os.makedirs("visuals/assets/temp_bulk_frames", exist_ok=True)
+    os.makedirs("visuals/assets/temp_edge_frames", exist_ok=True)
     
     # Bulk points and theoretical limit
     y_fixed = 0.0
@@ -114,9 +116,8 @@ def animate_asymptotic_kernel_scaling():
         airy_limit.append(val)
         
     for idx, d in enumerate(degrees):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-        
-        # 1. Bulk
+        # 1. Bulk Frame
+        fig1, ax1 = plt.subplots(figsize=(6.5, 5.2))
         rho_0 = np.sqrt(2.0 * d) / np.pi
         pts = np.concatenate([x_vals / rho_0, [y_fixed / rho_0]])
         K_mat = hermite_function_kernel_matrix(d, pts)
@@ -124,13 +125,19 @@ def animate_asymptotic_kernel_scaling():
         
         ax1.plot(x_vals, k_bulk, color='#1f77b4', lw=2.0, label=f"Finite Kernel (d={d})")
         ax1.plot(x_vals, sine_limit, '--', color='black', lw=2.0, label="Sine Kernel Limit")
-        ax1.set_title("Bulk Universality (Sine Kernel Limit)", fontsize=11, fontweight='bold')
+        ax1.set_title(f"Bulk Universality (Sine Kernel Limit, d={d})", fontsize=11, fontweight='bold')
         ax1.set_xlabel(r"Rescaled Distance $\pi(x - y)$")
         ax1.set_ylabel("Kernel Value")
         ax1.grid(True, linestyle=":", alpha=0.6)
         ax1.legend(loc="upper right")
+        plt.tight_layout()
+        frame_path_bulk = f"visuals/assets/temp_bulk_frames/frame_{idx:03d}.png"
+        plt.savefig(frame_path_bulk, dpi=120)
+        plt.close()
+        bulk_images.append(Image.open(frame_path_bulk))
         
-        # 2. Edge
+        # 2. Edge Frame
+        fig2, ax2 = plt.subplots(figsize=(6.5, 5.2))
         edge = np.sqrt(2.0 * d)
         scale = 1.0 / (np.sqrt(2.0) * (d ** (1.0/6.0)))
         pts_edge = np.concatenate([edge + x_edge_vals * scale, [edge + y_edge_fixed * scale]])
@@ -139,46 +146,55 @@ def animate_asymptotic_kernel_scaling():
         
         ax2.plot(x_edge_vals, k_edge, color='#2ca02c', lw=2.0, label=f"Finite Kernel (d={d})")
         ax2.plot(x_edge_vals, airy_limit, '--', color='black', lw=2.0, label="Airy Kernel Limit")
-        ax2.set_title("Edge Universality (Airy Kernel Limit)", fontsize=11, fontweight='bold')
+        ax2.set_title(f"Edge Universality (Airy Kernel Limit, d={d})", fontsize=11, fontweight='bold')
         ax2.set_xlabel(r"Rescaled Edge Distance")
         ax2.set_ylabel("Kernel Value")
         ax2.grid(True, linestyle=":", alpha=0.6)
         ax2.legend(loc="upper right")
-        
-        plt.suptitle(f"Kernel Scaling Limits Convergence (d={d})", fontsize=13, fontweight='bold')
         plt.tight_layout()
-        
-        frame_path = f"visuals/assets/temp_kernel_frames/frame_{idx:03d}.png"
-        plt.savefig(frame_path, dpi=120)
+        frame_path_edge = f"visuals/assets/temp_edge_frames/frame_{idx:03d}.png"
+        plt.savefig(frame_path_edge, dpi=120)
         plt.close()
+        edge_images.append(Image.open(frame_path_edge))
         
-        frame_images.append(Image.open(frame_path))
-        
-    gif_path = "visuals/assets/asymptotic_kernel_scaling.gif"
-    if frame_images:
-        frame_images[0].save(
-            gif_path,
+    gif_path_bulk = "visuals/assets/asymptotic_kernel_bulk.gif"
+    gif_path_edge = "visuals/assets/asymptotic_kernel_edge.gif"
+    if bulk_images:
+        bulk_images[0].save(
+            gif_path_bulk,
             save_all=True,
-            append_images=frame_images[1:],
+            append_images=bulk_images[1:],
             duration=300,
             loop=0
         )
-    print(f"Saved kernel scaling animation to {gif_path}")
+    if edge_images:
+        edge_images[0].save(
+            gif_path_edge,
+            save_all=True,
+            append_images=edge_images[1:],
+            duration=300,
+            loop=0
+        )
+    print(f"Saved bulk kernel scaling animation to {gif_path_bulk}")
+    print(f"Saved edge kernel scaling animation to {gif_path_edge}")
     
-    for img in frame_images:
+    for img in bulk_images:
+        img.close()
+    for img in edge_images:
         img.close()
         
     # Cleanup
     for idx in range(len(degrees)):
         try:
-            os.remove(f"visuals/assets/temp_kernel_frames/frame_{idx:03d}.png")
+            os.remove(f"visuals/assets/temp_bulk_frames/frame_{idx:03d}.png")
+            os.remove(f"visuals/assets/temp_edge_frames/frame_{idx:03d}.png")
         except OSError:
             pass
     try:
-        os.rmdir("visuals/assets/temp_kernel_frames")
+        os.rmdir("visuals/assets/temp_bulk_frames")
+        os.rmdir("visuals/assets/temp_edge_frames")
     except OSError:
         pass
-    print("Saved animation to visuals/assets/asymptotic_kernel_scaling.gif")
 
 
 def gap_probability_continuous_vectorized(d: int, a: float, b: float, n_points: int = 35) -> float:

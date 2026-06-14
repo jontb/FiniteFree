@@ -15,7 +15,7 @@ os.makedirs("visuals/assets", exist_ok=True)
 
 
 def visualize_interlacing_preservation() -> None:
-    print("Generating Root Interlacing Preservation plot...")
+    print("Generating Root Interlacing Preservation plots...")
     d = 6
     roots_p = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0]
     roots_q = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
@@ -38,8 +38,8 @@ def visualize_interlacing_preservation() -> None:
     roots_p_mult = p_mult.evaluate_roots_float64()
     roots_q_mult = q_mult.evaluate_roots_float64()
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
-
+    # 1. Original Plot
+    fig1, ax1 = plt.subplots(figsize=(7, 4.5))
     ax1.scatter(
         roots_p,
         np.zeros_like(roots_p),
@@ -82,9 +82,14 @@ def visualize_interlacing_preservation() -> None:
     ax1.set_yticklabels(["p(x)", "q(x)"])
     ax1.set_title("Original Roots: p < q")
     ax1.set_xlabel("Root Coordinate")
-    ax1.legend()
+    ax1.legend(loc="upper right")
     ax1.grid(True, axis="x", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("visuals/assets/root_interlacing_original.png", dpi=150)
+    plt.close()
 
+    # 2. Additive Plot
+    fig2, ax2 = plt.subplots(figsize=(7, 4.5))
     ax2.scatter(
         roots_p_add,
         np.zeros_like(roots_p_add),
@@ -133,9 +138,14 @@ def visualize_interlacing_preservation() -> None:
     ax2.set_yticklabels([r"$p \boxplus_6 r$", r"$q \boxplus_6 r$"])
     ax2.set_title(r"Additive: $p \boxplus_6 r \prec q \boxplus_6 r$")
     ax2.set_xlabel("Root Coordinate")
-    ax2.legend()
+    ax2.legend(loc="upper right")
     ax2.grid(True, axis="x", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("visuals/assets/root_interlacing_additive.png", dpi=150)
+    plt.close()
 
+    # 3. Multiplicative Plot
+    fig3, ax3 = plt.subplots(figsize=(7, 4.5))
     ax3.scatter(
         roots_p_mult,
         np.zeros_like(roots_p_mult),
@@ -184,13 +194,12 @@ def visualize_interlacing_preservation() -> None:
     ax3.set_yticklabels([r"$p \boxtimes_6 r$", r"$q \boxtimes_6 r$"])
     ax3.set_title(r"Multiplicative: $p \boxtimes_6 r \prec q \boxtimes_6 r$")
     ax3.set_xlabel("Root Coordinate")
-    ax3.legend()
+    ax3.legend(loc="upper right")
     ax3.grid(True, axis="x", alpha=0.3)
-
     plt.tight_layout()
-    plt.savefig("visuals/assets/root_interlacing.png", dpi=150)
+    plt.savefig("visuals/assets/root_interlacing_multiplicative.png", dpi=150)
     plt.close()
-    print("Saved plot to visuals/assets/root_interlacing.png")
+    print("Saved interlacing plots successfully.")
 
 
 if __name__ == "__main__":
