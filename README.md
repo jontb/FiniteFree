@@ -95,47 +95,94 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 ## Features
 
+<details>
+<summary><b>Core Polynomial Operations & Domain Verification</b></summary>
+<br>
+
 - **Exact Real-Rooted Polynomial Validation**: Verified lazily via exact rational Sturm sequences.
 - **Unitary Circle Geometries ($\mathbb{T}$)**: Implements `UnitaryPolynomial` structures for polynomials with roots strictly on the complex unit circle, bypassing real-line Sturm sequence constraints and isolating angular arguments via complex eigensolvers (e.g., `unitary_hermite_polynomial`).
 - **Lazy Geometric Domain Properties**: $O(d)$ lazy algebraic root verification properties (`has_non_negative_roots` and `has_strictly_positive_roots`) evaluated directly on the coefficients using Descartes' Rule of Signs to enforce operators domains without root seeking.
 - **Basic Polynomial Transformations**: Supports exact algebraic transformations including variable dilation (`dilation`), variable shift (`shift`), root powers (`power`), root-reciprocal reversing (`reversed_polynomial`), derivative (`derivative`), projection (`projection`), fractional additive convolution power (`additive_power`), and the Fujie-Ueda limiting polynomial $\Phi_d$ (`phi_d`).
-- **Orthogonal Polynomial Families**:
-  - **Jacobi Polynomials** (`jacobi_polynomial`): Exact $O(n^2)$ recurrence construction of $P_n^{(\alpha, \beta)}(x)$ using `flint.fmpq_poly` in exact rational arithmetic.
-  - **Hahn Polynomials** (`hahn_polynomial`): Exact $O(n)$ recurrence construction of $Q_n(x; \alpha, \beta, N)$ using sequential running products to prevent redundant Pochhammer factorial operations.
-  - **Jack Polynomials** (`jack_polynomial`): High-performance variables recursion computing symmetric Jack polynomials $J_\lambda^{(\alpha)}(x_1, \dots, x_m)$ strictly over sparse monomial exponent dictionaries, completely bypassing SymPy's slow symbolic expansion engine.
-  - **Chebyshev & Legendre Polynomials** (`chebyshev_t_polynomial`, `chebyshev_u_polynomial`, `legendre_polynomial`): Exact recurrence constructions of $T_n(x)$, $U_n(x)$, and $P_n(x)$ over $\mathbb{Q}$ via `flint.fmpq_poly`.
 - **High-Degree Scaling & Root Reconstruction**:
   - **Divide-and-Conquer Polynomial Synthesis**: `RealRootedPolynomial.from_roots(roots)` executes a binary splitting tree algorithm operating in $O(d \log^2 d)$ time for high-speed, exact polynomial synthesis.
-- **Finite Free Convolutions**:
-  - **Symmetric Additive ($\boxplus_d$)**: Exact analytical evaluation mapping polynomial convolutions against the symmetric finite combinatorial variance.
-  - **Asymmetric Additive ($\uplus_d$)**: Validated combinatorial operator supporting mixed rank geometry via fractional squared weights.
-  - **Multiplicative ($\boxtimes_d$)**: Exact discrete multiplicative root transformations via scaled Hadamard projections.
-- **Analytical Finite Transforms**:
-  - **Finite Cauchy Transform** ($G_p^{(d)}$)
-  - **Finite S-Transform** ($S_p^{(d)}$): Discrete normalized evaluations bypassing non-linear mapping.
-  - **Finite R-Transform** ($R_p^{(d)}$): Computes finite free cumulants ($\kappa_n^{(d)}$) via an exact $O(n^2)$ recursive generating function sequence map over $\mathbb{Q}$, bypassing exponential partition lattice enumeration while verifying exact additivity $\kappa_n^{(d)}(p \boxplus_d q) = \kappa_n^{(d)}(p) + \kappa_n^{(d)}(q)$.
-  - **Finite T-Transform** ($T_p^{(d)}$): Step function mapping the right-continuous inverse to the Fujie-Ueda limit $\Phi_d$, evaluated in $O(d)$ algebraically using coefficient sign-alternation validation.
-  - **Symmetric Finite S-Transform** ($\tilde{S}_p^{(2d)}$): Evaluates the discrete S-Transform over symmetric domains via exact root-squaring maps ($\mathbf{Sq}(p)$), bypassing zero-valued odd coefficients.
-
-- **Multivariate Hyperbolic Geometry & Matrix Pencils**:
-  - **`MultivariatePolynomial`**: Homogeneous multivariate polynomials with exact directional derivatives, mixed partials, and homogeneous multinomial normalization.
-  - **Compiled Sparse Evaluations**: Features `to_fmpq_mpoly()` for $O(1)$ evaluation and substitution using compiled C-level sparse representations inside the FLINT library.
-  - **Jacobi SLP & Reverse AD**: Straightline programs evaluating determinant gradients and Hessians via C-level FLINT evaluations and exact, linear-time Reverse-Mode Automatic Differentiation (AD) over $\mathbb{Q}$ (completely bypassing symbolic expansion).
-  - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
-  - **Zippel Sparse Interpolation**: Deploys Zippel's probabilistic algorithm over $\mathbb{F}_p$ for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`), bounding interpolation complexity to the target monomial count rather than the maximum total-degree combinatorial grid.
-  - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
-  - **LMI Cone Verification**: Positive definiteness checks ($A(e) \succ 0$) to verify hyperbolic cones.
 - **Optimized Memory Pool Management**: Prevents FLINT/GMP memory fragmentation at extreme degrees ($d \ge 1000$) through a conditional, threshold-based garbage collection registry inside `PrecisionContext`.
-- **Wilkinson-Proof Numerical Egress**:
-  - `to_numpy_poly1d()`: Safe rational coefficient `float64` casting, utilizing arbitrary-precision `decimal.Decimal` fallbacks to prevent `OverflowError` on coefficients with extreme magnitude ratios.
-  - `evaluate_roots_float64()`: Uses python-flint's certified complex interval backend (Arb) to isolate roots, ensuring numerical robustness and avoiding Wilkinson's phenomenon.
-- **Random Matrix Ensembles (`finitefree.ensembles`)**:
-  - **Matrix Samplers**: Fast generation of invariant random matrices for GOE ($O(d)$, $\beta=1$), GUE ($U(d)$, $\beta=2$), and GSE ($USp(2d)$, $\beta=4$).
-  - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
-- **Determinantal Point Processes (`finitefree.dpp`)**:
-  - **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula.
-  - **Gap Probabilities & Observables**: Evaluate exact discrete gap probabilities and approximate continuous Fredholm determinants via Nyström discretization, plus exact $k$-point correlation functions.
-  - **HKPV Sampler**: Execute exact point configuration sampling from projection kernels via eigenvalues and Gram-Schmidt projections.
+
+</details>
+
+<details>
+<summary><b>Orthogonal Polynomial Families</b></summary>
+<br>
+
+- **Jacobi Polynomials** (`jacobi_polynomial`): Exact $O(n^2)$ recurrence construction of $P_n^{(\alpha, \beta)}(x)$ using `flint.fmpq_poly` in exact rational arithmetic.
+- **Hahn Polynomials** (`hahn_polynomial`): Exact $O(n)$ recurrence construction of $Q_n(x; \alpha, \beta, N)$ using sequential running products to prevent redundant Pochhammer factorial operations.
+- **Jack Polynomials** (`jack_polynomial`): High-performance variables recursion computing symmetric Jack polynomials $J_\lambda^{(\alpha)}(x_1, \dots, x_m)$ strictly over sparse monomial exponent dictionaries, completely bypassing SymPy's slow symbolic expansion engine.
+- **Chebyshev & Legendre Polynomials** (`chebyshev_t_polynomial`, `chebyshev_u_polynomial`, `legendre_polynomial`): Exact recurrence constructions of $T_n(x)$, $U_n(x)$, and $P_n(x)$ over $\mathbb{Q}$ via `flint.fmpq_poly`.
+
+</details>
+
+<details>
+<summary><b>Finite Free Convolutions</b></summary>
+<br>
+
+- **Symmetric Additive ($\boxplus_d$)**: Exact analytical evaluation mapping polynomial convolutions against the symmetric finite combinatorial variance.
+- **Asymmetric Additive ($\uplus_d$)**: Validated combinatorial operator supporting mixed rank geometry via fractional squared weights.
+- **Multiplicative ($\boxtimes_d$)**: Exact discrete multiplicative root transformations via scaled Hadamard projections.
+
+</details>
+
+<details>
+<summary><b>Analytical Finite Transforms</b></summary>
+<br>
+
+- **Finite Cauchy Transform** ($G_p^{(d)}$)
+- **Finite S-Transform** ($S_p^{(d)}$): Discrete normalized evaluations bypassing non-linear mapping.
+- **Finite R-Transform** ($R_p^{(d)}$): Computes finite free cumulants ($\kappa_n^{(d)}$) via an exact $O(n^2)$ recursive generating function sequence map over $\mathbb{Q}$, bypassing exponential partition lattice enumeration while verifying exact additivity $\kappa_n^{(d)}(p \boxplus_d q) = \kappa_n^{(d)}(p) + \kappa_n^{(d)}(q)$.
+- **Finite T-Transform** ($T_p^{(d)}$): Step function mapping the right-continuous inverse to the Fujie-Ueda limit $\Phi_d$, evaluated in $O(d)$ algebraically using coefficient sign-alternation validation.
+- **Symmetric Finite S-Transform** ($\tilde{S}_p^{(2d)}$): Evaluates the discrete S-Transform over symmetric domains via exact root-squaring maps ($\mathbf{Sq}(p)$), bypassing zero-valued odd coefficients.
+
+</details>
+
+<details>
+<summary><b>Multivariate Hyperbolic Geometry & Matrix Pencils</b></summary>
+<br>
+
+- **`MultivariatePolynomial`**: Homogeneous multivariate polynomials with exact directional derivatives, mixed partials, and homogeneous multinomial normalization.
+- **Compiled Sparse Evaluations**: Features `to_fmpq_mpoly()` for $O(1)$ evaluation and substitution using compiled C-level sparse representations inside the FLINT library.
+- **Jacobi SLP & Reverse AD**: Straightline programs evaluating determinant gradients and Hessians via C-level FLINT evaluations and exact, linear-time Reverse-Mode Automatic Differentiation (AD) over $\mathbb{Q}$ (completely bypassing symbolic expansion).
+- **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
+- **Zippel Sparse Interpolation**: Deploys Zippel's probabilistic algorithm over $\mathbb{F}_p$ for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`), bounding interpolation complexity to the target monomial count rather than the maximum total-degree combinatorial grid.
+- **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
+- **LMI Cone Verification**: Positive definiteness checks ($A(e) \succ 0$) to verify hyperbolic cones.
+
+</details>
+
+<details>
+<summary><b>Wilkinson-Proof Numerical Egress</b></summary>
+<br>
+
+- **`to_numpy_poly1d()`**: Safe rational coefficient `float64` casting, utilizing arbitrary-precision `decimal.Decimal` fallbacks to prevent `OverflowError` on coefficients with extreme magnitude ratios.
+- **`evaluate_roots_float64()`**: Uses python-flint's certified complex interval backend (Arb) to isolate roots, ensuring numerical robustness and avoiding Wilkinson's phenomenon.
+
+</details>
+
+<details>
+<summary><b>Random Matrix Ensembles (`finitefree.ensembles`)</b></summary>
+<br>
+
+- **Matrix Samplers**: Fast generation of invariant random matrices for GOE ($O(d)$, $\beta=1$), GUE ($U(d)$, $\beta=2$), and GSE ($USp(2d)$, $\beta=4$).
+- **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
+
+</details>
+
+<details>
+<summary><b>Determinantal Point Processes (`finitefree.dpp`)</b></summary>
+<br>
+
+- **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula.
+- **Gap Probabilities & Observables**: Evaluate exact discrete gap probabilities and approximate continuous Fredholm determinants via Nyström discretization, plus exact $k$-point correlation functions.
+- **HKPV Sampler**: Execute exact point configuration sampling from projection kernels via eigenvalues and Gram-Schmidt projections.
+
+</details>
 
 ## Installation
 
@@ -171,7 +218,9 @@ This project utilizes `hatchling` and `hatch-cython` to automatically compile Cy
 
 ### Usage Guide
 
-### 1. Polynomial Representation & Transformations
+<details>
+<summary><b>1. Polynomial Representation & Transformations</b></summary>
+<br>
 
 You can construct polynomials exactly from sequences of coefficients or find roots using numerical or certified (Arb) eigensolvers.
 
@@ -197,7 +246,11 @@ roots = p.evaluate_roots_float64(exact=True)
 print(roots)  # [1.0, 2.0]
 ```
 
-### 2. Finite Free Convolutions
+</details>
+
+<details>
+<summary><b>2. Finite Free Convolutions</b></summary>
+<br>
 
 Convolutions map discrete algebraic combinations of roots exactly, preserving real-rootedness.
 
@@ -222,7 +275,11 @@ res_mult = multiplicative(p, q, d=2)
 print(res_mult.coeffs)  # Hadamard-like projection
 ```
 
-### 3. Finite Transforms & Free Cumulants
+</details>
+
+<details>
+<summary><b>3. Finite Transforms & Free Cumulants</b></summary>
+<br>
 
 Finite free probability transforms compute expected spectral properties and algebraic limits without combinatorial partition search.
 
@@ -244,7 +301,11 @@ t_transform = FiniteTTransform(poly)
 print(t_transform(0.5))
 ```
 
-### 4. Orthogonal Families & Ensembles
+</details>
+
+<details>
+<summary><b>4. Orthogonal Families & Ensembles</b></summary>
+<br>
 
 FiniteFree builds classical and symmetric orthogonal systems exactly via optimized recursive relations.
 
@@ -273,7 +334,11 @@ expected_poly = expected_characteristic_polynomial(beta=1, d=4)
 print(expected_poly.coeffs)
 ```
 
-### 5. Multivariate Matrix Pencils
+</details>
+
+<details>
+<summary><b>5. Multivariate Matrix Pencils</b></summary>
+<br>
 
 Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation.
 
@@ -296,7 +361,11 @@ poly_sparse = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(pencil)
 print(poly_sparse.expr)
 ```
 
-### 6. Determinantal Point Processes (DPPs)
+</details>
+
+<details>
+<summary><b>6. Determinantal Point Processes (DPPs)</b></summary>
+<br>
 
 Construct correlation kernels, evaluate k-point joint intensities exactly, compute Fredholm determinant gap probabilities, and sample point configurations algebraically.
 
@@ -353,6 +422,24 @@ sampled_states = sample_discrete(discrete_kernel, state_space=[0, 1, 2])
 print(f"HKPV Sampled point configuration: {sampled_states}")
 ```
 
+</details>
+
+## Testing Protocol
+
+FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
+
+```bash
+pytest tests/
+```
+
+- **`test_core.py`**: Real-rootedness verification, divide-and-conquer root synthesis, and sequence extractions.
+- **`test_transformations.py`**: Exact algebraic variable scaling (dilation), shifts, powers, and reciprocal-root polynomial transformations.
+- **`test_convolutions.py`**: Additive and multiplicative explicit formulas and hyperbolic geometry preservation.
+- **`test_transforms.py`**: Exact recursive generating functions and high-order finite free cumulant strict additivity ($\kappa_n^{(d)}$).
+- **`test_empirical.py`**: Expected characteristic polynomial identities for GOE ($\beta=1$), GUE ($\beta=2$), and GSE ($\beta=4$) random matrix ensembles using the `ensembles` module.
+- **`test_hyperbolic.py`**: Multivariate homogeneous polynomials, CRT grid interpolations, sparse FLINT arrays, and Jacobi SLP evaluations.
+- **`test_orthogonal.py`**: Exact hypergeometric and multivariate orthogonal polynomial families (Jacobi, Hahn, Jack).
+
 ## Computational Complexity & Architecture
 
 FiniteFree is architected to bypass the combinatorial bottlenecks inherent in high-order differential operators, combinatorial partition counts, and eager root validation. It achieves this by executing convolutions, algebraic transforms, and matrix interpolations directly on polynomial coefficient sequences in C, leveraging `python-flint`'s arbitrary-precision integer/rational arithmetic.
@@ -389,25 +476,6 @@ To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$ a
 * **Cython-Accelerated Modular Determinants**: Matrix evaluations are mapped to machine-precision finite fields $\mathbb{F}_p$ for fast C-level Gaussian elimination.
 * **Chinese Remainder Theorem (CRT) Reconstruction**: Coefficients computed over multiple distinct prime fields are reconstructed back to exact large integers/rationals over $\mathbb{Q}$.
 * **Zippel's Sparse Polynomial Interpolation**: Instead of using an exponential dense grid (which requires $O(n^m)$ points), Zippel's randomized algorithm discovers the non-zero monomial support of the polynomial step-by-step over finite fields, drastically reducing evaluation costs for sparse pencils.
-
-
-
-
-## Testing Protocol
-
-FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
-
-```bash
-pytest tests/
-```
-
-- **`test_core.py`**: Real-rootedness verification, divide-and-conquer root synthesis, and sequence extractions.
-- **`test_transformations.py`**: Exact algebraic variable scaling (dilation), shifts, powers, and reciprocal-root polynomial transformations.
-- **`test_convolutions.py`**: Additive and multiplicative explicit formulas and hyperbolic geometry preservation.
-- **`test_transforms.py`**: Exact recursive generating functions and high-order finite free cumulant strict additivity ($\kappa_n^{(d)}$).
-- **`test_empirical.py`**: Expected characteristic polynomial identities for GOE ($\beta=1$), GUE ($\beta=2$), and GSE ($\beta=4$) random matrix ensembles using the `ensembles` module.
-- **`test_hyperbolic.py`**: Multivariate homogeneous polynomials, CRT grid interpolations, sparse FLINT arrays, and Jacobi SLP evaluations.
-- **`test_orthogonal.py`**: Exact hypergeometric and multivariate orthogonal polynomial families (Jacobi, Hahn, Jack).
 
 ## References
 
