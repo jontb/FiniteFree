@@ -120,8 +120,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 - **Multivariate Hyperbolic Geometry & Matrix Pencils**:
   - **`MultivariatePolynomial`**: Homogeneous multivariate polynomials with exact directional derivatives, mixed partials, and homogeneous multinomial normalization.
   - **Compiled Sparse Evaluations**: Features `to_fmpq_mpoly()` for $O(1)$ evaluation and substitution using compiled C-level sparse representations inside the FLINT library.
-  - **Jacobi SLP Operations**: Straightline programs evaluating determinant gradients and Hessians via Jacobi's determinant derivative formulas.
-  - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials for symmetric matrix pencils ($n \ge 4$) modulo prime sequences using C-level `nmod_mat` solvers, reconstructing the integer coefficients via the Chinese Remainder Theorem.
+  - **Jacobi SLP & Reverse AD**: Straightline programs evaluating determinant gradients and Hessians via C-level FLINT evaluations and exact, linear-time Reverse-Mode Automatic Differentiation (AD) over $\mathbb{Q}$ (completely bypassing symbolic expansion).
+  - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
   - **Zippel Sparse Interpolation**: Deploys Zippel's probabilistic algorithm over $\mathbb{F}_p$ for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`), bounding interpolation complexity to the target monomial count rather than the maximum total-degree combinatorial grid.
   - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
   - **LMI Cone Verification**: Positive definiteness checks ($A(e) \succ 0$) to verify hyperbolic cones.
@@ -383,7 +383,9 @@ Instead of seeking roots numerically to check domain boundaries (such as verifyi
 Rather than explicitly constructing combinatorial structures (such as enumerating non-crossing partitions to calculate free cumulants), FiniteFree solves the finite $R$-transform and $S$-transform relationships using direct generating function recurrences. By rewriting the underlying algebraic equations into coefficient-level recurrence relations, the combinatorial explosion is reduced to a deterministic $O(d^2)$ exact rational arithmetic sweep.
 
 #### 4. High-Performance Multivariate Matrix Pencil Interpolation
-To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$, the library avoids symbolic determinant bottlenecks via three complementary strategies:
+To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$ and compute exact characteristic polynomials without symbolic expansion blowups, the library avoids symbolic determinant bottlenecks via the following complementary strategies:
+* **Reverse-Mode Automatic Differentiation**: Replaces numerical approximations with an exact, linear-time Reverse-Mode AD engine for straight-line programs (SLPs) over $\mathbb{Q}$ to evaluate gradients and Hessians.
+* **Exact Rational Interpolation**: Computes characteristic polynomials of matrix pencils via exact rational interpolation over $\mathbb{Q}[t]$.
 * **Cython-Accelerated Modular Determinants**: Matrix evaluations are mapped to machine-precision finite fields $\mathbb{F}_p$ for fast C-level Gaussian elimination.
 * **Chinese Remainder Theorem (CRT) Reconstruction**: Coefficients computed over multiple distinct prime fields are reconstructed back to exact large integers/rationals over $\mathbb{Q}$.
 * **Zippel's Sparse Polynomial Interpolation**: Instead of using an exponential dense grid (which requires $O(n^m)$ points), Zippel's randomized algorithm discovers the non-zero monomial support of the polynomial step-by-step over finite fields, drastically reducing evaluation costs for sparse pencils.
