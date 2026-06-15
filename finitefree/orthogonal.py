@@ -245,19 +245,12 @@ def jack_polynomial(
     poly_dict = _jack_recursive(m, kappa_tup, alpha_sym)
     variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
-    terms = []
-    for exp, coeff in poly_dict.items():
-        factors = []
-        for var, power in zip(variables, exp):
-            if power > 0:
-                factors.append(var**power)
-        if factors:
-            terms.append(coeff * sp.Mul(*factors))
-        else:
-            terms.append(coeff)
+    names = tuple(x.name for x in variables)
+    ctx = flint.fmpq_mpoly_ctx.get(names=names)
+    flint_dict = {exp: sympy_to_fmpq(coeff) for exp, coeff in poly_dict.items()}
+    mpoly = ctx.from_dict(flint_dict)
 
-    expr = sp.Add(*terms) if terms else sp.Integer(0)
-    return MultivariatePolynomial(expr, variables)
+    return MultivariatePolynomial(mpoly, variables)
 
 
 def hermite_polynomial(n: int, physicist: bool = True) -> RealRootedPolynomial:

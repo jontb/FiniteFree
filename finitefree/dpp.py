@@ -95,32 +95,50 @@ class OrthogonalPolynomialKernel(BaseKernel):
         # Precompute derivative objects to avoid dynamic instantiation overhead
         self._pn = self.polys[self.n]
         self._pn_minus = self.polys[self.n - 1]
-        self._pn_deriv = self._pn.derivative() if self._pn.degree > 0 else None
+        self._pn_deriv = self._pn.derivative(monic=False) if self._pn.degree > 0 else None
         self._pn_minus_deriv = (
-            self._pn_minus.derivative() if self._pn_minus.degree > 0 else None
+            self._pn_minus.derivative(monic=False) if self._pn_minus.degree > 0 else None
         )
 
     def __call__(self, x: Any, y: Any) -> Any:
-        # Check if both are strict exact rationals to avoid converting them to floats for isclose checks
-        is_exact_rational = isinstance(x, flint.fmpq) and isinstance(y, flint.fmpq)
+        # Determine if they are close using raw float comparison first to bypass conversion overhead
+        is_diag = False
+        if isinstance(x, (int, float, np.floating)) and isinstance(y, (int, float, np.floating)):
+            is_diag = abs(float(x) - float(y)) < 1e-9
+        elif x == y:
+            is_diag = True
+
+        if isinstance(x, (float, np.floating)) or isinstance(y, (float, np.floating)):
+            from .utils.conversion import flint_to_float
+            x_f = float(x)
+            y_f = float(y)
+            kn_f = flint_to_float(self.leading_coeffs[self.n])
+            kn_minus_f = flint_to_float(self.leading_coeffs[self.n - 1])
+            hn_minus_f = flint_to_float(self.norms[self.n - 1])
+            factor_f = kn_minus_f / (kn_f * hn_minus_f)
+            if is_diag:
+                pn_val = self._pn.evaluate(x_f)
+                pn_minus_val = self._pn_minus.evaluate(x_f)
+                pn_deriv_val = (
+                    self._pn_deriv.evaluate(x_f) if self._pn_deriv else 0.0
+                )
+                pn_minus_deriv_val = (
+                    self._pn_minus_deriv.evaluate(x_f)
+                    if self._pn_minus_deriv
+                    else 0.0
+                )
+                return factor_f * (pn_deriv_val * pn_minus_val - pn_minus_deriv_val * pn_val)
+            else:
+                pn_x = self._pn.evaluate(x_f)
+                pn_minus_y = self._pn_minus.evaluate(y_f)
+                pn_minus_x = self._pn_minus.evaluate(x_f)
+                pn_y = self._pn.evaluate(y_f)
+                numerator = pn_x * pn_minus_y - pn_minus_x * pn_y
+                return (factor_f * numerator) / (x_f - y_f)
 
         # Convert inputs to exact types first
         x = sympy_to_exact(x)
         y = sympy_to_exact(y)
-
-        # Christoffel-Darboux evaluation
-        # If x == y (or very close numerically), evaluate diagonal via derivatives to avoid division by zero
-        is_diag = x == y
-        if (
-            not is_diag
-            and not is_exact_rational
-            and isinstance(x, (float, np.floating, flint.fmpq))
-            and isinstance(y, (float, np.floating, flint.fmpq))
-        ):
-            # Convert to float for close comparison only if they are not strict exact rationals
-            from .utils.conversion import flint_to_float
-
-            is_diag = np.isclose(flint_to_float(x), flint_to_float(y))
 
         kn = self.leading_coeffs[self.n]
         kn_minus = self.leading_coeffs[self.n - 1]
@@ -132,10 +150,10 @@ class OrthogonalPolynomialKernel(BaseKernel):
             pn_val = self._pn.evaluate(x)
             pn_minus_val = self._pn_minus.evaluate(x)
             pn_deriv_val = (
-                (self._pn_deriv.evaluate(x) * self._pn.degree) if self._pn_deriv else 0
+                self._pn_deriv.evaluate(x) if self._pn_deriv else 0
             )
             pn_minus_deriv_val = (
-                (self._pn_minus_deriv.evaluate(x) * self._pn_minus.degree)
+                self._pn_minus_deriv.evaluate(x)
                 if self._pn_minus_deriv
                 else 0
             )

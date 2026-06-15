@@ -186,3 +186,16 @@ def test_exact_roots_default() -> None:
     np.testing.assert_allclose(eval_roots_default, roots)
     np.testing.assert_allclose(eval_roots_exact, roots)
     np.testing.assert_allclose(eval_roots_approx, roots)
+
+
+def test_derivative_non_monic() -> None:
+    # p(x) = x^2 - 3x + 2, derivative is 2x - 3
+    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
+    
+    # Monic (default): returns x - 1.5
+    dp_monic = p.derivative(monic=True)
+    assert np.allclose(list(dp_monic.coeffs), [1, -1.5])
+    
+    # Non-monic: returns 2x - 3
+    dp_non_monic = p.derivative(monic=False)
+    assert np.allclose(list(dp_non_monic.coeffs), [2, -3])

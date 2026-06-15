@@ -35,6 +35,7 @@ class RealRootedPolynomial(Polynomial):
         self,
         coeffs: Union[Sequence[Any], NDArray[Any], flint.fmpq_poly],
         assume_real_rooted: bool = False,
+        monic: bool = True,
     ) -> None:
         """
         coeffs: array of length d+1 where index k corresponds to x^{d-k}, or a flint.fmpq_poly.
@@ -61,7 +62,7 @@ class RealRootedPolynomial(Polynomial):
                 # Fallback to SymPy object array for non-rational/transcendental coefficients (e.g. UnitaryPolynomial)
                 self.coeffs_sympy = np.array(coeffs, dtype=object)
                 leading_coeff = self.coeffs_sympy[0]
-                if leading_coeff != 1:
+                if monic and leading_coeff != 1:
                     coeffs_list = []
                     for c in self.coeffs_sympy:
                         coeffs_list.append(c / leading_coeff)
@@ -74,7 +75,7 @@ class RealRootedPolynomial(Polynomial):
             except AttributeError:
                 # Fallback for older python-flint versions where leading_coefficient() is missing
                 leading_coeff = poly.coeffs()[-1] if poly.coeffs() else flint.fmpq(0, 1)
-            if leading_coeff != 0 and leading_coeff != 1:
+            if monic and leading_coeff != 0 and leading_coeff != 1:
                 poly = poly * (1 / leading_coeff)
             self._fmpq_poly = poly
             self.degree: int = poly.degree() if poly.degree() >= 0 else 0
@@ -82,11 +83,13 @@ class RealRootedPolynomial(Polynomial):
             self.degree = len(self.coeffs_sympy) - 1
 
         self._is_verified: bool = assume_real_rooted
+        self._is_monic = monic
         self._normalized_coeffs_flint_cached: Union[List[Any], None] = None
         self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
         self._has_non_negative_roots_cached: Union[bool, None] = None
         self._has_strictly_positive_roots_cached: Union[bool, None] = None
+        self._float_coeffs_cached: Union[list[float], None] = None
 
     @property
     def coeffs(self) -> NDArray[np.object_]:
@@ -103,6 +106,15 @@ class RealRootedPolynomial(Polynomial):
     def evaluate(self, x: Any) -> Any:
         """Evaluates the polynomial at the point x."""
         if self._is_flint:
+            if isinstance(x, (float, np.floating)):
+                if self._float_coeffs_cached is None:
+                    from finitefree.utils.conversion import flint_to_float
+                    self._float_coeffs_cached = [flint_to_float(c) for c in self._fmpq_poly.coeffs()]
+                val = 0.0
+                x_val = float(x)
+                for c in reversed(self._float_coeffs_cached):
+                    val = val * x_val + c
+                return val
             x_fmpq = sympy_to_fmpq(x)
             return self._fmpq_poly(x_fmpq)
         sym_x = sp.sympify(x)
@@ -278,12 +290,14 @@ class RealRootedPolynomial(Polynomial):
 
         if self._is_flint:
             e_k = []
+            curr_binom = flint.fmpz(1)
             for k in range(d + 1):
+                if k > 0:
+                    curr_binom = (curr_binom * (d - k + 1)) // k
                 if k <= self.degree:
                     c_k = self._fmpq_poly[self.degree - k]
-                    binom = math.comb(d, k)
                     sign = (-1) ** k
-                    val = c_k * flint.fmpq(sign, binom)
+                    val = c_k * flint.fmpq(flint.fmpz(sign), curr_binom)
                     e_k.append(val)
                 else:
                     e_k.append(flint.fmpq(0))
@@ -350,12 +364,18 @@ class RealRootedPolynomial(Polynomial):
         d = len(e_k) - 1
         try:
             q_ek = [sympy_to_fmpq(x) for x in e_k]
+            # Precompute binomial coefficients via C-level running product
+            binoms = [flint.fmpz(1)]
+            curr = flint.fmpz(1)
+            for k in range(1, d + 1):
+                curr = (curr * (d - k + 1)) // k
+                binoms.append(curr)
+
             c_asc = []
             for j in range(d + 1):
                 k = d - j
-                binom = math.comb(d, k)
                 sign = (-1) ** k
-                val = q_ek[k] * flint.fmpq(sign * binom)
+                val = q_ek[k] * flint.fmpq(flint.fmpz(sign) * binoms[k])
                 c_asc.append(val)
             poly = flint.fmpq_poly(c_asc)
             inst = cls(poly, assume_real_rooted=True)
@@ -363,10 +383,12 @@ class RealRootedPolynomial(Polynomial):
             return inst
         except Exception:
             c = []
+            curr_binom = 1
             for k in range(d + 1):
-                binom = math.comb(d, k)
+                if k > 0:
+                    curr_binom = (curr_binom * (d - k + 1)) // k
                 sign = (-1) ** k
-                c.append(e_k[k] * sign * binom)
+                c.append(e_k[k] * sign * curr_binom)
             inst = cls(c, assume_real_rooted=True)
             return inst
 
@@ -762,18 +784,41 @@ class RealRootedPolynomial(Polynomial):
             )
 
         d = self.degree
-        e_k = self.normalized_coeffs()
+
+        if self._is_flint:
+            import flint
+            e_k = self._normalized_coeffs_flint()
+            r = 0
+            while r < d and self._fmpq_poly[r] == 0:
+                r += 1
+
+            new_roots = []
+            for k in range(1, d + 1):
+                if k <= d - r:
+                    val_num = e_k[k]
+                    val_den = e_k[k - 1]
+                    if val_den == 0:
+                        raise ValueError(
+                            f"Zero division encountered: e_tilde_{k - 1} is zero."
+                        )
+                    new_roots.append(val_num / val_den)
+                else:
+                    new_roots.append(flint.fmpq(0))
+            return RealRootedPolynomial.from_roots(new_roots)
+
+        e_k_sympy = self.normalized_coeffs()
 
         # Multiplicity r of the root at 0 is the number of trailing zero coefficients
         r = 0
-        while r < d and self.coeffs[d - r] == 0:
+        coeffs = self.coeffs_sympy
+        while r < d and coeffs[d - r] == 0:
             r += 1
 
         new_roots = []
         for k in range(1, d + 1):
             if k <= d - r:
-                val_num = e_k[k]
-                val_den = e_k[k - 1]
+                val_num = e_k_sympy[k]
+                val_den = e_k_sympy[k - 1]
                 if val_den == 0:
                     raise ValueError(
                         f"Zero division encountered: e_tilde_{k - 1} is zero."
@@ -792,14 +837,17 @@ class RealRootedPolynomial(Polynomial):
 
         return RealRootedPolynomial.from_roots(new_roots)
 
-    def derivative(self) -> "RealRootedPolynomial":
+    def derivative(self, monic: bool = True) -> "RealRootedPolynomial":
         """
-        Computes the derivative p'(x) of the polynomial, monic-normalized.
+        Computes the derivative p'(x) of the polynomial.
+        If monic=True, returns the monic-normalized derivative.
         """
         if self.degree == 0:
             raise ValueError("Cannot take derivative of a constant polynomial.")
         res_poly = self._fmpq_poly.derivative()
-        return RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
+        return RealRootedPolynomial(
+            res_poly, assume_real_rooted=self._is_verified, monic=monic
+        )
 
     def projection(self, j: int) -> "RealRootedPolynomial":
         """
@@ -826,26 +874,22 @@ class RealRootedPolynomial(Polynomial):
             )
 
         d = self.degree
+        import flint
+
         from .transforms import FiniteRTransform
 
         kappas = FiniteRTransform(self, order=d)
-        kappas_scaled = [k * t for k in kappas]
+        t_fmpq = sympy_to_fmpq(t)
+        kappas_fmpq = [sympy_to_fmpq(k) for k in kappas]
+        kappas_scaled = [k * t_fmpq for k in kappas_fmpq]
 
         c_cumulants = []
         for n in range(1, d + 1):
-            den = math.factorial(n - 1) * ((-d) ** (n - 1))
+            den = flint.fmpq(math.factorial(n - 1) * ((-d) ** (n - 1)), 1)
             val_num = kappas_scaled[n - 1]
-            if isinstance(val_num, (int, np.integer)) and isinstance(
-                den, (int, np.integer)
-            ):
-                if val_num % den == 0:
-                    c_cumulants.append(val_num // den)
-                else:
-                    c_cumulants.append(sp.Rational(val_num, den))
-            else:
-                c_cumulants.append(val_num / den)
+            c_cumulants.append(val_num / den)
 
-        e_k: List[Any] = [1]
+        e_k = [flint.fmpq(1)]
         for n in range(1, d + 1):
             en = c_cumulants[n - 1]
             for k in range(1, n):

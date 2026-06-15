@@ -166,3 +166,16 @@ def test_convolution_degree_validation() -> None:
         ValueError, match="Polynomial degrees cannot exceed dimension d"
     ):
         asymmetric_additive(p, q, d=2)
+
+
+def test_asymmetric_additive_weights() -> None:
+    p = RealRootedPolynomial([1, -2, 1], assume_real_rooted=True)  # (x-1)^2
+    q = RealRootedPolynomial([1, 2, 1], assume_real_rooted=True)  # (x+1)^2
+
+    # Verify asymmetric convolution with weights dilates the roots accordingly
+    # weights = [0.5, 0.5] -> p dilated by 0.5: (x - 0.5)^2 = x^2 - x + 0.25
+    # q dilated by 0.5: (x + 0.5)^2 = x^2 + x + 0.25
+    # Asymmetric convolution of these two should result in x^2 + 0.25
+    res = asymmetric_additive(p, q, d=2, weights=[0.5, 0.5])
+    assert res.degree == 2
+    assert np.allclose(list(res.coeffs), [1, 0, 0.25])

@@ -1,12 +1,7 @@
-import functools
 import math
+from typing import Any, Optional, Sequence
 
 from .core import RealRootedPolynomial
-
-
-@functools.lru_cache(maxsize=None)
-def _get_factorial_list(d: int) -> list[int]:
-    return [math.factorial(i) for i in range(d + 1)]
 
 
 def symmetric_additive(
@@ -25,24 +20,28 @@ def symmetric_additive(
     e_p = p._normalized_coeffs_flint(d)
     e_q = q._normalized_coeffs_flint(d)
 
-    # Precompute factorials via cache
-    factorials = _get_factorial_list(d)
+    # Compute U[k] = 1 / k! sequentially in O(d)
+    U: list[Any] = [None] * (d + 1)
+    U[0] = flint.fmpq(1)
+    for k in range(1, d + 1):
+        U[k] = U[k - 1] / k
 
     A_coeffs = []
     B_coeffs = []
-
     for k in range(d + 1):
-        fact = factorials[k]
-        A_coeffs.append(e_p[k] / fact)
-        B_coeffs.append(e_q[k] / fact)
+        A_coeffs.append(e_p[k] * U[k])
+        B_coeffs.append(e_q[k] * U[k])
 
     A_poly = flint.fmpq_poly(A_coeffs)
     B_poly = flint.fmpq_poly(B_coeffs)
     C_poly = A_poly * B_poly
 
     e_res = []
+    curr_fact = flint.fmpz(1)
     for k in range(d + 1):
-        val_res = C_poly[k] * factorials[k]
+        if k > 0:
+            curr_fact *= k
+        val_res = C_poly[k] * curr_fact
         e_res.append(val_res)
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)
@@ -68,7 +67,10 @@ def multiplicative(
 
 
 def asymmetric_additive(
-    p: RealRootedPolynomial, q: RealRootedPolynomial, d: int
+    p: RealRootedPolynomial,
+    q: RealRootedPolynomial,
+    d: int,
+    weights: Optional[Sequence[Any]] = None,
 ) -> RealRootedPolynomial:
     r"""
     Computes the finite free asymmetric additive convolution (p \uplus_d q)
@@ -79,22 +81,26 @@ def asymmetric_additive(
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
 
+    if weights is not None:
+        p = p.dilation(weights[0])
+        q = q.dilation(weights[1])
+
     import flint
 
     e_p = p._normalized_coeffs_flint(d)
     e_q = q._normalized_coeffs_flint(d)
 
-    # Precompute factorials via cache
-    factorials = _get_factorial_list(d)
+    # Compute W[i] = (d - i)! / i! sequentially in O(d)
+    W: list[Any] = [None] * (d + 1)
+    W[0] = flint.fmpq(math.factorial(d))
+    for i in range(1, d + 1):
+        W[i] = W[i - 1] / (i * (d - i + 1))
 
     A_coeffs = []
     B_coeffs = []
-
     for i in range(d + 1):
-        fact_ratio = factorials[d - i]
-        fact_i = factorials[i]
-        A_coeffs.append(e_p[i] * flint.fmpq(fact_ratio, fact_i))
-        B_coeffs.append(e_q[i] * flint.fmpq(fact_ratio, fact_i))
+        A_coeffs.append(e_p[i] * W[i])
+        B_coeffs.append(e_q[i] * W[i])
 
     # Cauchy product (polynomial multiplication) of scaled sequences in O(d log d)
     A_poly = flint.fmpq_poly(A_coeffs)
@@ -102,9 +108,9 @@ def asymmetric_additive(
     C_poly = A_poly * B_poly
 
     e_res = []
-    fact_d = factorials[d]
+    W_d = W[d]
     for k in range(d + 1):
-        val_res = C_poly[k] * flint.fmpq(factorials[k], fact_d * factorials[d - k])
+        val_res = C_poly[k] * (W_d / W[k])
         e_res.append(val_res)
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)

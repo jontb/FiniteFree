@@ -5,7 +5,7 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial, UnitaryPolynomial
-from .utils.conversion import flint_to_float, sympy_to_fmpq
+from .utils.conversion import flint_to_float
 
 
 def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
@@ -155,7 +155,7 @@ class FiniteTTransform:
 
         self.p = p
         self.d = p.degree
-        self.e_k = p.normalized_coeffs()
+        self.e_k = p._normalized_coeffs_flint()
 
         # Multiplicity r of the root 0 of p is trailing zeros in coeffs
         self.r = 0
@@ -190,8 +190,8 @@ class FiniteTTransform:
         if k > self.d:
             k = self.d
 
-        val_num = sympy_to_fmpq(self.e_k[self.d - k + 1])
-        val_den = sympy_to_fmpq(self.e_k[self.d - k])
+        val_num = self.e_k[self.d - k + 1]
+        val_den = self.e_k[self.d - k]
 
         if val_den == 0:
             raise ValueError(
@@ -218,7 +218,7 @@ def SymmetricFiniteSTransform(
         raise ValueError("Polynomial must be symmetric.")
 
     d = p.degree // 2
-    e_k = p.normalized_coeffs()
+    e_k = p._normalized_coeffs_flint()
 
     # Multiplicity 2r of the root 0
     zero_mult = 0
@@ -233,8 +233,8 @@ def SymmetricFiniteSTransform(
     s_transform = np.zeros(d - r, dtype=object if exact else np.float64)
 
     for k in range(1, d - r + 1):
-        val_num = sympy_to_fmpq(e_k[2 * (k - 1)])
-        val_den = sympy_to_fmpq(e_k[2 * k])
+        val_num = e_k[2 * (k - 1)]
+        val_den = e_k[2 * k]
 
         if val_den == 0:
             raise ValueError(f"Zero division encountered: e_tilde_{2 * k} is zero.")
