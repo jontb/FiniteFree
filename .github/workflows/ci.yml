@@ -28,7 +28,6 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
 
     - name: Install System Dependencies (Linux)
       if: matrix.os == 'ubuntu-latest'
@@ -39,9 +38,14 @@ jobs:
     - name: Install System Dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install flint gmp mpfr
-        echo "C_INCLUDE_PATH=/opt/homebrew/include" >> $GITHUB_ENV
-        echo "LIBRARY_PATH=/opt/homebrew/lib" >> $GITHUB_ENV
+        if command -v brew &> /dev/null; then
+          brew install flint gmp mpfr
+          echo "C_INCLUDE_PATH=/opt/homebrew/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=/opt/homebrew/lib" >> $GITHUB_ENV
+        elif command -v apt-get &> /dev/null; then
+          sudo apt-get update
+          sudo apt-get install -y libflint-dev libgmp-dev libmpfr-dev
+        fi
 
     - name: Install Dependencies
       run: |

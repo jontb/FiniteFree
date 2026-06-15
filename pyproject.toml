@@ -22,7 +22,7 @@ description = "A Python library for exact finite free probability"
 authors = [
     { name = "Author" }
 ]
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
     "python-flint>=0.6.0",
