@@ -95,21 +95,28 @@ class OrthogonalPolynomialKernel(BaseKernel):
         # Precompute derivative objects to avoid dynamic instantiation overhead
         self._pn = self.polys[self.n]
         self._pn_minus = self.polys[self.n - 1]
-        self._pn_deriv = self._pn.derivative(monic=False) if self._pn.degree > 0 else None
+        self._pn_deriv = (
+            self._pn.derivative(monic=False) if self._pn.degree > 0 else None
+        )
         self._pn_minus_deriv = (
-            self._pn_minus.derivative(monic=False) if self._pn_minus.degree > 0 else None
+            self._pn_minus.derivative(monic=False)
+            if self._pn_minus.degree > 0
+            else None
         )
 
     def __call__(self, x: Any, y: Any) -> Any:
         # Determine if they are close using raw float comparison first to bypass conversion overhead
         is_diag = False
-        if isinstance(x, (int, float, np.floating)) and isinstance(y, (int, float, np.floating)):
+        if isinstance(x, (int, float, np.floating)) and isinstance(
+            y, (int, float, np.floating)
+        ):
             is_diag = abs(float(x) - float(y)) < 1e-9
         elif x == y:
             is_diag = True
 
         if isinstance(x, (float, np.floating)) or isinstance(y, (float, np.floating)):
             from .utils.conversion import flint_to_float
+
             x_f = float(x)
             y_f = float(y)
             kn_f = flint_to_float(self.leading_coeffs[self.n])
@@ -119,15 +126,13 @@ class OrthogonalPolynomialKernel(BaseKernel):
             if is_diag:
                 pn_val = self._pn.evaluate(x_f)
                 pn_minus_val = self._pn_minus.evaluate(x_f)
-                pn_deriv_val = (
-                    self._pn_deriv.evaluate(x_f) if self._pn_deriv else 0.0
-                )
+                pn_deriv_val = self._pn_deriv.evaluate(x_f) if self._pn_deriv else 0.0
                 pn_minus_deriv_val = (
-                    self._pn_minus_deriv.evaluate(x_f)
-                    if self._pn_minus_deriv
-                    else 0.0
+                    self._pn_minus_deriv.evaluate(x_f) if self._pn_minus_deriv else 0.0
                 )
-                return factor_f * (pn_deriv_val * pn_minus_val - pn_minus_deriv_val * pn_val)
+                return factor_f * (
+                    pn_deriv_val * pn_minus_val - pn_minus_deriv_val * pn_val
+                )
             else:
                 pn_x = self._pn.evaluate(x_f)
                 pn_minus_y = self._pn_minus.evaluate(y_f)
@@ -149,13 +154,9 @@ class OrthogonalPolynomialKernel(BaseKernel):
         if is_diag:
             pn_val = self._pn.evaluate(x)
             pn_minus_val = self._pn_minus.evaluate(x)
-            pn_deriv_val = (
-                self._pn_deriv.evaluate(x) if self._pn_deriv else 0
-            )
+            pn_deriv_val = self._pn_deriv.evaluate(x) if self._pn_deriv else 0
             pn_minus_deriv_val = (
-                self._pn_minus_deriv.evaluate(x)
-                if self._pn_minus_deriv
-                else 0
+                self._pn_minus_deriv.evaluate(x) if self._pn_minus_deriv else 0
             )
             return factor * (pn_deriv_val * pn_minus_val - pn_minus_deriv_val * pn_val)
         else:

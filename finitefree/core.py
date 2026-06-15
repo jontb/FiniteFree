@@ -109,7 +109,10 @@ class RealRootedPolynomial(Polynomial):
             if isinstance(x, (float, np.floating)):
                 if self._float_coeffs_cached is None:
                     from finitefree.utils.conversion import flint_to_float
-                    self._float_coeffs_cached = [flint_to_float(c) for c in self._fmpq_poly.coeffs()]
+
+                    self._float_coeffs_cached = [
+                        flint_to_float(c) for c in self._fmpq_poly.coeffs()
+                    ]
                 val = 0.0
                 x_val = float(x)
                 for c in reversed(self._float_coeffs_cached):
@@ -787,6 +790,7 @@ class RealRootedPolynomial(Polynomial):
 
         if self._is_flint:
             import flint
+
             e_k = self._normalized_coeffs_flint()
             r = 0
             while r < d and self._fmpq_poly[r] == 0:
