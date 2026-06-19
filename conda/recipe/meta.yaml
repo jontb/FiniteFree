@@ -6,7 +6,7 @@ package:
   version: {{ version }}
 
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
   sha256: 896094c4ee4e571d8af98cec2ed1b9066d3c63116604998dd25187f41504b2ac
 
 build:
@@ -17,6 +17,7 @@ build:
 requirements:
   build:
     - {{ compiler('c') }}
+    - {{ stdlib("c") }}
   host:
     - python
     - pip
@@ -45,3 +46,7 @@ about:
   license_file: LICENSE
   summary: 'A Python library for exact finite free probability'
   dev_url: https://github.com/jontb/FiniteFree
+
+extra:
+  recipe-maintainers:
+    - jontb
