@@ -1,0 +1,85 @@
+name: Build and Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish_to_testpypi:
+        description: 'Publish to TestPyPI instead of PyPI'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build wheels via cibuildwheel
+        uses: pypa/cibuildwheel@v2.21.3
+
+      - name: Upload compiled wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build
+
+      - name: Build sdist
+        run: python -m build --sdist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: cibw-sdist
+          path: dist/*.tar.gz
+
+  publish:
+    name: Publish packages to PyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # Required for Trusted Publishing / OIDC
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to TestPyPI
+        # Publish to TestPyPI if triggered by manual dispatch with TestPyPI input, or tags ending in rc/dev
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_testpypi == 'true') ||
+          (github.event_name == 'push' && (contains(github.ref, 'rc') || contains(github.ref, 'dev')))
+        uses: pypa/gh-action-pypi-publish@release
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+      - name: Publish to PyPI
+        # Publish to production PyPI only on clean semver releases (non-pre-release tags)
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_to_testpypi == 'false') ||
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, 'rc') && !contains(github.ref, 'dev'))
+        uses: pypa/gh-action-pypi-publish@release
