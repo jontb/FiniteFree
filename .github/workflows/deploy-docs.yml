@@ -53,6 +53,8 @@ jobs:
 
       - name: Configure GitHub Pages environment
         uses: actions/configure-pages@v4
+        with:
+          enablement: true
 
       - name: Upload compiled artifact
         uses: actions/upload-pages-artifact@v3
