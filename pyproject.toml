@@ -84,3 +84,8 @@ skip = ["pp*", "*-manylinux_i686", "*-musllinux_i686", "*-win32"]
 # Build 64-bit architectures
 archs = ["auto64"]
 
+[tool.cibuildwheel.macos]
+# Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
+repair-wheel-command = ""
+
+
