@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-cython", "Cython", "numpy"]
+requires = ["hatchling", "hatch-cython", "Cython", "numpy", "setuptools"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel.hooks.cython]
@@ -7,9 +7,8 @@ dependencies = ["hatch-cython"]
 
 [tool.hatch.build.targets.wheel.hooks.cython.options]
 directives = {boundscheck = false, wraparound = false, nonecheck = false, cdivision = true, language_level = 3}
-
-[tool.hatch.build.targets.wheel.hooks.cython.options.files]
-exclude = ["**/*.py", "*.py"]
+include_numpy = true
+compile_py = false
 
 [tool.setuptools]
 packages = ["finitefree"]
@@ -83,6 +82,9 @@ ignore = ["E501", "E402"]
 skip = ["pp*", "*-manylinux_i686", "*-musllinux_i686", "*-win32"]
 # Build 64-bit architectures
 archs = ["auto64"]
+# Verbosity level to show internal build and repair logs
+build-verbosity = 1
+
 
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
