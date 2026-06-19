@@ -8,9 +8,9 @@ from .core import RealRootedPolynomial
 
 
 def sample_gue(d: int, scale: float = 1.0) -> Any:
-    """
+    r"""
     Generates a sample GUE matrix (Hermitian, Gaussian entries)
-    with diagonal and off-diagonal variance of 1/d.
+    with diagonal and off-diagonal variance of $1/d$.
     """
     X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2.0)
     H = (X + X.conj().T) / (np.sqrt(2.0) * np.sqrt(d))
@@ -18,9 +18,9 @@ def sample_gue(d: int, scale: float = 1.0) -> Any:
 
 
 def sample_goe(d: int, scale: float = 1.0) -> Any:
-    """
+    r"""
     Generates a sample GOE matrix (Symmetric, Gaussian entries)
-    with diagonal variance 2/d and off-diagonal variance 1/d.
+    with diagonal variance $2/d$ and off-diagonal variance $1/d$.
     """
     X = np.random.randn(d, d)
     H = (X + X.T) / (np.sqrt(2.0) * np.sqrt(d))
@@ -28,9 +28,9 @@ def sample_goe(d: int, scale: float = 1.0) -> Any:
 
 
 def sample_gse(d: int, scale: float = 1.0) -> Any:
-    """
-    Generates a sample GSE matrix of dimension 2d x 2d (Self-dual, Gaussian entries)
-    with Kramers degeneracy, scaled to match the d-dimensional expected characteristic polynomial.
+    r"""
+    Generates a sample GSE matrix of dimension $2d \times 2d$ (Self-dual, Gaussian entries)
+    with Kramers degeneracy, scaled to match the $d$-dimensional expected characteristic polynomial.
     """
     X = (np.random.randn(2 * d, 2 * d) + 1j * np.random.randn(2 * d, 2 * d)) / np.sqrt(
         2.0
@@ -44,9 +44,9 @@ def sample_gse(d: int, scale: float = 1.0) -> Any:
 
 
 def sample_wishart(d: int, n: int, beta: int = 2, scale: float = 1.0) -> NDArray[Any]:
-    """
-    Generates a sample Wishart (LUE for beta=2, LOE for beta=1, LSE for beta=4)
-    matrix W = X X^H / n.
+    r"""
+    Generates a sample Wishart (LUE for $\beta=2$, LOE for $\beta=1$, LSE for $\beta=4$)
+    matrix $W = X X^H / n$.
     """
     if beta == 1:
         X = np.random.randn(d, n)
@@ -83,7 +83,7 @@ def sample_haar_orthogonal(d: int) -> Any:
 
 
 def sample_haar_symplectic(d: int) -> NDArray[np.complex128]:
-    """Generates a Haar-distributed random symplectic matrix in USp(2d)."""
+    r"""Generates a Haar-distributed random symplectic matrix in $\text{USp}(2d)$."""
     X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
     Y = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
     Z = np.block([[X, Y], [-np.conj(Y), np.conj(X)]])
@@ -104,9 +104,9 @@ def sample_haar_symplectic(d: int) -> NDArray[np.complex128]:
 
 
 def gue_expected_poly(d: int) -> RealRootedPolynomial:
-    """
-    Computes the exact expected characteristic polynomial of a d x d GUE matrix:
-    E[det(xI - M)] = d^{-d/2} He_d(sqrt(d) x)
+    r"""
+    Computes the exact expected characteristic polynomial of a $d \times d$ GUE matrix:
+    $\mathbb{E}[\det(xI - M)] = d^{-d/2} He_d(\sqrt{d} x)$
     using the probabilist's Hermite polynomial from orthogonal.py.
     """
     import flint
@@ -130,9 +130,9 @@ def gue_expected_poly(d: int) -> RealRootedPolynomial:
 
 
 def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial:
-    """
-    Computes the exact expected characteristic polynomial of a d x d Wishart matrix:
-    E[det(xI - W)] = n^{-d} d! (-1)^d L_d^{(n - d)}(n x)
+    r"""
+    Computes the exact expected characteristic polynomial of a $d \times d$ Wishart matrix:
+    $\mathbb{E}[\det(xI - W)] = n^{-d} d! (-1)^d L_d^{(n - d)}(n x)$
     using the generalized Laguerre polynomial from orthogonal.py.
     """
     import flint

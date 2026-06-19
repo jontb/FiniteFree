@@ -23,8 +23,8 @@ class SymmetricMatrixPencil:
 
     def __init__(self, matrices: Sequence[NDArray[np.float64]]) -> None:
         r"""
-        matrices: A list of symmetric matrices A_1, A_2, ..., A_m
-        The pencil is defined as \sum x_i A_i
+        matrices: A list of symmetric matrices $A_1, A_2, \dots, A_m$
+        The pencil is defined as $\sum x_i A_i$
         """
         self.matrices = [np.array(A, dtype=np.float64) for A in matrices]
         self.m = len(self.matrices)
@@ -40,8 +40,8 @@ class SymmetricMatrixPencil:
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         r"""
-        Evaluates the matrix pencil at point x = (x_1, ..., x_m)
-        Returns the matrix \sum x_i A_i
+        Evaluates the matrix pencil at point $x = (x_1, \dots, x_m)$
+        Returns the matrix $\sum x_i A_i$
         """
         if len(x) != self.m:
             raise ValueError(f"Expected {self.m} variables, got {len(x)}")
@@ -93,9 +93,9 @@ class SymmetricMatrixPencil:
         return A_exact
 
     def verify_hyperbolicity(self, e: Sequence[float], exact: bool = False) -> bool:
-        """
-        Verifies if the pencil is hyperbolic in direction e using
-        definite matrix programming LMI: A(e) = sum e_i A_i > 0
+        r"""
+        Verifies if the pencil is hyperbolic in direction $e$ using
+        definite matrix programming LMI: $A(e) = \sum e_i A_i \succ 0$
         """
         if exact:
             A_exact = self._evaluate_exact(e)
@@ -124,10 +124,10 @@ class SymmetricMatrixPencil:
         parallel: bool = False,
         backend: str = "threads",
     ) -> Any:
-        """
+        r"""
         Computes the univariate polynomial
-        P(w_1 z + b_1, ..., w_m z + b_m) = det(z A + B)
-        exactly where A = sum w_i A_i and B = sum b_i A_i.
+        $P(w_1 z + b_1, \dots, w_m z + b_m) = \det(z A + B)$
+        exactly where $A = \sum w_i A_i$ and $B = \sum b_i A_i$.
         Returns a RealRootedPolynomial.
         """
 
@@ -231,9 +231,9 @@ class SymmetricMatrixPencil:
         return StraightLineProgram(operations=["det"], pencil=self)
 
     def characteristic_polynomial(self, x: Sequence[Any]) -> flint.fmpq_poly:
-        """
-        Computes the characteristic polynomial det(t*I - A(x)) of the pencil evaluated at x
-        exactly using rational interpolation over Q[t].
+        r"""
+        Computes the characteristic polynomial $\det(t I - A(x))$ of the pencil evaluated at $x$
+        exactly using rational interpolation over $\mathbb{Q}[t]$.
         """
         import flint
 
@@ -320,9 +320,9 @@ class MultiplicativeMatrixPencil:
         return A_exact
 
     def characteristic_polynomial(self, x: Sequence[Any]) -> flint.fmpq_poly:
-        """
-        Computes the characteristic polynomial det(t*I - A(x)) of the pencil evaluated at x
-        exactly using rational interpolation over Q[t].
+        r"""
+        Computes the characteristic polynomial $\det(t I - A(x))$ of the pencil evaluated at $x$
+        exactly using rational interpolation over $\mathbb{Q}[t]$.
         """
         import flint
 

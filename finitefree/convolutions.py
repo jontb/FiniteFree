@@ -8,9 +8,9 @@ def symmetric_additive(
     p: RealRootedPolynomial, q: RealRootedPolynomial, d: int
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free symmetric additive convolution (p \boxplus_d q).
+    Computes the finite free symmetric additive convolution $(p \boxplus_d q)$.
     Optimized via exponential generating function (EGF) polynomial multiplication
-    using python-flint's GMP-backed fmpq_poly in O(d log d) time in C.
+    using python-flint's GMP-backed fmpq_poly in $O(d \log d)$ time in C.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
@@ -51,7 +51,7 @@ def multiplicative(
     p: RealRootedPolynomial, q: RealRootedPolynomial, d: int
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free multiplicative convolution (p \boxtimes_d q).
+    Computes the finite free multiplicative convolution $(p \boxtimes_d q)$.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
@@ -73,8 +73,8 @@ def asymmetric_additive(
     weights: Optional[Sequence[Any]] = None,
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free asymmetric additive convolution (p \uplus_d q)
-    exactly. Optimized to run in O(d log d) time via a Cauchy product of
+    Computes the finite free asymmetric additive convolution $(p \uplus_d q)$
+    exactly. Optimized to run in $O(d \log d)$ time via a Cauchy product of
     scaled coefficient sequences using python-flint's compiled C-level fmpq_poly
     multiplication.
     """

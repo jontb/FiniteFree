@@ -37,8 +37,8 @@ class RealRootedPolynomial(Polynomial):
         assume_real_rooted: bool = False,
         monic: bool = True,
     ) -> None:
-        """
-        coeffs: array of length d+1 where index k corresponds to x^{d-k}, or a flint.fmpq_poly.
+        r"""
+        coeffs: array of length $d+1$ where index $k$ corresponds to $x^{d-k}$, or a flint.fmpq_poly.
         """
         import flint
 
@@ -253,11 +253,11 @@ class RealRootedPolynomial(Polynomial):
             return True
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
-        """
-        Verifies that the roots of the derivative p'(x) interlace the roots of p(x).
-        For univariate polynomials, if p(x) is real-rooted, Rolle's Theorem
-        mathematically guarantees that the roots of p'(x) interlace the roots of p(x).
-        If strict=True, they strictly interlace if and only if all roots of p(x)
+        r"""
+        Verifies that the roots of the derivative $p'(x)$ interlace the roots of $p(x)$.
+        For univariate polynomials, if $p(x)$ is real-rooted, Rolle's Theorem
+        mathematically guarantees that the roots of $p'(x)$ interlace the roots of $p(x)$.
+        If strict=True, they strictly interlace if and only if all roots of $p(x)$
         are simple (which corresponds to the polynomial being square-free).
         """
         self.verify_real_rootedness()
@@ -312,9 +312,9 @@ class RealRootedPolynomial(Polynomial):
         return e_k
 
     def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
-        """
+        r"""
         Extracts the normalized elementary symmetric polynomial sequence
-        \\tilde{e}_k^{(d)}(p) with respect to ambient dimension d as SymPy Rationals.
+        $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as SymPy Rationals.
         """
         if d is None:
             d = self.degree
@@ -358,9 +358,9 @@ class RealRootedPolynomial(Polynomial):
     def from_normalized_coeffs(
         cls, e_k: Union[Sequence[Any], NDArray[Any]]
     ) -> "RealRootedPolynomial":
-        """
+        r"""
         Reconstructs the polynomial from the normalized sequence
-        \\tilde{e}_k^{(d)}(p).
+        $\tilde{e}_k^{(d)}(p)$.
         """
         import flint
 
@@ -697,8 +697,8 @@ class RealRootedPolynomial(Polynomial):
                 return np.sort(np.real(np.roots(float_coeffs)))
 
     def dilation(self, c: Any) -> "RealRootedPolynomial":
-        """
-        Computes the dilated polynomial [Dil_c p](x) = c^d p(x/c).
+        r"""
+        Computes the dilated polynomial $[\text{Dil}_c p](x) = c^d p(x/c)$.
         """
         if c == 0:
             raise ValueError("Dilation factor c cannot be zero.")
@@ -716,8 +716,8 @@ class RealRootedPolynomial(Polynomial):
         )
 
     def shift(self, c: Any) -> "RealRootedPolynomial":
-        """
-        Computes the shifted polynomial [Shi_c p](x) = p(x-c).
+        r"""
+        Computes the shifted polynomial $[\text{Shi}_c p](x) = p(x-c)$.
         """
         c_fmpq = sympy_to_fmpq(c)
         shift_poly = _get_shift_poly(c_fmpq)
@@ -726,8 +726,8 @@ class RealRootedPolynomial(Polynomial):
         return RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
 
     def power(self, c: Any) -> "RealRootedPolynomial":
-        """
-        Computes the polynomial p^(c) whose roots are lambda_i(p)^c.
+        r"""
+        Computes the polynomial $p^{(c)}$ whose roots are $\lambda_i(p)^c$.
         """
         if not self.has_non_negative_roots:
             raise ValueError(
@@ -742,8 +742,8 @@ class RealRootedPolynomial(Polynomial):
         return RealRootedPolynomial.from_roots(new_roots)
 
     def reversed_polynomial(self) -> "RealRootedPolynomial":
-        """
-        Computes the reversed polynomial p^(-1) with roots 1/lambda_i(p).
+        r"""
+        Computes the reversed polynomial $p^{(-1)}$ with roots $1/\lambda_i(p)$.
         """
         d = self.degree
         e_k = self.normalized_coeffs()
@@ -774,10 +774,10 @@ class RealRootedPolynomial(Polynomial):
         return RealRootedPolynomial.from_normalized_coeffs(new_e)
 
     def phi_d(self) -> "RealRootedPolynomial":
-        """
-        Computes the limiting polynomial Phi_d(p) from Fujie and Ueda [FU23].
-        For p in P_d(R_>=0) with multiplicity r at root 0, the roots are
-        lambda_k = e_tilde_k / e_tilde_{k-1} for 1 <= k <= d - r, and 0 otherwise.
+        r"""
+        Computes the limiting polynomial $\Phi_d(p)$ from Fujie and Ueda [FU23].
+        For $p \in P_d(\mathbb{R}_{\ge 0})$ with multiplicity $r$ at root 0, the roots are
+        $\lambda_k = \tilde{e}_k / \tilde{e}_{k-1}$ for $1 \le k \le d - r$, and 0 otherwise.
         """
         # Verify that all roots are non-negative
         if not self.has_non_negative_roots:
@@ -854,9 +854,9 @@ class RealRootedPolynomial(Polynomial):
         )
 
     def projection(self, j: int) -> "RealRootedPolynomial":
-        """
-        Computes the projection \\partial^{j|d} p(x) which is the derivative
-        of order d-j, monic-normalized.
+        r"""
+        Computes the projection $\partial^{j|d} p(x)$ which is the derivative
+        of order $d-j$, monic-normalized.
         """
         if j < 0 or j > self.degree:
             raise ValueError("Projection dimension j must be between 0 and degree.")
@@ -867,10 +867,10 @@ class RealRootedPolynomial(Polynomial):
         return current
 
     def additive_power(self, t: Any) -> "RealRootedPolynomial":
-        """
+        r"""
         Computes the fractional finite free additive convolution power
-        p^{\\boxplus_d t} defined via scaling the finite free cumulants:
-        κ_n^{(d)}(p^{\\boxplus_d t}) = t * κ_n^{(d)}(p).
+        $p^{\boxplus_d t}$ defined via scaling the finite free cumulants:
+        $\kappa_n^{(d)}(p^{\boxplus_d t}) = t \cdot \kappa_n^{(d)}(p)$.
         """
         if t <= 0:
             raise ValueError(
@@ -918,11 +918,11 @@ class RealRootedPolynomial(Polynomial):
         return True
 
     def square_roots_map(self) -> "RealRootedPolynomial":
-        """
-        The Sq(p) mapping.
-        Given a symmetric polynomial p(x) = sum c_{2k} x^{2k}, constructs
-        and returns the transformed polynomial Sq(p)(x) = sum c_{2k} x^k.
-        This satisfies the identity Sq(p)(x^2) = p(x).
+        r"""
+        The $\mathbf{Sq}(p)$ mapping.
+        Given a symmetric polynomial $p(x) = \sum c_{2k} x^{2k}$, constructs
+        and returns the transformed polynomial $\mathbf{Sq}(p)(x) = \sum c_{2k} x^k$.
+        This satisfies the identity $\mathbf{Sq}(p)(x^2) = p(x)$.
         """
         if not self.is_symmetric():
             raise ValueError(

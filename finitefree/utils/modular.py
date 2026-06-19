@@ -12,7 +12,10 @@ __all__ = [
 ]
 
 try:
-    from .modular_fast import modular_det  # type: ignore[import-untyped, unused-ignore]
+    import importlib
+
+    _modular_fast = importlib.import_module(".modular_fast", package=__package__)
+    modular_det = _modular_fast.modular_det
 except ImportError:
 
     def modular_det(A: list[list[int]], p: int) -> int:

@@ -82,5 +82,9 @@ experiments/
 # Local Scratch/Development scripts
 scratch/
 
+# MkDocs output
+site/
+
+
 
 

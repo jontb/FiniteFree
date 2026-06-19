@@ -9,8 +9,8 @@ from .utils.conversion import flint_to_float
 
 
 def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
-    """
-    Computes the Finite Cauchy Transform G_p^{(d)}(z) = \frac{1}{d} \frac{p'(z)}{p(z)}
+    r"""
+    Computes the Finite Cauchy Transform $G_p^{(d)}(z) = \frac{1}{d} \frac{p'(z)}{p(z)}$
     Returns a SymPy expression.
     """
     z = sp.Symbol("z")
@@ -27,9 +27,9 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
 
 
 def FiniteSTransform(p: RealRootedPolynomial, exact: bool = True) -> NDArray[Any]:
-    """
-    Computes the finite S-Transform discretely on {-k/d}.
-    Returns a dense array of length d, where index k-1 maps to -k/d.
+    r"""
+    Computes the finite S-Transform discretely on $\{-k/d\}$.
+    Returns a dense array of length $d$, where index $k-1$ maps to $-k/d$.
     Raises ValueError if strict positivity constraint is violated.
     """
     if not isinstance(p, UnitaryPolynomial) and not p.has_strictly_positive_roots:
@@ -67,13 +67,13 @@ def FiniteRTransform(
     numerical: bool = False,
     prec: int = 256,
 ) -> List[Any]:
-    """
-    Extracts finite free cumulants κ_n^{(d)}(p) exactly using the classical
-    cumulant-moment recurrence (O(n²)), which is equivalent to Möbius
+    r"""
+    Extracts finite free cumulants $\kappa_n^{(d)}(p)$ exactly using the classical
+    cumulant-moment recurrence ($O(n^2)$), which is equivalent to Möbius
     inversion over the partition lattice but avoids exponential partition
     enumeration.
     Returns the first `order` finite free cumulants (which strictly
-    linearize ⊞_d).
+    linearize $\boxplus_d$).
     """
     import math
 
@@ -138,12 +138,12 @@ def FiniteRTransform(
 
 
 class FiniteTTransform:
-    """
+    r"""
     Definition 6.3 (Finite T-transform).
 
-    Given a polynomial p in P_d(R_>=0), the finite T-transform T_d(p)(t)
-    is the right-continuous step function on (0, 1) defined in terms of
-    the coefficients of p.
+    Given a polynomial $p \in P_d(\mathbb{R}_{\ge 0})$, the finite T-transform $T_d(p)(t)$
+    is the right-continuous step function on $(0, 1)$ defined in terms of
+    the coefficients of $p$.
     """
 
     def __init__(self, p: RealRootedPolynomial) -> None:

@@ -39,7 +39,7 @@ class BaseKernel(abc.ABC):
         return [[self(x, y) for y in xs] for x in xs]
 
     def k_point_correlation(self, xs: Sequence[Any]) -> Any:
-        """Evaluate the k-point correlation function exactly: det(K(x_i, x_j))."""
+        r"""Evaluate the k-point correlation function exactly: $\det(K(x_i, x_j))$."""
         M = self.matrix(xs)
         return _exact_det(M)
 
@@ -68,10 +68,10 @@ class OrthogonalPolynomialKernel(BaseKernel):
         norms: List[Any],
         leading_coeffs: Union[List[Any], None] = None,
     ) -> None:
-        """
-        polys: List of RealRootedPolynomial, from p_0 to p_n (length n + 1)
-        norms: List of norm constants, from h_0 to h_{n-1} (length n)
-        leading_coeffs: Optional list of leading coefficients, from k_0 to k_n (length n + 1)
+        r"""
+        polys: List of RealRootedPolynomial, from $p_0$ to $p_n$ (length $n + 1$)
+        norms: List of norm constants, from $h_0$ to $h_{n-1}$ (length $n$)
+        leading_coeffs: Optional list of leading coefficients, from $k_0$ to $k_n$ (length $n + 1$)
         """
         self.polys = polys
         self.norms = [sympy_to_exact(h) for h in norms]
@@ -186,7 +186,7 @@ def sympy_to_exact(val: Any) -> Any:
 
 
 def gap_probability_discrete(kernel: BaseKernel, points_in_gap: Sequence[Any]) -> Any:
-    """Computes exact gap probability over a discrete state space subset: det(I - K_I)."""
+    r"""Computes exact gap probability over a discrete state space subset: $\det(I - K_I)$."""
     n = len(points_in_gap)
     if n == 0:
         return 1
@@ -203,7 +203,7 @@ def gap_probability_discrete(kernel: BaseKernel, points_in_gap: Sequence[Any]) -
 def gap_probability_continuous(
     kernel: BaseKernel, a: float, b: float, n_points: int = 50, weight_func: Any = None
 ) -> float:
-    """Approximates the continuous Fredholm determinant gap probability over [a, b] using Nyström discretization."""
+    r"""Approximates the continuous Fredholm determinant gap probability over $[a, b]$ using Nyström discretization."""
     import scipy.special
 
     from .utils.conversion import flint_to_float

@@ -60,7 +60,7 @@ class MultivariatePolynomial(Polynomial):
     """
 
     def evaluate(self, x: Sequence[Any]) -> Any:
-        """Evaluates the multivariate polynomial at a point x = (x_1, ..., x_m)."""
+        r"""Evaluates the multivariate polynomial at a point $x = (x_1, \dots, x_m)$."""
         from .utils.conversion import sympy_to_fmpq
 
         if len(x) != len(self.variables):
@@ -114,9 +114,9 @@ class MultivariatePolynomial(Polynomial):
         return int(self._mpoly.total_degree())
 
     def is_homogeneous(self) -> bool:
-        """
+        r"""
         Verifies if the polynomial is homogeneous.
-        P(t x_1, ..., t x_m) == t^d P(x_1, ..., x_m)
+        $P(t x_1, \dots, t x_m) = t^d P(x_1, \dots, x_m)$
         """
         d = self.degree()
         return all(sum(alpha) == d for alpha in self._mpoly.monoms())
@@ -124,9 +124,9 @@ class MultivariatePolynomial(Polynomial):
     def directional_derivative(
         self, direction: Sequence[Any]
     ) -> "MultivariatePolynomial":
-        """
+        r"""
         Computes the directional derivative of the polynomial:
-        D_e P(x) = <e, grad P(x)> = sum e_i * dP/dx_i
+        $D_e P(x) = \langle e, \nabla P(x) \rangle = \sum e_i \frac{\partial P}{\partial x_i}$
         """
         if len(direction) != len(self.variables):
             raise ValueError(
@@ -164,10 +164,10 @@ class MultivariatePolynomial(Polynomial):
         return MultivariatePolynomial(res, self.variables)
 
     def normalized_coefficients(self) -> Dict[Tuple[int, ...], Any]:
-        """
+        r"""
         Extracts the normalized coefficients:
-        \\tilde{c}_\\alpha = c_\\alpha / \\binom{d}{\\alpha}
-        where \\binom{d}{\\alpha} is the multinomial coefficient.
+        $\tilde{c}_\alpha = c_\alpha / \binom{d}{\alpha}$
+        where $\binom{d}{\alpha}$ is the multinomial coefficient.
         """
         import flint
 
@@ -201,11 +201,11 @@ class MultivariatePolynomial(Polynomial):
         parallel: bool = False,
         backend: str = "threads",
     ) -> "MultivariatePolynomial":
-        """
-        Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)
+        r"""
+        Constructs the multivariate polynomial $\det(x_1 A_1 + \dots + x_m A_m)$
         by evaluating the determinants modulo prime numbers exactly using fast
         C-level modular matrix mathematics and reconstructing exact coefficients
-        over Q using the Chinese Remainder Theorem (CRT) and Rational Reconstruction.
+        over $\mathbb{Q}$ using the Chinese Remainder Theorem (CRT) and Rational Reconstruction.
         """
         import math
 
@@ -323,11 +323,11 @@ class MultivariatePolynomial(Polynomial):
     def from_symmetric_matrix_pencil_sparse(
         cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
     ) -> "MultivariatePolynomial":
-        """
-        Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)
+        r"""
+        Constructs the multivariate polynomial $\det(x_1 A_1 + \dots + x_m A_m)$
         by evaluating the determinants modulo prime numbers exactly using fast
         C-level modular matrix mathematics and reconstructing exact coefficients
-        over Q using Zippel's sparse interpolation algorithm.
+        over $\mathbb{Q}$ using Zippel's sparse interpolation algorithm.
         """
         import math
         import random
@@ -542,10 +542,10 @@ class MultivariatePolynomial(Polynomial):
     def from_symmetric_matrix_pencil(
         cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
     ) -> "MultivariatePolynomial":
-        """
-        Constructs the multivariate polynomial det(x_1 A_1 + ... + x_m A_m)
+        r"""
+        Constructs the multivariate polynomial $\det(x_1 A_1 + \dots + x_m A_m)$
         using exact arithmetic. Uses exact grid-based rational polynomial
-        interpolation for large pencils (n >= 4) to bypass the exponential
+        interpolation for large pencils ($n \ge 4$) to bypass the exponential
         symbolic determinant bottleneck, and direct Berkowitz determinant
         for small pencils.
         """

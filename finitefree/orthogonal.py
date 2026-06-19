@@ -16,9 +16,9 @@ _JACK_CACHE: dict[
 
 
 def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
-    """
-    Computes the Jacobi polynomial P_n^(alpha, beta)(x) of degree n
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Jacobi polynomial $P_n^{(\alpha, \beta)}(x)$ of degree $n$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -73,9 +73,9 @@ def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
 
 
 def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomial:
-    """
-    Computes the Hahn polynomial Q_n(x; alpha, beta, N) of degree n
-    exactly using sequential O(n) running products for coefficients.
+    r"""
+    Computes the Hahn polynomial $Q_n(x; \alpha, \beta, N)$ of degree $n$
+    exactly using sequential $O(n)$ running products for coefficients.
     """
     if n < 0 or n > N:
         raise ValueError("n must satisfy 0 <= n <= N")
@@ -232,9 +232,9 @@ def _jack_recursive(
 def jack_polynomial(
     m: int, partition: Sequence[int], alpha: Any
 ) -> MultivariatePolynomial:
-    """
-    Computes the symmetric Jack polynomial J_lambda^(alpha)(x_1, ..., x_m)
-    recursively in m variables with parameter alpha using transition coefficients.
+    r"""
+    Computes the symmetric Jack polynomial $J_\lambda^{(\alpha)}(x_1, \dots, x_m)$
+    recursively in $m$ variables with parameter $\alpha$ using transition coefficients.
     """
     kappa = list(partition)
     while kappa and kappa[-1] == 0:
@@ -254,9 +254,9 @@ def jack_polynomial(
 
 
 def hermite_polynomial(n: int, physicist: bool = True) -> RealRootedPolynomial:
-    """
-    Computes the Hermite polynomial (Physicist's H_n(x) or Probabilist's He_n(x))
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Hermite polynomial (Physicist's $H_n(x)$ or Probabilist's $He_n(x)$)
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -297,9 +297,9 @@ def hermite_polynomial(n: int, physicist: bool = True) -> RealRootedPolynomial:
 
 
 def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
-    """
-    Computes the generalized Laguerre polynomial L_n^(alpha)(x)
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the generalized Laguerre polynomial $L_n^{(\alpha)}(x)$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -336,9 +336,9 @@ def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
 
 
 def krawtchouk_polynomial(n: int, p: Any, N: int) -> RealRootedPolynomial:
-    """
-    Computes the Krawtchouk polynomial K_n(x; p, N)
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Krawtchouk polynomial $K_n(x; p, N)$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0 or n > N:
         raise ValueError("n must satisfy 0 <= n <= N")
@@ -379,8 +379,8 @@ def krawtchouk_polynomial(n: int, p: Any, N: int) -> RealRootedPolynomial:
 
 
 def unitary_hermite_polynomial(d: int, t: Any) -> UnitaryPolynomial:
-    """
-    Computes the Unitary Hermite polynomial H_d(z; t) of degree d
+    r"""
+    Computes the Unitary Hermite polynomial $H_d(z; t)$ of degree $d$
     defined on the unit circle. Uses SymPy exp and binomial coefficients exactly.
     """
     if d < 0:
@@ -403,9 +403,9 @@ def unitary_hermite_polynomial(d: int, t: Any) -> UnitaryPolynomial:
 
 
 def chebyshev_t_polynomial(n: int) -> RealRootedPolynomial:
-    """
-    Computes the Chebyshev polynomial of the first kind T_n(x) of degree n
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Chebyshev polynomial of the first kind $T_n(x)$ of degree $n$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -435,9 +435,9 @@ def chebyshev_t_polynomial(n: int) -> RealRootedPolynomial:
 
 
 def chebyshev_u_polynomial(n: int) -> RealRootedPolynomial:
-    """
-    Computes the Chebyshev polynomial of the second kind U_n(x) of degree n
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Chebyshev polynomial of the second kind $U_n(x)$ of degree $n$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -467,9 +467,9 @@ def chebyshev_u_polynomial(n: int) -> RealRootedPolynomial:
 
 
 def legendre_polynomial(n: int) -> RealRootedPolynomial:
-    """
-    Computes the Legendre polynomial P_n(x) of degree n
-    exactly using the three-term recurrence relation over Q with flint.fmpq_poly.
+    r"""
+    Computes the Legendre polynomial $P_n(x)$ of degree $n$
+    exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
