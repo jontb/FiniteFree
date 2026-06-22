@@ -598,7 +598,7 @@ class RealRootedPolynomial(Polynomial):
                             if cp.max(cp.abs(update)) < 1e-12:
                                 break
                         gpu_roots = np.sort(np.real(cp.asnumpy(z)))
-                        return gpu_roots * S
+                        return np.asarray(gpu_roots * S, dtype=np.float64)
                     except Exception:
                         # CPU Seeker via NumPy (Vectorized)
                         c_0 = scaled_coeffs[0]
@@ -630,7 +630,7 @@ class RealRootedPolynomial(Polynomial):
                             if np.max(np.abs(update)) < 1e-12:
                                 break
                         cpu_roots = np.sort(np.real(z))
-                        return cpu_roots * S
+                        return np.asarray(cpu_roots * S, dtype=np.float64)
             except (OverflowError, ValueError):
                 pass  # Fall through to companion matrix/certified solver
 
