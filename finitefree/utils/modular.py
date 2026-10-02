@@ -2,6 +2,14 @@ import functools
 from typing import Any
 
 import flint
+import numpy as np
+from numpy.typing import NDArray
+
+
+def _as_modular_array(values: Any, p: int) -> NDArray[np.int64]:
+    """Reduce Python integers before narrowing them for Cython arithmetic."""
+    return np.asarray(np.asarray(values, dtype=object) % p, dtype=np.int64)
+
 
 __all__ = [
     "modular_det",

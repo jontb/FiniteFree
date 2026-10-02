@@ -7,8 +7,9 @@ This page describes the mathematical and numerical contracts with executable exa
 `RealRootedPolynomial.evaluate_roots_float64(parallel=False, exact=True)` returns sorted NumPy `float64` roots, with multiplicities. It validates real-rootedness before extraction unless the constructor or a proven family has already marked the polynomial verified.
 
 - `exact=False` first uses a symmetric tridiagonal Jacobi matrix when recurrence metadata is available. It scales the matrix without centering, computes parameter differences before float conversion, and accumulates affine parameters rationally before converting the final roots.
-- `exact=True` first requests python-flint/Arb isolation and remains the default. Use `PrecisionContext(degree=d, prec=192)` to request a working precision. This option selects the high-precision path; the returned floats are neither exact algebraic roots nor interval error bounds. Existing SymPy/general numerical fallbacks may still be used if isolation fails.
-- An `exact=True` request bypasses a cache produced with `exact=False`. An `exact=False` request can reuse an existing high-precision result. Repeated calls may return cached arrays; do not modify those arrays in place.
+- `exact=True` requests python-flint/Arb isolation and remains the default. Use `PrecisionContext(degree=d, prec=192)` to request a working precision. This option selects the high-precision path; the returned floats are neither exact algebraic roots nor interval error bounds. SymPy/general numerical fallbacks may still be used if isolation fails.
+- An `exact=True` request bypasses a cache produced with `exact=False`, or a high-precision cache recorded at a lower working precision. An `exact=False` request can reuse any existing root result. Repeated calls may return cached arrays; do not modify those arrays in place.
+- When real-rootedness validation uses Arb, it retains the isolated roots and working precision in that same cache. Generic root calls can return this result directly, without another isolation or a companion-matrix pass. Without a suitable cache, dispatch follows the solver options below.
 - If no usable recurrence is available, `exact=False` uses the existing balanced companion-matrix path, or the Aberth–Ehrlich path when `parallel=True`, with Arb/general numerical fallback. Generic monomial coefficients can be ill-conditioned. Fast recurrence metadata is preserved through affine transforms and proven Hermite additive convolutions, not through arbitrary coefficient operations.
 
 The recurrence path is available for degree at least two in these domains:
@@ -42,6 +43,8 @@ assert len(numerical) == d
 ```
 
 The [reproducible benchmark and measured results](index.md#testing-protocol) compare six families at degrees 32, 100 and 300 against independently isolated Arb roots. Root timings exclude polynomial construction and cached results; construction is reported separately. Degree-300 numerical extraction took 0.95–1.29 ms on jon-desktop with maximum scaled error `4.51e-15`. These measurements are not performance or accuracy guarantees for other inputs or machines.
+
+For generic compound-Wishart convolutions, `PYTHONPATH=. python scripts/benchmark_compound_roots.py --output compound-roots.json` measures first public root calls with domain validation included, at degrees 10, 30, 60, 100 and 150. It compares 192-bit working precision with an independent 384-bit reference and counts isolation calls. Construction, numerical-library warm-up and repeat-cache latency are excluded from first-call timings and reported separately where applicable. These polynomials retain the general solver rather than inheriting an orthogonal-family recurrence.
 
 ## Validation and mathematical contracts
 
@@ -95,6 +98,23 @@ except ValueError:
     pass
 else:
     raise AssertionError("Invalid correlation spectrum was accepted")
+```
+
+## Matrix-pencil input contract
+
+`SymmetricMatrixPencil` and `MultiplicativeMatrixPencil` accept nonempty sequences of equally sized square matrices containing real rational values, including Python/NumPy integers, Python floats, `Fraction`, SymPy rationals and Flint rationals. Constructors copy the entries into rational matrices before creating their separate `float64` views. Supplied floats represent their actual binary values, not a recovered decimal intent. Entries must fit a finite float64 numerical view; tiny entries may underflow in that view while their rational values remain preserved.
+
+`characteristic_polynomial`, rational SLP evaluation/gradient/Hessian, diagonal specialization and direct/interpolated/sparse multivariate determinant construction use the preserved rational values. `evaluate` and numerical SLP operations use the float64 views. Construct a new pencil when changing matrix entries rather than mutating its stored views.
+
+Invalid shape, inconsistent dimensions, empty matrix sequences, nonfinite/complex entries or nonsymmetric supplied entries in `SymmetricMatrixPencil` raise `ValueError`. Symmetry uses the rational entries without an approximate tolerance, so float rounding cannot hide a difference between large integers. Coordinate sequences must match the number of matrices in numerical and rational evaluation. Modular paths reduce integer entries modulo each prime before int64 conversion for Cython calculations.
+
+```python
+from finitefree.hyperbolic import SymmetricMatrixPencil
+
+large = 2**53 + 1
+pencil = SymmetricMatrixPencil([[[large]]])
+assert pencil.characteristic_polynomial([1])[0] == -large
+assert pencil.evaluate([1])[0, 0] == float(large)
 ```
 
 ## Core Operations

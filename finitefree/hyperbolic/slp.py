@@ -82,7 +82,7 @@ class StraightLineProgram:
                 inv_A = A_exact.solve(identity)
 
                 grad = []
-                for Ai in self.pencil.matrices:
+                for Ai in self.pencil._get_matrices_exact():
                     tr = flint.fmpq(0)
                     for r in range(self.pencil.n):
                         for c in range(self.pencil.n):
@@ -183,7 +183,7 @@ class StraightLineProgram:
             m = self.pencil.m
             hess = np.zeros((m, m), dtype=object)
             B = []
-            for Ai in self.pencil.matrices:
+            for Ai in self.pencil._get_matrices_exact():
                 Bi = flint.fmpq_mat(self.pencil.n, self.pencil.n)
                 for r in range(self.pencil.n):
                     for c in range(self.pencil.n):

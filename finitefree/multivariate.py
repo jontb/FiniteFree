@@ -2,11 +2,10 @@ import functools
 import math
 from typing import Any, Dict, Sequence, Tuple, Union
 
-import numpy as np
 import sympy as sp
 
 from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
-from .utils.modular import crt, prime_generator
+from .utils.modular import _as_modular_array, crt, prime_generator
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
 
 
@@ -216,15 +215,7 @@ class MultivariatePolynomial(Polynomial):
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
         if m == 1:
-            exact_A = []
-            for r in range(n):
-                row = []
-                for c in range(n):
-                    val = sp.sympify(pencil.matrices[0][r, c])
-                    if isinstance(val, (int, float, np.number)):
-                        val = sp.Rational(val)
-                    row.append(val)
-                exact_A.append(row)
+            exact_A = pencil._get_matrices_sympy()[0]
             det_val = sp.Matrix(exact_A).det()
             expr = det_val * (variables[0] ** n)
             return cls(expr, variables)
@@ -339,15 +330,7 @@ class MultivariatePolynomial(Polynomial):
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
         if m == 1:
-            exact_A = []
-            for r in range(n):
-                row = []
-                for c in range(n):
-                    val = sp.sympify(pencil.matrices[0][r, c])
-                    if isinstance(val, (int, float, np.number)):
-                        val = sp.Rational(val)
-                    row.append(val)
-                exact_A.append(row)
+            exact_A = pencil._get_matrices_sympy()[0]
             det_val = sp.Matrix(exact_A).det()
             expr = det_val * (variables[0] ** n)
             return cls(expr, variables)
@@ -462,7 +445,7 @@ class MultivariatePolynomial(Polynomial):
                             test_pts[r_idx] + tuple(t) + (1,) for r_idx in range(K)
                         ]
                         grid_pts_np = np.array(grid_pts, dtype=np.int64)
-                        matrices_np = np.array(integer_matrices, dtype=np.int64)
+                        matrices_np = _as_modular_array(integer_matrices, p)
                         dets = eval_points_grid_mod_p(matrices_np, grid_pts_np, p)
                         for r_idx in range(K):
                             y[r_idx, 0] = dets[r_idx]
@@ -558,13 +541,10 @@ class MultivariatePolynomial(Polynomial):
 
         # Construct symbolic matrix
         M = sp.zeros(n, n)
-        for xi, Ai in zip(variables, pencil.matrices):
+        for xi, Ai in zip(variables, pencil._get_matrices_sympy()):
             for r in range(n):
                 for c in range(n):
-                    # sympify as Rational to preserve exact integers/rationals
-                    val = sp.sympify(Ai[r, c])
-                    if isinstance(val, (int, float, np.number)):
-                        val = sp.Rational(val)
+                    val = Ai[r][c]
                     M[r, c] += xi * val
 
         expr = M.berkowitz_det()
