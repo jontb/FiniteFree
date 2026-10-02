@@ -73,6 +73,25 @@ np.testing.assert_allclose(p.evaluate_roots_float64(), [1, 2])
 
 Verification uses square-free factorization and exact Sturm sequences through degree 30, with subresultant PRS for factors of degree at least 15. Higher degrees use Arb. An imaginary ball merely containing zero is not accepted as a real-root certificate. Complex-rooted inputs raise `ValueError`; inability to certify raises `RuntimeError`. Passing `assume_real_rooted=True` explicitly trusts the caller's claim and bypasses this verification. Jacobi/Laguerre construction outside a known orthogonality domain remains available but validates lazily.
 
+Degree-one polynomials use the coefficient ratio `-a_1/a_0`. A symbolic nonreal root is rejected; unknown realness raises `RuntimeError`. Known real roots can be certified without a numerical value. Their positive/nonnegative domain checks also require a known sign. Numerical extraction requires a numeric root in the finite `float64` range; otherwise it raises `RuntimeError` without filling the root cache. Rational and numeric symbolic linear roots use direct coefficient division rather than a general eigensolver or Arb isolation. Higher-degree symbolic certification retains its existing limitations.
+
+```python
+import numpy as np
+import sympy as sp
+from finitefree import RealRootedPolynomial
+
+p = RealRootedPolynomial([1, -sp.sqrt(2)])
+assert p.verify_real_rootedness()
+assert p.has_strictly_positive_roots
+np.testing.assert_allclose(p.evaluate_roots_float64(), [np.sqrt(2)])
+try:
+    RealRootedPolynomial([1, sp.I]).verify_real_rootedness()
+except ValueError:
+    pass
+else:
+    raise AssertionError("Nonreal linear root was certified")
+```
+
 ```python
 from finitefree import RealRootedPolynomial
 

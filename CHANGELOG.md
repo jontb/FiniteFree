@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Linear symbolic roots are checked for realness instead of receiving an unconditional certificate. Certified numeric roots use their coefficient ratio for extraction and geometry; unknown realness/signs and nonnumeric/out-of-range numerical requests raise descriptive errors without poisoning caches.
+
 - Polynomial construction copies mutable FLINT inputs; symbolic coefficient access returns independent arrays. Normalized coefficients and real/unitary root arrays are now read-only, with `.copy()` available for editing. T-transforms own their coefficient list instead of exposing the polynomial's cache.
 
 - Finite free cumulants use `(-d)**(n-1) * c_n / (n-1)!`, following Definition 2.14 of Arizmendi et al. Earlier code multiplied by `(n-1)!`. For orders `n >= 3`, recompute saved cumulants or convert with `new = old / ((n-1)!)**2`. The first two cumulants are unchanged. The matching additive-power inverse is updated, preserving valid polynomial coefficients.

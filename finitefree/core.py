@@ -151,6 +151,11 @@ class RealRootedPolynomial(Polynomial):
         q_coeffs = [sympy_to_fmpq(c) for c in reversed(self.coeffs_sympy)]
         return flint.fmpq_poly(q_coeffs)
 
+    def _linear_root(self) -> Any:
+        """Return the exact coefficient ratio for a degree-one polynomial."""
+        coefficients = self.coeffs
+        return sp.cancel(-sp.sympify(coefficients[1]) / sp.sympify(coefficients[0]))
+
     def verify_real_rootedness(self) -> bool:
         """
         Lazily verify real-rootedness using exact Sturm sequences through
@@ -162,6 +167,14 @@ class RealRootedPolynomial(Polynomial):
             return True
 
         if self.degree <= 1:
+            if self.degree == 1 and not self._is_flint:
+                real = self._linear_root().is_real
+                if real is False:
+                    raise ValueError(
+                        "Polynomial is not real-rooted: nonreal linear root"
+                    )
+                if real is None:
+                    raise RuntimeError("Unable to certify that the linear root is real")
             self._is_verified = True
             return True
 
@@ -535,6 +548,21 @@ class RealRootedPolynomial(Polynomial):
         d = self.degree
         if d == 0:
             return np.empty(0, dtype=np.float64)
+        if d == 1:
+            root = (
+                -self._fmpq_poly[0] / self._fmpq_poly[1]
+                if self._is_flint
+                else self._linear_root()
+            )
+            try:
+                value = flint_to_float(root)
+            except (TypeError, ValueError, OverflowError) as error:
+                raise RuntimeError(
+                    "Linear root cannot be converted to float64"
+                ) from error
+            if not np.isfinite(value):
+                raise RuntimeError("Linear root is outside the finite float64 range")
+            return np.array([value], dtype=np.float64)
 
         if not exact and self._root_recurrence is not None:
             from scipy.linalg import eigvalsh_tridiagonal
@@ -1057,6 +1085,16 @@ class RealRootedPolynomial(Polynomial):
         if self._has_non_negative_roots_cached is None:
             if not self.verify_real_rootedness():
                 return False
+            if self.degree <= 1 and not self._is_flint:
+                answer = (
+                    True if self.degree == 0 else self._linear_root().is_nonnegative
+                )
+                if answer is None:
+                    raise RuntimeError(
+                        "Unable to certify that the linear root is nonnegative"
+                    )
+                self._has_non_negative_roots_cached = bool(answer)
+                return self._has_non_negative_roots_cached
             signs = []
             for j in range(self.degree + 1):
                 c = self._fmpq_poly[self.degree - j]
@@ -1075,6 +1113,14 @@ class RealRootedPolynomial(Polynomial):
         if self._has_strictly_positive_roots_cached is None:
             if not self.verify_real_rootedness():
                 return False
+            if self.degree <= 1 and not self._is_flint:
+                answer = True if self.degree == 0 else self._linear_root().is_positive
+                if answer is None:
+                    raise RuntimeError(
+                        "Unable to certify that the linear root is positive"
+                    )
+                self._has_strictly_positive_roots_cached = bool(answer)
+                return self._has_strictly_positive_roots_cached
             ans = True
             for k in range(self.degree + 1):
                 if self._fmpq_poly[k] == 0:

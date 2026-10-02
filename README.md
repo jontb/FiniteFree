@@ -443,6 +443,8 @@ print(f"HKPV Sampled point configuration: {sampled_states}")
 
 Polynomial construction copies caller inputs, and `coeffs` returns an independent editable array. Normalized coefficient arrays and cached real/unitary roots are read-only; call `.copy()` before editing them. This preserves verification and cached results when caller data changes. See the [ownership contract](docs/api.md#coefficient-ownership-and-cached-arrays).
 
+Linear root verification and extraction use the coefficient ratio, including numeric symbolic roots such as `sqrt(2)`. Nonreal roots are rejected, unknown symbolic realness/signs remain uncertified, and nonnumeric or out-of-range numerical root requests fail explicitly. See [real-rootedness](docs/api.md#real-rootedness).
+
 FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
 
 ```bash
