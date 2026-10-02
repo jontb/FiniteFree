@@ -160,8 +160,10 @@ class RealRootedPolynomial(Polynomial):
 
     def verify_real_rootedness(self) -> bool:
         """
-        Lazily verify real-rootedness using exact Sturm sequences through
-        degree 30 and Arb isolation above that degree. Complex roots raise
+        Lazily verify real-rootedness using Arb isolation above degree 30 or
+        for squarefree factors of degree at least 15. Smaller factors use exact
+        Sturm sequences; degrees through 30 also retain Sturm as a fallback
+        when Arb cannot obtain a certificate. Complex roots raise
         ValueError; failure to obtain a certificate raises RuntimeError.
         An explicit assume_real_rooted=True bypasses verification.
         """
@@ -188,6 +190,12 @@ class RealRootedPolynomial(Polynomial):
         try:
             f_poly = self._to_fmpq_poly()
             _, factors = f_poly.factor_squarefree()
+
+            if any(factor.degree() >= 15 for factor, _ in factors):
+                try:
+                    return self._verify_real_rootedness_arb()
+                except RuntimeError:
+                    pass  # Keep exact Sturm certification if isolation is unavailable.
 
             total_real_roots = 0
             for factor, multiplicity in factors:

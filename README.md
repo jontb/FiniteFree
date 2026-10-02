@@ -99,7 +99,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <summary><b>Core Polynomial Operations & Domain Verification</b></summary>
 <br>
 
-- **Exact Real-Rooted Polynomial Validation**: Verified lazily via exact rational Sturm sequences.
+- **Certified Real-Rooted Polynomial Validation**: Verified lazily with exact rational Sturm sequences for small squarefree factors and certified Arb isolation for larger factors. Exact Sturm remains a fallback through degree 30 when Arb cannot obtain a certificate.
 - **Unitary Circle Geometries ($\mathbb{T}$)**: Implements `UnitaryPolynomial` structures for polynomials with roots strictly on the complex unit circle, bypassing real-line Sturm sequence constraints and isolating angular arguments via complex eigensolvers (e.g., `unitary_hermite_polynomial`).
 - **Lazy Geometric Domain Properties**: After certifying real-rootedness, `has_non_negative_roots` and `has_strictly_positive_roots` use an $O(d)$ coefficient sign check to enforce operator domains. Sign alternation alone cannot certify real-rootedness.
 - **Basic Polynomial Transformations**: Supports exact algebraic transformations including variable dilation (`dilation`), variable shift (`shift`), positive integer root powers (`power`), root-reciprocal reversing (`reversed_polynomial`), derivative (`derivative`), projection (`projection`), fractional additive convolution power (`additive_power`), and the Fujie-Ueda limiting polynomial $\Phi_d$ (`phi_d`). Noninteger root powers use numerical root isolation and reconstruction.
