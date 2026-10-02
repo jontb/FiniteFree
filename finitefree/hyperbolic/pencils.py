@@ -7,12 +7,53 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from ..core import RealRootedPolynomial
-from ..utils.conversion import sympy_to_fmpq
+from ..utils.conversion import flint_to_float, sympy_to_fmpq
 from ..utils.modular import crt, prime_generator
 from ..utils.parallel import (
     ParallelScheduler,
     _eval_diagonal_specialization_prime_worker,
 )
+
+
+def _prepare_matrices(
+    matrices: Sequence[Any], symmetric: bool
+) -> tuple[List[NDArray[np.float64]], List[Any]]:
+    """Copy rational entries before preparing separate numerical matrices."""
+    if len(matrices) == 0:
+        raise ValueError("At least one matrix is required")
+    numerical = []
+    exact = []
+    shape = None
+    for source in matrices:
+        values = np.array(source, dtype=object, copy=True)
+        if values.ndim != 2 or values.shape[0] != values.shape[1]:
+            raise ValueError("Pencil matrices must be square")
+        if shape is not None and values.shape != shape:
+            raise ValueError("All matrices in the pencil must have the same shape")
+        shape = values.shape
+        n = shape[0]
+        rational = flint.fmpq_mat(n, n)
+        floats = np.empty(shape, dtype=np.float64)
+        try:
+            for r in range(n):
+                for c in range(n):
+                    rational[r, c] = sympy_to_fmpq(values[r, c])
+                    floats[r, c] = flint_to_float(rational[r, c])
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(
+                "Matrix entries must be finite real rational values"
+            ) from error
+        if not np.all(np.isfinite(floats)):
+            raise ValueError(
+                "Matrix entries must fit the finite float64 numerical view"
+            )
+        if symmetric and any(
+            rational[r, c] != rational[c, r] for r in range(n) for c in range(r + 1, n)
+        ):
+            raise ValueError("All matrices must be symmetric")
+        numerical.append(floats)
+        exact.append(rational)
+    return numerical, exact
 
 
 class SymmetricMatrixPencil:
@@ -21,22 +62,17 @@ class SymmetricMatrixPencil:
     hyperbolic multivariate generalizations.
     """
 
-    def __init__(self, matrices: Sequence[NDArray[np.float64]]) -> None:
+    def __init__(self, matrices: Sequence[Any]) -> None:
         r"""
         matrices: A list of symmetric matrices $A_1, A_2, \dots, A_m$
         The pencil is defined as $\sum x_i A_i$
+        Integer/rational entries are copied before conversion; rational methods
+        preserve their values and numerical methods use a separate float64 view.
+        Symmetry is checked on the supplied values, without roundoff tolerance.
         """
-        self.matrices = [np.array(A, dtype=np.float64) for A in matrices]
+        self.matrices, self._matrices_exact = _prepare_matrices(matrices, True)
         self.m = len(self.matrices)
-        if self.m > 0:
-            self.n = self.matrices[0].shape[0]
-            for A in self.matrices:
-                if A.shape != (self.n, self.n):
-                    raise ValueError(
-                        "All matrices in the pencil must have the same shape"
-                    )
-                if not np.allclose(A, A.T):
-                    raise ValueError("All matrices must be symmetric")
+        self.n = self.matrices[0].shape[0]
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         r"""
@@ -52,18 +88,6 @@ class SymmetricMatrixPencil:
         return result
 
     def _get_matrices_exact(self) -> List[Any]:
-        if not hasattr(self, "_matrices_exact"):
-            import flint
-
-            from ..utils.conversion import sympy_to_fmpq
-
-            self._matrices_exact = []
-            for A in self.matrices:
-                mat = flint.fmpq_mat(self.n, self.n)
-                for r in range(self.n):
-                    for c in range(self.n):
-                        mat[r, c] = sympy_to_fmpq(A[r, c])
-                self._matrices_exact.append(mat)
         return self._matrices_exact
 
     def _get_matrices_sympy(self) -> List[List[List[Any]]]:
@@ -71,21 +95,21 @@ class SymmetricMatrixPencil:
             import sympy as sp
 
             self._matrices_sympy = []
-            for mat in self.matrices:
+            for mat in self._get_matrices_exact():
                 row_list = []
                 for r in range(self.n):
                     col_list = []
                     for c in range(self.n):
-                        val = sp.sympify(mat[r, c])
-                        if isinstance(val, (int, float, np.number)):
-                            val = sp.Rational(val)
+                        value = mat[r, c]
+                        val = sp.Rational(int(value.p), int(value.q))
                         col_list.append(val)
                     row_list.append(col_list)
                 self._matrices_sympy.append(row_list)
         return self._matrices_sympy
 
     def _evaluate_exact(self, x: Sequence[Any]) -> Any:
-
+        if len(x) != self.m:
+            raise ValueError(f"Expected {self.m} variables, got {len(x)}")
         A_exact = flint.fmpq_mat(self.n, self.n)
         exact_mats = self._get_matrices_exact()
         for xi, Ai in zip(x, exact_mats):
@@ -274,16 +298,11 @@ class MultiplicativeMatrixPencil:
     algebraic geometries of multiplicative convolutions.
     """
 
-    def __init__(self, matrices: Sequence[NDArray[np.float64]]) -> None:
-        self.matrices = [np.array(A, dtype=np.float64) for A in matrices]
+    def __init__(self, matrices: Sequence[Any]) -> None:
+        """Copy integer/rational inputs before preparing the float64 numerical view."""
+        self.matrices, self._matrices_exact = _prepare_matrices(matrices, False)
         self.m = len(self.matrices)
-        if self.m > 0:
-            self.n = self.matrices[0].shape[0]
-            for A in self.matrices:
-                if A.shape != (self.n, self.n):
-                    raise ValueError(
-                        "All matrices in the pencil must have the same shape"
-                    )
+        self.n = self.matrices[0].shape[0]
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         if len(x) != self.m:
@@ -294,21 +313,11 @@ class MultiplicativeMatrixPencil:
         return result
 
     def _get_matrices_exact(self) -> List[Any]:
-        if not hasattr(self, "_matrices_exact"):
-            import flint
-
-            from ..utils.conversion import sympy_to_fmpq
-
-            self._matrices_exact = []
-            for A in self.matrices:
-                mat = flint.fmpq_mat(self.n, self.n)
-                for r in range(self.n):
-                    for c in range(self.n):
-                        mat[r, c] = sympy_to_fmpq(A[r, c])
-                self._matrices_exact.append(mat)
         return self._matrices_exact
 
     def _evaluate_exact(self, x: Sequence[Any]) -> Any:
+        if len(x) != self.m:
+            raise ValueError(f"Expected {self.m} variables, got {len(x)}")
         import flint
 
         from ..utils.conversion import sympy_to_fmpq
@@ -361,14 +370,13 @@ class MultiplicativeMatrixPencil:
             import sympy as sp
 
             self._matrices_sympy = []
-            for mat in self.matrices:
+            for mat in self._get_matrices_exact():
                 row_list = []
                 for r in range(self.n):
                     col_list = []
                     for c in range(self.n):
-                        val = sp.sympify(mat[r, c])
-                        if isinstance(val, (int, float, np.number)):
-                            val = sp.Rational(val)
+                        value = mat[r, c]
+                        val = sp.Rational(int(value.p), int(value.q))
                         col_list.append(val)
                     row_list.append(col_list)
                 self._matrices_sympy.append(row_list)
