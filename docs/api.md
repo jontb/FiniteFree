@@ -76,6 +76,25 @@ assert FiniteRTransform(p, order=3) == [1, 3, 9]
 assert list(p.additive_power(2).coeffs) == list(symmetric_additive(p, p, 3).coeffs)
 ```
 
+### Orthogonal polynomial kernel evaluation
+
+`OrthogonalPolynomialKernel(polys, norms)` represents the unweighted kernel $K(x,y)=\sum_{j=0}^{n-1}p_j(x)p_j(y)/h_j$, with `n=len(norms)` and polynomials through $p_n$. The supplied polynomials, norms and any explicit leading coefficients must form a consistent orthogonal family; construction does not certify orthogonality. Evaluation uses the [Christoffel–Darboux identity and its confluent form](https://dlmf.nist.gov/18.2#v). Exact arguments use exact equality to select the diagonal, preserving distinct integers beyond the float64 range. An empty basis (`norms=[]`, with $p_0$ supplied) returns zero.
+
+If either argument is a floating scalar, both coordinates are converted to float64. The derivative formula evaluates equal stored coordinates. Distinct points with separation at most `sqrt(float64_eps) * max(1, abs(x), abs(y))` use the finite basis sum with `math.fsum`; other points use the Christoffel–Darboux quotient. Nearby distinct coordinates are not replaced with a diagonal approximation. The basis sum adds polynomial evaluations, while diagonal and separated calls retain the fast path. It still uses floating polynomial evaluation and cannot eliminate badly conditioned coefficients, overflow, underflow or final-output rounding.
+
+```python
+from finitefree import OrthogonalPolynomialKernel, hermite_polynomial
+
+polys = [hermite_polynomial(j, physicist=False) for j in range(3)]
+K = OrthogonalPolynomialKernel(polys, [1, 1])  # K(x,y) = 1+x*y
+x, y = 10**16, 10**16 + 1
+assert K(x, y) == 1 + x*y
+assert K(20.0, 20.000000001) == 1 + 20.0*20.000000001
+assert K(20.000000001, 20.0) == K(20.0, 20.000000001)
+```
+
+`PYTHONPATH=. python scripts/benchmark_kernels.py --output kernel-benchmark.json` compares Hermite kernels at degrees 20, 40 and 60 with independent exact rational basis sums, for diagonal, nearby and separated coordinates. Timings are best of five with warmed coefficient caches and exclude construction and reference evaluation. These cases do not provide a uniform accuracy guarantee for other bases, degrees or coordinates.
+
 ### Discrete DPP sampling
 
 `sample_discrete` uses floating-point spectral HKPV sampling for real symmetric correlation kernels. Nonprojection kernels first select eigenvectors with independent Bernoulli draws. It requires a finite square matrix matching the state-space size, symmetry, and spectrum in `[0, 1]`. Absolute roundoff up to `1e-10` is allowed; small asymmetry is symmetrized and eigenvalues are clipped only within that tolerance. Invalid kernels raise `ValueError` before sampling; loss of the projection basis raises `RuntimeError`.

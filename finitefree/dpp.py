@@ -1,4 +1,5 @@
 import abc
+import math
 import operator
 from typing import Any, List, Sequence, Union
 
@@ -60,7 +61,12 @@ class DiscreteFiniteKernel(BaseKernel):
 
 
 class OrthogonalPolynomialKernel(BaseKernel):
-    """Correlation kernel constructed from orthogonal polynomials using Christoffel-Darboux formula."""
+    """Orthogonal-polynomial kernel with exact Christoffel-Darboux evaluation.
+
+    Distinct nearby floating points use the finite basis sum to avoid dividing
+    a cancelled numerator by a small separation. The diagonal retains the
+    derivative formula. Consistent orthogonal polynomials and norms are assumed.
+    """
 
     def __init__(
         self,
@@ -105,25 +111,31 @@ class OrthogonalPolynomialKernel(BaseKernel):
         )
 
     def __call__(self, x: Any, y: Any) -> Any:
-        # Determine if they are close using raw float comparison first to bypass conversion overhead
-        is_diag = False
-        if isinstance(x, (int, float, np.floating)) and isinstance(
-            y, (int, float, np.floating)
-        ):
-            is_diag = abs(float(x) - float(y)) < 1e-9
-        elif x == y:
-            is_diag = True
+        if self.n == 0:
+            return 0
 
         if isinstance(x, (float, np.floating)) or isinstance(y, (float, np.floating)):
             from .utils.conversion import flint_to_float
 
             x_f = float(x)
             y_f = float(y)
+            separation = abs(x_f - y_f)
+            close_scale = max(1.0, abs(x_f), abs(y_f))
+            if 0 < separation <= math.sqrt(np.finfo(float).eps) * close_scale:
+                # This is K(x,y), not the confluent approximation K(x,x).
+                # Summing the basis is slower, but avoids the CD quotient's
+                # cancellation for this small subset of floating evaluations.
+                return math.fsum(
+                    flint_to_float(self.polys[j].evaluate(x_f))
+                    * flint_to_float(self.polys[j].evaluate(y_f))
+                    / flint_to_float(self.norms[j])
+                    for j in range(self.n)
+                )
             kn_f = flint_to_float(self.leading_coeffs[self.n])
             kn_minus_f = flint_to_float(self.leading_coeffs[self.n - 1])
             hn_minus_f = flint_to_float(self.norms[self.n - 1])
             factor_f = kn_minus_f / (kn_f * hn_minus_f)
-            if is_diag:
+            if x_f == y_f:
                 pn_val = self._pn.evaluate(x_f)
                 pn_minus_val = self._pn_minus.evaluate(x_f)
                 pn_deriv_val = self._pn_deriv.evaluate(x_f) if self._pn_deriv else 0.0
@@ -151,7 +163,7 @@ class OrthogonalPolynomialKernel(BaseKernel):
 
         factor = kn_minus / (kn * hn_minus)
 
-        if is_diag:
+        if x == y:
             pn_val = self._pn.evaluate(x)
             pn_minus_val = self._pn_minus.evaluate(x)
             pn_deriv_val = self._pn_deriv.evaluate(x) if self._pn_deriv else 0
