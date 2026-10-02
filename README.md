@@ -101,8 +101,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 - **Exact Real-Rooted Polynomial Validation**: Verified lazily via exact rational Sturm sequences.
 - **Unitary Circle Geometries ($\mathbb{T}$)**: Implements `UnitaryPolynomial` structures for polynomials with roots strictly on the complex unit circle, bypassing real-line Sturm sequence constraints and isolating angular arguments via complex eigensolvers (e.g., `unitary_hermite_polynomial`).
-- **Lazy Geometric Domain Properties**: $O(d)$ lazy algebraic root verification properties (`has_non_negative_roots` and `has_strictly_positive_roots`) evaluated directly on the coefficients using Descartes' Rule of Signs to enforce operators domains without root seeking.
-- **Basic Polynomial Transformations**: Supports exact algebraic transformations including variable dilation (`dilation`), variable shift (`shift`), root powers (`power`), root-reciprocal reversing (`reversed_polynomial`), derivative (`derivative`), projection (`projection`), fractional additive convolution power (`additive_power`), and the Fujie-Ueda limiting polynomial $\Phi_d$ (`phi_d`).
+- **Lazy Geometric Domain Properties**: After certifying real-rootedness, `has_non_negative_roots` and `has_strictly_positive_roots` use an $O(d)$ coefficient sign check to enforce operator domains. Sign alternation alone cannot certify real-rootedness.
+- **Basic Polynomial Transformations**: Supports exact algebraic transformations including variable dilation (`dilation`), variable shift (`shift`), positive integer root powers (`power`), root-reciprocal reversing (`reversed_polynomial`), derivative (`derivative`), projection (`projection`), fractional additive convolution power (`additive_power`), and the Fujie-Ueda limiting polynomial $\Phi_d$ (`phi_d`). Noninteger root powers use numerical root isolation and reconstruction.
 - **High-Degree Scaling & Root Reconstruction**:
   - **Divide-and-Conquer Polynomial Synthesis**: `RealRootedPolynomial.from_roots(roots)` executes a binary splitting tree algorithm operating in $O(d \log^2 d)$ time for high-speed, exact polynomial synthesis.
 - **Optimized Memory Pool Management**: Prevents FLINT/GMP memory fragmentation at extreme degrees ($d \ge 1000$) through a conditional, threshold-based garbage collection registry inside `PrecisionContext`.
@@ -157,11 +157,12 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 </details>
 
 <details>
-<summary><b>Wilkinson-Proof Numerical Egress</b></summary>
+<summary><b>Stable Numerical Root Evaluation</b></summary>
 <br>
 
 - **`to_numpy_poly1d()`**: Safe rational coefficient `float64` casting, utilizing arbitrary-precision `decimal.Decimal` fallbacks to prevent `OverflowError` on coefficients with extreme magnitude ratios.
-- **`evaluate_roots_float64()`**: Uses python-flint's certified complex interval backend (Arb) to isolate roots, ensuring numerical robustness and avoiding Wilkinson's phenomenon.
+- **`evaluate_roots_float64(exact=False)`**: Uses scaled symmetric tridiagonal eigenvalues for Hermite, Laguerre, Jacobi, Legendre and Chebyshev polynomials in their orthogonality domains, including GUE/Wishart expectations, affine transforms and proven Hermite additive convolutions. It avoids forming an ill-conditioned monomial companion matrix for these families.
+- **`evaluate_roots_float64(exact=True)`**: Retains the Arb isolation path as the default high-precision reference. A reference request after a numerical call recomputes the roots rather than reusing the approximate cache. Results from either path are returned as `float64`.
 
 </details>
 
@@ -231,19 +232,24 @@ import sympy as sp
 # Initialize exactly via rational/integer coefficients: (x - 1)(x - 2) = x^2 - 3x + 2
 p = RealRootedPolynomial([1, -3, 2])
 
-# Dilate roots by 2, shift roots by 1, or square the roots exactly
+# Dilate, shift, and take positive integer root powers exactly
 p_dilated = p.dilation(2)             # x^2 - 6x + 8 (roots scaled by 2)
 p_shifted = p.shift(1)                # (x - 2)(x - 3) = x^2 - 5x + 6 (roots + 1)
 p_powered = p.power(2)                # (x - 1)(x - 4) = x^2 - 5x + 4 (roots squared)
 p_reversed = p.reversed_polynomial()  # x^2 - 1.5x + 0.5 (reciprocal roots)
 
-# Fast domain properties evaluated via Descartes' Rule of Signs without root-finding
+# Domain properties use coefficient signs after real-rootedness verification
 print(p.has_non_negative_roots)       # True
 print(p.has_strictly_positive_roots)  # True
 
 # Perform certified complex interval root isolation (Arb)
 roots = p.evaluate_roots_float64(exact=True)
 print(roots)  # [1.0, 2.0]
+
+# Use stable numerical roots for asymptotic comparisons of known families
+from finitefree import gue_expected_poly
+gue_roots = gue_expected_poly(100).evaluate_roots_float64(exact=False)
+assert len(gue_roots) == 100
 ```
 
 </details>
@@ -252,11 +258,12 @@ print(roots)  # [1.0, 2.0]
 <summary><b>2. Finite Free Convolutions</b></summary>
 <br>
 
-Convolutions map discrete algebraic combinations of roots exactly, preserving real-rootedness.
+Convolutions combine polynomial coefficients exactly. Additive convolution preserves real-rootedness; multiplicative convolution does so when one real-rooted input has non-negative roots. Formal coefficient formulas can also produce polynomials with complex roots, so reconstructed outputs are verified lazily.
 
 ```python
 from finitefree.core import RealRootedPolynomial
 from finitefree.convolutions import symmetric_additive, asymmetric_additive, multiplicative
+import sympy as sp
 
 # Instantiate two real-rooted polynomials of degree d=2
 p = RealRootedPolynomial([1, -3, 2])  # roots: 1, 2
@@ -264,7 +271,7 @@ q = RealRootedPolynomial([1, 0, -4])  # roots: -2, 2
 
 # Symmetric Additive Convolution (p [+]_d q)
 res_add = symmetric_additive(p, q, d=2)
-print(res_add.coeffs)  # [1, 0, -5]
+print(res_add.coeffs)  # [1, -3, -2]
 
 # Asymmetric Additive Convolution (p [u]_d q) with fractional rank weights
 res_asym = asymmetric_additive(p, q, weights=[sp.Rational(1, 2), sp.Rational(1, 2)], d=2)
@@ -293,13 +300,19 @@ poly = laguerre_polynomial(n=3, alpha=1)
 # Compute Finite Free Cumulants exactly via generating function recurrences (O(d^2))
 # Additivity holds: kappa(p [+] q) = kappa(p) + kappa(q)
 r_transform = FiniteRTransform(poly)
-cumulant_3 = r_transform.get_cumulant(3)
+cumulant_3 = r_transform[2]
 print(f"3rd Finite Free Cumulant: {cumulant_3}")
 
 # Map inverse limit points using the Fujie-Ueda Finite T-Transform
 t_transform = FiniteTTransform(poly)
 print(t_transform(0.5))
 ```
+
+**Compatibility note:** Finite free cumulants now use the normalization in [Definition 2.14 of Arizmendi et al.](https://arxiv.org/html/2408.09337v2#S2.SS5), $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence. Earlier code multiplied by $(n-1)!$, so values for $n\geq3$ were too large by $((n-1)!)^2$. Recompute stored cumulants, or divide old values by this factor. The first two cumulants are unchanged. `additive_power` uses the matching corrected inverse, preserving its valid polynomial coefficients. Orders above the ambient dimension continue to return zero as an API convention; they are outside the finite cumulant definition.
+
+Reconstruction from normalized coefficients no longer certifies real-rootedness automatically. Root extraction and positive-root domain checks now reject complex-rooted inputs; formal coefficient convolutions remain available. `sample_discrete` rejects invalid correlation kernels instead of silently clipping their spectrum, while allowing $10^{-10}$ absolute numerical roundoff.
+
+Jacobi and Laguerre polynomials constructed outside their orthogonality domains are also validated lazily. Formal construction remains available, but a root request rejects a complex-rooted result such as `laguerre_polynomial(2, -3)`.
 
 </details>
 
@@ -316,7 +329,7 @@ from finitefree.orthogonal import (
     jack_polynomial,
     hermite_polynomial,
 )
-from finitefree.ensembles import GOESampler, expected_characteristic_polynomial
+from finitefree.ensembles import sample_gue, gue_expected_poly
 
 # Construct Jacobi, Hahn, and Hermite recurrence relations exactly over Q
 h_prob = hermite_polynomial(n=4, physicist=False)  # Probabilist Hermite He_4
@@ -325,12 +338,11 @@ hahn   = hahn_polynomial(n=2, alpha=1, beta=1, N=5)  # Hahn Q_2
 
 # High-performance multivariate Jack polynomials using sparse exponent dicts
 jack = jack_polynomial(m=3, partition=[2, 1], alpha=2)
-print(jack.coeffs)
+print(jack.expr)
 
 # Compare random matrix characteristic polynomials with theoretical sequences
-goe = GOESampler(d=4)
-M = goe.sample(n_samples=1)[0]
-expected_poly = expected_characteristic_polynomial(beta=1, d=4)
+M = sample_gue(d=4)
+expected_poly = gue_expected_poly(d=4)
 print(expected_poly.coeffs)
 ```
 
@@ -341,6 +353,8 @@ print(expected_poly.coeffs)
 <br>
 
 Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation.
+
+Matrix-pencil constructors currently convert entries to `float64` before exact evaluation. The rational backend therefore preserves those stored binary values; it cannot recover precision lost from an original rational or an integer larger than $2^{53}$. Preserving exact matrix inputs is a remaining limitation.
 
 ```python
 from finitefree.hyperbolic import SymmetricMatrixPencil
@@ -380,13 +394,14 @@ from finitefree import (
 )
 import numpy as np
 import math
+import sympy as sp
 
 # --- 1. Discrete DPP Kernel & Exact Gap Probability ---
-# 3x3 projection matrix of rank 2
+# 3x3 nonprojection correlation kernel with eigenvalues 1, 1, 1/3
 K_mat = [
-    [2/3, 1/3, 0.0],
-    [1/3, 2/3, 0.0],
-    [0.0, 0.0, 1.0],
+    [sp.Rational(2, 3), sp.Rational(1, 3), 0],
+    [sp.Rational(1, 3), sp.Rational(2, 3), 0],
+    [0, 0, 1],
 ]
 discrete_kernel = DiscreteFiniteKernel(K_mat)
 
@@ -439,6 +454,21 @@ pytest tests/
 - **`test_empirical.py`**: Expected characteristic polynomial identities for GOE ($\beta=1$), GUE ($\beta=2$), and GSE ($\beta=4$) random matrix ensembles using the `ensembles` module.
 - **`test_hyperbolic.py`**: Multivariate homogeneous polynomials, CRT grid interpolations, sparse FLINT arrays, and Jacobi SLP evaluations.
 - **`test_orthogonal.py`**: Exact hypergeometric and multivariate orthogonal polynomial families (Jacobi, Hahn, Jack).
+- **`test_numerical_roots.py`**: Independent 192-bit Arb comparisons, tiny positive hard-edge roots, affine scales, solver fallback and cache behavior.
+- **`test_dpp.py`**: Correlation-kernel validation, state-space ordering and seeded projection/nonprojection sampling laws.
+
+For reproducible root benchmarks, run `PYTHONPATH=. python scripts/benchmark_roots.py --output roots-benchmark.json`. The script compares uncached numerical roots with independently isolated 192-bit Arb roots at degrees 32, 100 and 300, and reports construction time separately. On jon-desktop (Python 3.13, NumPy 2.2.4, SciPy 1.15.3, python-flint 0.9.0), degree-300 results were:
+
+| Family | Numerical roots | Arb roots | Maximum scaled error |
+| :--- | ---: | ---: | ---: |
+| GUE additive convolution | 1.29 ms | 1.24 s | $8.5\times10^{-16}$ |
+| Square Wishart | 0.97 ms | 17.45 s | $2.6\times10^{-15}$ |
+| Rectangular Wishart ($n=2d$) | 0.99 ms | 21.64 s | $3.6\times10^{-15}$ |
+| Legendre | 1.23 ms | 1.68 s | $7.8\times10^{-16}$ |
+| Laguerre ($\alpha=-1+10^{-12}$) | 0.95 ms | 17.47 s | $4.6\times10^{-15}$ |
+| Jacobi ($\alpha=-1+10^{-12}$, $\beta=3/2$) | 1.27 ms | 6.86 s | $1.4\times10^{-15}$ |
+
+Scaled error means $\max_i|\hat\lambda_i-\lambda_i|/\max(1,\max_i|\lambda_i|)$. The smallest Laguerre root was $3.33\times10^{-15}$, with relative error $3.1\times10^{-13}$. Timings are measurements on this machine, not CI thresholds; they exclude polynomial construction. Construction at degree 300 took 5.8–191 ms across these cases.
 
 ## Computational Complexity & Architecture
 
@@ -455,13 +485,16 @@ FiniteFree is architected to bypass the combinatorial bottlenecks inherent in hi
 | **Multiplicative Convolution ($\boxtimes_d$)** | Pointwise multiplication of normalized coefficients | $O(d)$ | Exact $\mathbb{Q}$ |
 | **Sturm Real-Rootedness Verification** | Subresultant Polynomial Remainders Sequence (PRS) | $O(d^2)$ | Exact $\mathbb{Q}$ |
 | **Certified Root Isolation (Arb)** | Belyi-like complex interval bisection | $O(d^2)$ | Interval $\mathbb{C}$ |
-| **Fast Root Approximation** | Balanced companion matrix eigenvalues | $O(d^2)$ | Float $\mathbb{C}$ |
+| **Orthogonal-Family Root Approximation** | Symmetric tridiagonal eigenvalues, $O(d)$ matrix storage | $O(d^2)$ | Float $\mathbb{R}$ |
+| **General Root Approximation** | Dense balanced companion matrix eigenvalues | $O(d^3)$ | Float $\mathbb{C}$ |
 | **Finite R-Transform (Cumulants)** | Generating function recurrence relation | $O(d^2)$ | Exact $\mathbb{Q}$ |
 
 ### Architectural Design Principles
 
 #### 1. Exact-to-Approximate Hybrid Pipeline
 All algebraic operations, polynomial recurrences, and convolutions are computed in exact rational arithmetic ($\mathbb{Q}$) using GMP/FLINT backends (`fmpq_poly`). Floating-point approximations are deferred entirely to the final egress stage (e.g. root isolation or evaluation), preventing early-stage rounding errors and numerical drift from compounding during intensive convolution chains.
+
+For asymptotic root comparisons, known orthogonal families carry their three-term recurrence alongside the exact polynomial. The numerical path computes parameter differences before float conversion and scales the Jacobi matrix without centering, preserving tiny positive hard-edge roots. Affine shifts are applied after solving. This follows the [Jacobi-matrix characterization of zeros](https://dlmf.nist.gov/18.2#vi) and [classical recurrences](https://dlmf.nist.gov/18.9) using [SciPy's tridiagonal eigenvalue solver](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.eigvalsh_tridiagonal.html). Arbitrary convolutions, including compound-Wishart lognormal examples, do not inherit unproven recurrence metadata and retain the general solver/reference path. Nonfinite or underflowed recurrences fall back; extreme affine shifts can still lose differences that `float64` cannot represent.
 
 #### 2. Algebraic Domain Verification (Sturm PRS)
 Instead of seeking roots numerically to check domain boundaries (such as verifying real-rootedness of a convolution), the library employs exact algebraic verification. For polynomials of degree $d \le 30$, FiniteFree evaluates Sturm sequences using Euclidean division modulo in C. For higher degrees, it uses a subresultant Polynomial Remainder Sequence (PRS) to compute Sturm sequences without coefficient growth. If certified bounds are needed, it falls back to Flint’s complex interval bisection (Arb).
@@ -498,4 +531,3 @@ The theoretical architecture and exact computational operators implemented in Fi
 * Macdonald, I. G. (1995). *Symmetric Functions and Hall Polynomials* (2nd ed.). Oxford University Press.
 * Mehta, M. L. (2004). *Random Matrices* (3rd ed.). Elsevier.
 * Szegő, G. (1975). *Orthogonal Polynomials* (4th ed., Vol. 23). American Mathematical Society, Colloquium Publications.
-

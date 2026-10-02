@@ -1,7 +1,30 @@
 import numpy as np
 import pytest
+import sympy as sp
 
 from finitefree.core import RealRootedPolynomial
+
+
+@pytest.mark.parametrize("exponent, total", [(1, 3), (2, 7), (3, 18), (4, 47)])
+def test_integer_root_powers_are_exact(exponent: int, total: int) -> None:
+    # The roots of x^2-3x+1 are irrational, but their power sums are integers.
+    p = RealRootedPolynomial([1, -3, 1])
+    assert list(p.power(exponent).coeffs) == [1, -total, 1]
+
+
+def test_integer_root_powers_with_multiplicity_and_rational_roots() -> None:
+    p = RealRootedPolynomial.from_roots([0, sp.Rational(1, 3), sp.Rational(1, 3), 2])
+    for exponent in [2, 3]:
+        expected = RealRootedPolynomial.from_roots(
+            [
+                0,
+                sp.Rational(1, 3) ** exponent,
+                sp.Rational(1, 3) ** exponent,
+                2**exponent,
+            ]
+        )
+        assert list(p.power(exponent).coeffs) == list(expected.coeffs)
+    assert list(RealRootedPolynomial([1]).power(3).coeffs) == [1]
 
 
 def test_dilation() -> None:

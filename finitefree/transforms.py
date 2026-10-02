@@ -15,6 +15,8 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
     """
     z = sp.Symbol("z")
     d = p.degree
+    if d == 0:
+        raise ValueError("Finite Cauchy transform requires a positive degree.")
 
     poly = sp.Poly(list(p.coeffs), z)
     expr = poly.as_expr()
@@ -23,7 +25,7 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
     dp_poly = sp.Poly(dp_coeffs, z)
     p_prime = dp_poly.as_expr()
 
-    return (1 / d) * (p_prime / expr)
+    return sp.Rational(1, d) * (p_prime / expr)
 
 
 def FiniteSTransform(p: RealRootedPolynomial, exact: bool = True) -> NDArray[Any]:
@@ -74,6 +76,9 @@ def FiniteRTransform(
     enumeration.
     Returns the first `order` finite free cumulants (which strictly
     linearize $\boxplus_d$).
+    Uses Definition 2.14 of Arizmendi et al., arXiv:2408.09337:
+    the classical cumulant of the normalized coefficients is scaled by
+    $(-d)^{n-1}/(n-1)!$. Orders above d are returned as zero.
     """
     import math
 
@@ -93,21 +98,21 @@ def FiniteRTransform(
                 val = flint.arb(v)
                 arb_e.append(val)
 
-            c = []
+            c_arb = []
             cumulants = []
             for n in range(1, order + 1):
                 if n > d:
                     cumulants.append(0.0)
-                    c.append(flint.arb(0))
+                    c_arb.append(flint.arb(0))
                     continue
 
                 cn = arb_e[n]
                 for k in range(1, n):
-                    cn -= math.comb(n - 1, k - 1) * c[k - 1] * arb_e[n - k]
-                c.append(cn)
+                    cn -= math.comb(n - 1, k - 1) * c_arb[k - 1] * arb_e[n - k]
+                c_arb.append(cn)
 
                 # Use exact operations on the arb/fmpz before floating to avoid loss of precision
-                kappa_n = cn * math.factorial(n - 1) * ((-d) ** (n - 1))
+                kappa_n = cn * ((-d) ** (n - 1)) / math.factorial(n - 1)
                 cumulants.append(float(kappa_n))
 
             return cumulants
@@ -116,7 +121,7 @@ def FiniteRTransform(
 
     # c_n = classical cumulant of the sequence (e_1, e_2, ..., e_n)
     # Using the recurrence: c_n = e_n - sum_{k=1}^{n-1} C(n-1, k-1) * c_k * e_{n-k}
-    # Then: kappa_n^{(d)} = c_n * (n-1)! * (-d)^{n-1}
+    # Then: kappa_n^{(d)} = c_n * (-d)^{n-1} / (n-1)!
     c = []  # c[0] = c_1, c[1] = c_2, etc.
     cumulants = []
     for n in range(1, order + 1):
@@ -131,7 +136,7 @@ def FiniteRTransform(
         c.append(cn)
 
         # Maintain exact representation
-        kappa_n = cn * math.factorial(n - 1) * ((-d) ** (n - 1))
+        kappa_n = cn * ((-d) ** (n - 1)) / math.factorial(n - 1)
         cumulants.append(sp.Rational(int(kappa_n.p), int(kappa_n.q)))
 
     return cumulants

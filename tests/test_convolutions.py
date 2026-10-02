@@ -34,6 +34,10 @@ def test_multiplicative_basic() -> None:
     res = multiplicative(p, q, 2)
     assert res.degree == 2
     assert list(res.coeffs) == [1, 0, 1]
+    import pytest
+
+    with pytest.raises(ValueError, match="not real-rooted"):
+        res.verify_real_rootedness()
 
 
 def test_asymmetric_additive_basic() -> None:

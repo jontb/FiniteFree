@@ -6,6 +6,13 @@ import sympy as sp
 from .core import RealRootedPolynomial, UnitaryPolynomial
 from .multivariate import MultivariatePolynomial
 from .utils.conversion import fmpq_poly_to_sympy_coeffs, sympy_to_fmpq
+from .utils.roots import (
+    _chebyshev_roots,
+    _hermite_roots,
+    _jacobi_roots,
+    _laguerre_roots,
+    _legendre_roots,
+)
 
 # Global cache for Jack polynomials to prevent redundant recomputations
 # Keyed by (m, partition_tuple, alpha_sym)
@@ -69,7 +76,13 @@ def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(p_curr, assume_real_rooted=True)
+    return _jacobi_roots(
+        RealRootedPolynomial(
+            p_curr, assume_real_rooted=bool(alpha_sym > -1 and beta_sym > -1)
+        ),
+        alpha_sym,
+        beta_sym,
+    )
 
 
 def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomial:
@@ -291,8 +304,8 @@ def hermite_polynomial(n: int, physicist: bool = True) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    return _hermite_roots(
+        RealRootedPolynomial(p_curr, assume_real_rooted=True), physicist
     )
 
 
@@ -330,8 +343,9 @@ def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    return _laguerre_roots(
+        RealRootedPolynomial(p_curr, assume_real_rooted=bool(alpha_sym >= -1)),
+        alpha_sym,
     )
 
 
@@ -429,9 +443,7 @@ def chebyshev_t_polynomial(n: int) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
-    )
+    return _chebyshev_roots(RealRootedPolynomial(p_curr, assume_real_rooted=True), True)
 
 
 def chebyshev_u_polynomial(n: int) -> RealRootedPolynomial:
@@ -461,8 +473,8 @@ def chebyshev_u_polynomial(n: int) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
+    return _chebyshev_roots(
+        RealRootedPolynomial(p_curr, assume_real_rooted=True), False
     )
 
 
@@ -495,6 +507,4 @@ def legendre_polynomial(n: int) -> RealRootedPolynomial:
         p_prev = p_curr
         p_curr = p_next
 
-    return RealRootedPolynomial(
-        fmpq_poly_to_sympy_coeffs(p_curr), assume_real_rooted=True
-    )
+    return _legendre_roots(RealRootedPolynomial(p_curr, assume_real_rooted=True))

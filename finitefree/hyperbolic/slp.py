@@ -222,14 +222,14 @@ class StraightLineProgram:
 
         # Precompute B_i = inv_A @ A_i to avoid O(n^3) matrix multiplications
         # inside the nested loop
-        B = [inv_A @ Ai for Ai in self.pencil.matrices]
-        traces = [np.trace(Bi) for Bi in B]
-        B_T = [Bi.T for Bi in B]
+        B_float = [inv_A @ Ai for Ai in self.pencil.matrices]
+        traces = [np.trace(Bi) for Bi in B_float]
+        B_T = [Bi.T for Bi in B_float]
 
         for i in range(m):
             for j in range(m):
                 term1 = traces[i] * traces[j]
                 # tr(B_i @ B_j) = sum(B_i * B_j.T) which is O(n^2) instead of O(n^3)
-                term2 = np.sum(B[i] * B_T[j])
+                term2 = np.sum(B_float[i] * B_T[j])
                 hess[i, j] = det_A * (term1 - term2)
         return hess

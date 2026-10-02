@@ -70,6 +70,8 @@ class RealRootedPolynomial(Polynomial):
                 self._is_flint = False
 
         if self._is_flint:
+            if poly.degree() < 0:
+                raise ValueError("Zero polynomial is not supported")
             try:
                 leading_coeff = poly.leading_coefficient()
             except AttributeError:
@@ -87,6 +89,17 @@ class RealRootedPolynomial(Polynomial):
         self._normalized_coeffs_flint_cached: Union[List[Any], None] = None
         self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
+        self._roots_cached_exact = False
+        self._root_recurrence: Union[
+            tuple[NDArray[np.float64], NDArray[np.float64]], None
+        ] = None
+        self._root_scale = 1.0
+        self._root_dilation: Any = flint.fmpq(1)
+        self._root_shift: Any = flint.fmpq(0)
+        self._root_recurrence_driver = "stemr"
+        self._root_recurrence_positive = False
+        self._hermite_variance: Any = None
+        self._hermite_center: Any = 0
         self._has_non_negative_roots_cached: Union[bool, None] = None
         self._has_strictly_positive_roots_cached: Union[bool, None] = None
         self._float_coeffs_cached: Union[list[float], None] = None
@@ -217,40 +230,33 @@ class RealRootedPolynomial(Polynomial):
             self._is_verified = True
             return True
 
+        except ValueError:
+            raise
         except Exception:
             return self._verify_real_rootedness_arb()
 
     def _verify_real_rootedness_arb(self) -> bool:
         """
-        Verify real-rootedness using Flint's certified root isolation (Arb)
-        with fallback to numerical check when necessary.
+        Verify real-rootedness using Flint's certified root isolation (Arb).
+        Numerical proximity to the real axis is not a certificate.
         """
         try:
-            acb_roots = self._fmpq_poly.complex_roots()
+            acb_roots: Any = self._to_fmpq_poly().complex_roots()
 
-            # Verify that all isolated roots are real (i.e. imaginary
-            # part contains 0)
+            # A ball merely containing zero does not prove a real root.
             for r_pair in acb_roots:
                 r = r_pair[0]
-                if 0 not in r.imag:
-                    raise ValueError("Complex root detected in Arb isolation.")
+                if not r.imag.is_zero():
+                    raise ValueError(
+                        "Polynomial is not real-rooted: complex root detected."
+                    )
 
             self._is_verified = True
             return True
+        except ValueError:
+            raise
         except Exception as inner_e:
-            # If Flint complex_roots itself fails, fall back to numpy.roots
-            # with a conservative tolerance to prevent false rejections
-            # due to Wilkinson's phenomenon.
-            float_coeffs = [
-                flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())
-            ]
-            roots = np.roots(np.array(float_coeffs, dtype=float))
-            if not np.allclose(np.imag(roots), 0, atol=1e-2, rtol=1e-2):
-                raise ValueError(
-                    "Numerical fallback: Polynomial is not real-rooted."
-                ) from inner_e
-            self._is_verified = True
-            return True
+            raise RuntimeError("Could not certify real-rootedness.") from inner_e
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
         r"""
@@ -361,9 +367,13 @@ class RealRootedPolynomial(Polynomial):
         r"""
         Reconstructs the polynomial from the normalized sequence
         $\tilde{e}_k^{(d)}(p)$.
+        Real-rootedness is verified lazily; arbitrary sequences need not
+        represent real-rooted polynomials.
         """
         import flint
 
+        if len(e_k) == 0 or e_k[0] != 1:
+            raise ValueError("Normalized coefficients must start with e_0 = 1.")
         d = len(e_k) - 1
         try:
             q_ek = [sympy_to_fmpq(x) for x in e_k]
@@ -381,7 +391,7 @@ class RealRootedPolynomial(Polynomial):
                 val = q_ek[k] * flint.fmpq(flint.fmpz(sign) * binoms[k])
                 c_asc.append(val)
             poly = flint.fmpq_poly(c_asc)
-            inst = cls(poly, assume_real_rooted=True)
+            inst = cls(poly)
             inst._normalized_coeffs_flint_cached = q_ek
             return inst
         except Exception:
@@ -392,7 +402,7 @@ class RealRootedPolynomial(Polynomial):
                     curr_binom = (curr_binom * (d - k + 1)) // k
                 sign = (-1) ** k
                 c.append(e_k[k] * sign * curr_binom)
-            inst = cls(c, assume_real_rooted=True)
+            inst = cls(c)
             return inst
 
     @classmethod
@@ -489,14 +499,18 @@ class RealRootedPolynomial(Polynomial):
         """
         Computes the roots of the polynomial with high numerical stability.
         By default, uses python-flint's Arb-based certified root isolation (exact=True)
-        to prevent numerical drift. If exact=False, or as a fallback, tries fast
-        companion-matrix or parallelized Aberth-Ehrlich numerical solvers.
+        to prevent numerical drift. If exact=False, first tries a scaled symmetric
+        tridiagonal solver for known orthogonal families, then companion-matrix
+        or parallelized Aberth-Ehrlich numerical solvers. Exact isolation remains
+        the fallback when those numerical methods fail.
         Supports lazy caching to avoid redundant C-level solver evaluations.
         """
-        if self._roots_cached is not None:
+        self.verify_real_rootedness()
+        if self._roots_cached is not None and (not exact or self._roots_cached_exact):
             return self._roots_cached
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
         self._roots_cached = res
+        self._roots_cached_exact = exact
         return res
 
     def _evaluate_roots_float64_uncached(
@@ -507,10 +521,40 @@ class RealRootedPolynomial(Polynomial):
         if d == 0:
             return np.empty(0, dtype=np.float64)
 
+        if not exact and self._root_recurrence is not None:
+            from scipy.linalg import eigvalsh_tridiagonal
+
+            diagonal, off_diagonal = self._root_recurrence
+            # Scaling preserves tiny positive eigenvalues at a hard edge.
+            # Centering and then adding back a large offset can erase them.
+            scale = max(
+                float(np.max(np.abs(diagonal))), float(np.max(np.abs(off_diagonal)))
+            )
+            if scale == 0:
+                scale = 1.0
+            try:
+                scaled_off = off_diagonal / scale
+                if np.any(scaled_off == 0):
+                    raise ValueError("Recurrence scaling underflows float64")
+                roots = eigvalsh_tridiagonal(
+                    diagonal / scale,
+                    scaled_off,
+                    lapack_driver=self._root_recurrence_driver,
+                )
+                roots = (roots * scale) * self._root_scale * flint_to_float(
+                    self._root_dilation
+                ) + flint_to_float(self._root_shift)
+                if np.all(np.isfinite(roots)) and (
+                    not self._root_recurrence_positive or np.all(roots > 0)
+                ):
+                    return np.sort(np.asarray(roots, dtype=np.float64))
+            except (ValueError, np.linalg.LinAlgError):
+                pass  # Retain the general polynomial / high-precision fallback.
+
         # --- Certified path: Arb-based root isolation (default) ---
         if exact:
             try:
-                acb_roots = self._fmpq_poly.complex_roots()
+                acb_roots: Any = self._fmpq_poly.complex_roots()
                 float_roots = []
                 for r_pair in acb_roots:
                     r = r_pair[0]
@@ -711,9 +755,22 @@ class RealRootedPolynomial(Polynomial):
         for j in range(d + 1):
             new_asc.append(self._fmpq_poly[j] * (c_fmpq ** (d - j)))
 
-        return RealRootedPolynomial(
+        result = RealRootedPolynomial(
             flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
         )
+        if self._root_recurrence is not None:
+            result._root_recurrence = self._root_recurrence
+            result._root_scale = self._root_scale
+            result._root_dilation = self._root_dilation * c_fmpq
+            result._root_shift = self._root_shift * c_fmpq
+            result._root_recurrence_driver = self._root_recurrence_driver
+            result._root_recurrence_positive = (
+                self._root_recurrence_positive and c_fmpq > 0
+            )
+        if self._hermite_variance is not None:
+            result._hermite_variance = self._hermite_variance * c_fmpq**2
+            result._hermite_center = self._hermite_center * c_fmpq
+        return result
 
     def shift(self, c: Any) -> "RealRootedPolynomial":
         r"""
@@ -723,11 +780,27 @@ class RealRootedPolynomial(Polynomial):
         shift_poly = _get_shift_poly(c_fmpq)
         res_poly = self._fmpq_poly(shift_poly)
 
-        return RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
+        result = RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
+        if self._root_recurrence is not None:
+            result._root_recurrence = self._root_recurrence
+            result._root_scale = self._root_scale
+            result._root_dilation = self._root_dilation
+            result._root_shift = self._root_shift + c_fmpq
+            result._root_recurrence_driver = self._root_recurrence_driver
+            result._root_recurrence_positive = (
+                self._root_recurrence_positive and c_fmpq >= 0
+            )
+        if self._hermite_variance is not None:
+            result._hermite_variance = self._hermite_variance
+            result._hermite_center = self._hermite_center + c_fmpq
+        return result
 
     def power(self, c: Any) -> "RealRootedPolynomial":
         r"""
         Computes the polynomial $p^{(c)}$ whose roots are $\lambda_i(p)^c$.
+        Positive integer powers are computed exactly over Q. Squaring uses
+        p(x)p(-x); other integer powers use the companion matrix's charpoly.
+        Noninteger powers use numerical root isolation and reconstruction.
         """
         if not self.has_non_negative_roots:
             raise ValueError(
@@ -736,6 +809,27 @@ class RealRootedPolynomial(Polynomial):
             )
         if c <= 0:
             raise ValueError("Power factor c must be strictly positive.")
+
+        c_exact = sympy_to_fmpq(c)
+        if c_exact.q == 1:
+            exponent = int(c_exact.p)
+            d = self.degree
+            if d == 0 or exponent == 1:
+                result = self._fmpq_poly
+            elif exponent == 2:
+                reflected = flint.fmpq_poly(
+                    [self._fmpq_poly[j] * (-1) ** j for j in range(d + 1)]
+                )
+                product = self._fmpq_poly * reflected * (-1) ** d
+                result = flint.fmpq_poly([product[2 * j] for j in range(d + 1)])
+            else:
+                companion = flint.fmpq_mat(d, d)
+                for j in range(d):
+                    companion[0, j] = -self._fmpq_poly[d - j - 1] / self._fmpq_poly[d]
+                for j in range(1, d):
+                    companion[j, j - 1] = 1
+                result = (companion**exponent).charpoly()
+            return RealRootedPolynomial(result, assume_real_rooted=True)
 
         roots = self.evaluate_roots_float64()
         new_roots = [r**c for r in roots]
@@ -889,7 +983,7 @@ class RealRootedPolynomial(Polynomial):
 
         c_cumulants = []
         for n in range(1, d + 1):
-            den = flint.fmpq(math.factorial(n - 1) * ((-d) ** (n - 1)), 1)
+            den = flint.fmpq((-d) ** (n - 1), math.factorial(n - 1))
             val_num = kappas_scaled[n - 1]
             c_cumulants.append(val_num / den)
 
@@ -935,15 +1029,19 @@ class RealRootedPolynomial(Polynomial):
         for j in range(d_new + 1):
             new_asc.append(self._fmpq_poly[2 * j])
 
-        return RealRootedPolynomial(flint.fmpq_poly(new_asc), assume_real_rooted=True)
+        return RealRootedPolynomial(
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+        )
 
     @property
     def has_non_negative_roots(self) -> bool:
         """
         Check if all roots of the polynomial are non-negative in O(d) time
-        using sign alternation.
+        using sign alternation after certifying real-rootedness.
         """
         if self._has_non_negative_roots_cached is None:
+            if not self.verify_real_rootedness():
+                return False
             signs = []
             for j in range(self.degree + 1):
                 c = self._fmpq_poly[self.degree - j]
@@ -957,9 +1055,11 @@ class RealRootedPolynomial(Polynomial):
     def has_strictly_positive_roots(self) -> bool:
         """
         Check if all roots of the polynomial are strictly positive in O(d) time
-        using sign alternation.
+        using sign alternation after certifying real-rootedness.
         """
         if self._has_strictly_positive_roots_cached is None:
+            if not self.verify_real_rootedness():
+                return False
             ans = True
             for k in range(self.degree + 1):
                 if self._fmpq_poly[k] == 0:

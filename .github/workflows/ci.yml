@@ -77,6 +77,16 @@ jobs:
         export PYTHONPATH=.
         python -m pytest --import-mode=importlib tests/
 
+    - name: Verify README examples
+      run: python scripts/check_readme_examples.py
+
+    - name: Test installed wheel outside the source tree
+      run: |
+        # The standard installation above built a wheel. Test that installed
+        # package with no source checkout on the import path.
+        unset PYTHONPATH
+        python scripts/test_installed_wheel.py
+
     - name: Mark workspace as safe directory (Linux only)
       if: matrix.os == 'ubuntu-latest'
       run: |

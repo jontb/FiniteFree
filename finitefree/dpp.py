@@ -1,4 +1,5 @@
 import abc
+import operator
 from typing import Any, List, Sequence, Union
 
 import flint
@@ -52,11 +53,10 @@ class DiscreteFiniteKernel(BaseKernel):
         self._K = K
 
     def __call__(self, i: Any, j: Any) -> Any:
-        # Check if i, j are integers
-        try:
-            return self._K[i][j]
-        except TypeError:
-            return self._K[int(i)][int(j)]
+        i, j = operator.index(i), operator.index(j)
+        if isinstance(self._K, flint.fmpq_mat):
+            return self._K[i, j]
+        return self._K[i][j]
 
 
 class OrthogonalPolynomialKernel(BaseKernel):
@@ -236,24 +236,50 @@ def gap_probability_continuous(
 def sample_discrete(
     kernel: Union[BaseKernel, NDArray[Any]], state_space: Sequence[Any]
 ) -> List[Any]:
-    """HKPV exact projection kernel sampling algorithm for discrete state spaces."""
+    """Sample a real symmetric DPP correlation kernel by spectral HKPV.
+
+    Nonprojection kernels use independent Bernoulli eigenvector selection.
+    An ndarray is indexed in state_space order; a BaseKernel is evaluated
+    on those states, including subsets and permutations. The numerical matrix
+    must be finite, symmetric, and have spectrum in [0, 1], up to 1e-10
+    absolute roundoff. Invalid kernels raise ValueError before drawing samples.
+    """
+    M = len(state_space)
+    if len(set(state_space)) != M:
+        raise ValueError("state_space must contain distinct states.")
+    if M == 0:
+        if isinstance(kernel, np.ndarray) and kernel.shape != (0, 0):
+            raise ValueError("Kernel shape must match state_space.")
+        return []
+
     if isinstance(kernel, np.ndarray):
         K_mat = kernel
-    elif hasattr(kernel, "_K") and isinstance(kernel._K, np.ndarray):
-        K_mat = kernel._K
     else:
         K_mat = np.array(
             [[float(kernel(x, y)) for y in state_space] for x in state_space]
         )
-    M = len(state_space)
+
+    if np.iscomplexobj(K_mat):
+        raise ValueError("Kernel must be real symmetric.")
+    K_mat = np.asarray(K_mat, dtype=np.float64)
+    if K_mat.shape != (M, M):
+        raise ValueError("Kernel shape must match state_space.")
+    if not np.all(np.isfinite(K_mat)):
+        raise ValueError("Kernel entries must be finite.")
+    tolerance = 1e-10
+    if not np.allclose(K_mat, K_mat.T, rtol=0.0, atol=tolerance):
+        raise ValueError("Kernel must be real symmetric.")
+    K_mat = (K_mat + K_mat.T) / 2
 
     # Eigen-decomposition for projection component selection
     eigenvalues, eigenvectors = np.linalg.eigh(K_mat)
+    if np.any(eigenvalues < -tolerance) or np.any(eigenvalues > 1 + tolerance):
+        raise ValueError("Kernel eigenvalues must lie in [0, 1].")
+    eigenvalues = np.clip(eigenvalues, 0.0, 1.0)
 
     selected_indices = []
     for idx, lam in enumerate(eigenvalues):
-        p = np.clip(lam, 0.0, 1.0)
-        if np.random.rand() < p:
+        if np.random.rand() < lam:
             selected_indices.append(idx)
 
     if not selected_indices:
@@ -261,16 +287,17 @@ def sample_discrete(
 
     V_mat = eigenvectors[:, selected_indices].T  # shape (k, M)
     k = len(selected_indices)
-    sampled_indices = []
+    sampled_indices: list[int] = []
 
     for i in range(k, 0, -1):
         probs = np.sum(V_mat**2, axis=0) / i
+        probs[sampled_indices] = 0
         probs = np.clip(probs, 0, None)
         total_prob = np.sum(probs)
         if total_prob > 1e-12:
             probs /= total_prob
         else:
-            probs = np.ones(M) / M
+            raise RuntimeError("Projection sampling lost its orthonormal basis.")
 
         sampled_idx = np.random.choice(M, p=probs)
         sampled_indices.append(sampled_idx)
