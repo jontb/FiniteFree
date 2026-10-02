@@ -684,10 +684,18 @@ class RealRootedPolynomial(Polynomial):
                     # Fall through to numerical solvers if exact solver fails
                     pass
 
+        # Companion/Aberth coefficients have leading term one. Normalize in
+        # rational arithmetic before float conversion, including extreme scalar
+        # multiples; keep the caller's stored coefficient representation intact.
+        numerical_polynomial = self._fmpq_poly
+        leading_coefficient = numerical_polynomial[d]
+        if leading_coefficient != 1:
+            numerical_polynomial = numerical_polynomial / leading_coefficient
+
         non_zero_scales = []
 
         for k in range(1, d + 1):
-            val = abs(flint_to_float(self._fmpq_poly[d - k]))
+            val = abs(flint_to_float(numerical_polynomial[d - k]))
             if val > 0:
                 non_zero_scales.append(val ** (1.0 / k))
 
@@ -705,7 +713,7 @@ class RealRootedPolynomial(Polynomial):
         scaled_coeffs = np.zeros(d + 1, dtype=np.float64)
         scaled_coeffs[0] = 1.0
         for k in range(1, d + 1):
-            scaled_coeffs[k] = flint_to_float(self._fmpq_poly[d - k]) / (S**k)
+            scaled_coeffs[k] = flint_to_float(numerical_polynomial[d - k]) / (S**k)
 
         # --- Parallel path: Vectorized Aberth-Ehrlich Candidate Seeker ---
         if parallel:
@@ -838,7 +846,7 @@ class RealRootedPolynomial(Polynomial):
                     stacklevel=2,
                 )
                 float_coeffs = [
-                    flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())
+                    flint_to_float(c) for c in reversed(numerical_polynomial.coeffs())
                 ]
                 return np.sort(np.real(np.roots(float_coeffs)))
 
