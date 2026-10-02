@@ -6,6 +6,8 @@ This page describes the mathematical and numerical contracts with executable exa
 
 `RealRootedPolynomial.evaluate_roots_float64(parallel=False, exact=True)` returns sorted NumPy `float64` roots, with multiplicities. It validates real-rootedness before extraction unless the constructor or a proven family has already marked the polynomial verified.
 
+Exact rational operations preserve the stored binary value of supplied Python and NumPy floating scalars, including `longdouble` when it provides extra precision on the platform. This applies to polynomial inputs, affine parameters, and exact matrix-pencil entries/parameters. Precision lost before supplying a value cannot be recovered. Numerical outputs and matrix views still use `float64` and can round values that remain distinct in the exact representation.
+
 - `exact=False` first uses a symmetric tridiagonal Jacobi matrix when recurrence metadata is available. It scales the matrix without centering, computes parameter differences before float conversion, and accumulates affine parameters rationally before converting the final roots.
 - `exact=True` requests python-flint/Arb isolation and remains the default. Use `PrecisionContext(degree=d, prec=192)` to request a working precision. This option selects the high-precision path; the returned floats are neither exact algebraic roots nor interval error bounds. SymPy/general numerical fallbacks may still be used if isolation fails.
 - An `exact=True` request bypasses a cache produced with `exact=False`, or a high-precision cache recorded at a lower working precision. An `exact=False` request can reuse any existing root result. Returned arrays are read-only and repeated calls may reuse the same array; call `.copy()` for editable values.

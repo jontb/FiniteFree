@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Exact rational conversion uses each Python/NumPy floating scalar's own integer ratio. NumPy extended-precision values are no longer narrowed through float64 before polynomial construction, affine transforms or exact matrix-pencil operations, including supplied-value symmetry checks. Numerical outputs retain their documented float64 limits.
+
 - Generic companion/Aberth root paths normalize nonmonic coefficients exactly before float conversion. This fixes incorrect roots such as the numerical result for `2*x**2-6*x+4` and avoids common-scalar overflow/underflow without changing stored coefficients.
 
 - Squarefree factors of degree at least 15 use certified Arb validation before the expensive integer PRS path. Degrees through 30 retain exact Sturm certification if Arb cannot obtain a certificate; small factors keep their existing exact path. This also reuses the isolated roots for numerical evaluation.
