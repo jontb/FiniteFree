@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Arb validation-created root caches obey the read-only array contract, including cache reuse and later precision upgrades. Cross-batch regressions also check nonmonic input snapshots, direct projections and shifted numerical cumulants together.
+
 - CI includes the advertised Python 3.9 minimum; documentation-tool annotations retain Python 3.9 compatibility.
 
 - Linear symbolic roots are checked for realness instead of receiving an unconditional certificate. Certified numeric roots use their coefficient ratio for extraction and geometry; unknown realness/signs and nonnumeric/out-of-range numerical requests raise descriptive errors without poisoning caches.

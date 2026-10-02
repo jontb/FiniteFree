@@ -279,6 +279,7 @@ class RealRootedPolynomial(Polynomial):
                 for _ in range(int(multiplicity))
             ]
             self._roots_cached = np.sort(np.asarray(roots, dtype=np.float64))
+            self._roots_cached.setflags(write=False)
             self._roots_cached_exact = True
             self._roots_cached_prec = flint.ctx.prec
             return True
