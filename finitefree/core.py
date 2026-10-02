@@ -92,6 +92,7 @@ class RealRootedPolynomial(Polynomial):
         self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
         self._roots_cached_exact = False
+        self._roots_cached_prec = 0
         self._root_recurrence: Union[
             tuple[NDArray[np.float64], NDArray[np.float64]], None
         ] = None
@@ -269,6 +270,16 @@ class RealRootedPolynomial(Polynomial):
                     )
 
             self._is_verified = True
+            # Isolation already found the roots. Reuse them instead of repeating
+            # Arb work or trying an ill-conditioned companion matrix afterward.
+            roots = [
+                flint_to_float(root.real)
+                for root, multiplicity in acb_roots
+                for _ in range(int(multiplicity))
+            ]
+            self._roots_cached = np.sort(np.asarray(roots, dtype=np.float64))
+            self._roots_cached_exact = True
+            self._roots_cached_prec = flint.ctx.prec
             return True
         except ValueError:
             raise
@@ -541,17 +552,22 @@ class RealRootedPolynomial(Polynomial):
         supported orthogonal families and proven Hermite additive convolutions.
         Otherwise use a balanced companion matrix, or parallelized Aberth-Ehrlich
         when parallel=True, with high-precision/general numerical fallback.
-        An exact=True request bypasses a cache produced with exact=False.
+        Arb validation retains isolated roots. An exact=True request bypasses
+        an approximate cache or one recorded at a lower working precision.
         Nonfinite/underflowed recurrences fall back; extreme affine scales or
         shifts remain limited by float64 representability and conditioning.
         """
         self.verify_real_rootedness()
-        if self._roots_cached is not None and (not exact or self._roots_cached_exact):
+        if self._roots_cached is not None and (
+            not exact
+            or (self._roots_cached_exact and self._roots_cached_prec >= flint.ctx.prec)
+        ):
             return self._roots_cached
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
         res.setflags(write=False)
         self._roots_cached = res
         self._roots_cached_exact = exact
+        self._roots_cached_prec = flint.ctx.prec if exact else 0
         return res
 
     def _evaluate_roots_float64_uncached(

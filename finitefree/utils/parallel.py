@@ -6,6 +6,7 @@ import flint
 import numpy as np
 
 from .modular import (
+    _as_modular_array,
     get_inverse_vandermonde_matrices_cached,
     get_inverse_vandermonde_matrix,
     modular_det,
@@ -28,8 +29,8 @@ def _eval_diagonal_specialization_prime_worker(
     p: int, A_int: Any, B_int: Any, n: int, deg: int
 ) -> Tuple[int, Optional[List[int]]]:
     if HAS_CYTHON:
-        A_arr = np.array(A_int, dtype=np.int64)
-        B_arr = np.array(B_int, dtype=np.int64)
+        A_arr = _as_modular_array(A_int, p)
+        B_arr = _as_modular_array(B_int, p)
         y = list(eval_diagonal_specialization_mod_p(A_arr, B_arr, p, deg))
     else:
 
@@ -106,7 +107,7 @@ def _eval_prime_worker(
 
         if HAS_CYTHON:
             grid_pts_np = np.array([pt + (1,) for pt in full_grid_pts], dtype=np.int64)
-            matrices_np = np.array(integer_matrices, dtype=np.int64)
+            matrices_np = _as_modular_array(integer_matrices, p)
             dets = list(eval_points_grid_mod_p(matrices_np, grid_pts_np, p))
             values = dict(zip(full_grid_pts, dets))
         else:

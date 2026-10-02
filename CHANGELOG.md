@@ -12,6 +12,10 @@
 
 - README-to-MkDocs synchronization preserves fenced examples, rejects malformed details blocks before overwriting the index, and fails when the README is missing. Documentation tools now have strict typing, lint and regression checks in CI.
 
+- Matrix-pencil rational methods preserve supplied integer/rational values before preparing float64 numerical views. This fixes loss of integers above `2**53` in characteristic polynomials, SLP derivatives and multivariate determinants. Constructors validate square, consistent, finite real rational inputs; symmetric pencils require symmetry on the supplied values without approximate tolerance. Reconstruct a pencil to change its entries.
+- Cython modular evaluation reduces integers before int64 conversion, preventing overflow and repeated sparse interpolation retries for large entries.
+- Arb real-rootedness validation retains its roots for evaluation, avoiding duplicate isolation and a subsequent companion-matrix pass. Higher working-precision reference requests refresh the cache.
+
 - Finite free cumulants use `(-d)**(n-1) * c_n / (n-1)!`, following Definition 2.14 of Arizmendi et al. Earlier code multiplied by `(n-1)!`. For orders `n >= 3`, recompute saved cumulants or convert with `new = old / ((n-1)!)**2`. The first two cumulants are unchanged. The matching additive-power inverse is updated, preserving valid polynomial coefficients.
 - Reconstructed normalized coefficient sequences and Jacobi/Laguerre polynomials outside proven orthogonality domains are validated lazily. Root extraction and positive-root domain checks reject complex-rooted inputs rather than accepting false certificates. Inability to certify raises `RuntimeError`.
 - DPP sampling validates real symmetric correlation kernels, spectrum, shape and finiteness. Invalid kernels raise `ValueError`; numerical roundoff up to `1e-10` is allowed. Kernel subsets/permutations respect the requested state space.

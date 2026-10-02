@@ -356,7 +356,7 @@ print(expected_poly.coeffs)
 
 Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation.
 
-Matrix-pencil constructors currently convert entries to `float64` before exact evaluation. The rational backend therefore preserves those stored binary values; it cannot recover precision lost from an original rational or an integer larger than $2^{53}$. Preserving exact matrix inputs is a remaining limitation.
+Matrix-pencil constructors copy integer/rational entries before preparing a separate `float64` numerical view. Characteristic polynomials, rational SLP derivatives and multivariate determinants use the copied values, including integers above $2^{53}$. Float inputs preserve their supplied binary values; precision lost before construction cannot be recovered. Matrices must be square, share one shape, contain finite real rational values that fit the finite numerical view, and be symmetric on the supplied values for `SymmetricMatrixPencil`. Construct a new pencil to change its entries.
 
 ```python
 from finitefree.hyperbolic import SymmetricMatrixPencil
@@ -503,6 +503,19 @@ FiniteFree is architected to bypass the combinatorial bottlenecks inherent in hi
 All algebraic operations, polynomial recurrences, and convolutions are computed in exact rational arithmetic ($\mathbb{Q}$) using GMP/FLINT backends (`fmpq_poly`). Floating-point approximations are deferred entirely to the final egress stage (e.g. root isolation or evaluation), preventing early-stage rounding errors and numerical drift from compounding during intensive convolution chains.
 
 For asymptotic root comparisons, known orthogonal families carry their three-term recurrence alongside the exact polynomial. The numerical path computes parameter differences before float conversion and scales the Jacobi matrix without centering, preserving tiny positive hard-edge roots. Affine shifts are applied after solving. This follows the [Jacobi-matrix characterization of zeros](https://dlmf.nist.gov/18.2#vi) and [classical recurrences](https://dlmf.nist.gov/18.9) using [SciPy's tridiagonal eigenvalue solver](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.eigvalsh_tridiagonal.html). Arbitrary convolutions, including compound-Wishart lognormal examples, do not inherit unproven recurrence metadata and retain the general solver/reference path. Nonfinite or underflowed recurrences fall back; extreme affine shifts can still lose differences that `float64` cannot represent.
+
+When domain validation uses Arb, it retains the isolated roots for subsequent evaluation. Generic root calls can therefore return the validation result directly. An `exact=True` request at a higher working precision refreshes the root cache; `exact=False` can reuse any available root result. Small-degree generic calls still use exact Sturm validation and may be dominated by coefficient growth. `scripts/benchmark_compound_roots.py` measures first public root calls, including validation, against independent higher-precision Arb roots, with construction and repeat-cache latency reported separately.
+
+For compound-Wishart polynomials with degree $d$, $n=d^2$, and $d$ identical multiplicative factors, measurements on the same jon-desktop environment at 192-bit working precision were:
+
+| Degree | Construction | First root call (`exact=False`, including validation) |
+| ---: | ---: | ---: |
+| 30 | 0.8 ms | 0.967 s |
+| 60 | 6.3 ms | 0.052 s |
+| 100 | 60.0 ms | 0.237 s |
+| 150 | 304.4 ms | 1.403 s |
+
+Root timings are the best of three fresh calls, excluding construction and library warm-up. Degree-60–150 results matched the independently isolated 384-bit reference after float64 conversion. Degree 10 retained the companion-matrix path with maximum scaled error $5.2\times10^{-13}$; degree 30 was dominated by Sturm verification. Runtime depends on coefficient size and the validation backend as well as degree. No orthogonal-family recurrence is inferred for these compound polynomials.
 
 #### 2. Algebraic Domain Verification (Sturm PRS)
 The library verifies real-rootedness lazily. Through degree 30 it uses square-free factorization and exact Sturm sequences, with a subresultant Polynomial Remainder Sequence (PRS) for factors of degree at least 15. Higher degrees use Arb isolation. An imaginary ball merely containing zero is not a certificate; complex roots raise `ValueError`, and inability to certify raises `RuntimeError`. An explicit `assume_real_rooted=True` trusts the caller and bypasses verification.
