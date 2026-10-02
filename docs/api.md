@@ -8,7 +8,7 @@ This page describes the mathematical and numerical contracts with executable exa
 
 - `exact=False` first uses a symmetric tridiagonal Jacobi matrix when recurrence metadata is available. It scales the matrix without centering, computes parameter differences before float conversion, and accumulates affine parameters rationally before converting the final roots.
 - `exact=True` first requests python-flint/Arb isolation and remains the default. Use `PrecisionContext(degree=d, prec=192)` to request a working precision. This option selects the high-precision path; the returned floats are neither exact algebraic roots nor interval error bounds. Existing SymPy/general numerical fallbacks may still be used if isolation fails.
-- An `exact=True` request bypasses a cache produced with `exact=False`. An `exact=False` request can reuse an existing high-precision result. Repeated calls may return cached arrays; do not modify those arrays in place.
+- An `exact=True` request bypasses a cache produced with `exact=False`. An `exact=False` request can reuse an existing high-precision result. Returned arrays are read-only and repeated calls may reuse the same array; call `.copy()` for editable values.
 - If no usable recurrence is available, `exact=False` uses the existing balanced companion-matrix path, or the Aberth–Ehrlich path when `parallel=True`, with Arb/general numerical fallback. Generic monomial coefficients can be ill-conditioned. Fast recurrence metadata is preserved through affine transforms and proven Hermite additive convolutions, not through arbitrary coefficient operations.
 
 The recurrence path is available for degree at least two in these domains:
@@ -44,6 +44,28 @@ assert len(numerical) == d
 The [reproducible benchmark and measured results](index.md#testing-protocol) compare six families at degrees 32, 100 and 300 against independently isolated Arb roots. Root timings exclude polynomial construction and cached results; construction is reported separately. Degree-300 numerical extraction took 0.95–1.29 ms on jon-desktop with maximum scaled error `4.51e-15`. These measurements are not performance or accuracy guarantees for other inputs or machines.
 
 ## Validation and mathematical contracts
+
+### Coefficient ownership and cached arrays
+
+Construction snapshots caller-supplied coefficient sequences and FLINT polynomials. `from_roots` and `from_normalized_coeffs` also copy their inputs. Changing those inputs later cannot change the polynomial, its verification state or cached results. The `coeffs` property returns an independent editable array on both rational and symbolic backends.
+
+`normalized_coeffs` and real/unitary root extraction return read-only NumPy arrays. Ordinary in-place edits raise `ValueError`; use `.copy()` to obtain editable values. Caching still avoids repeated extraction. Internal attributes and explicit re-enabling of array write flags are outside this mutation contract. A T-transform owns its coefficient list rather than sharing the polynomial's cache.
+
+```python
+import flint
+import numpy as np
+from finitefree import RealRootedPolynomial
+
+source = flint.fmpq_poly([2, -3, 1])
+p = RealRootedPolynomial(source)
+source[0] = 100
+assert list(p.coeffs) == [1, -3, 2]
+roots = p.evaluate_roots_float64()
+assert not roots.flags.writeable
+editable = roots.copy()
+editable[0] = 100
+np.testing.assert_allclose(p.evaluate_roots_float64(), [1, 2])
+```
 
 ### Real-rootedness
 

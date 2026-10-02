@@ -160,7 +160,7 @@ class FiniteTTransform:
 
         self.p = p
         self.d = p.degree
-        self.e_k = p._normalized_coeffs_flint()
+        self.e_k = list(p._normalized_coeffs_flint())
 
         # Multiplicity r of the root 0 of p is trailing zeros in coeffs
         self.r = 0

@@ -395,6 +395,8 @@ This project utilizes `hatchling` and `hatch-cython` to automatically compile Cy
 
 ## Testing Protocol
 
+Polynomial construction copies caller inputs, and `coeffs` returns an independent editable array. Normalized coefficient arrays and cached real/unitary roots are read-only; call `.copy()` before editing them. This preserves verification and cached results when caller data changes. See the [ownership contract](api.md#coefficient-ownership-and-cached-arrays).
+
 FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
 
 ```bash

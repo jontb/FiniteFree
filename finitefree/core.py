@@ -39,6 +39,7 @@ class RealRootedPolynomial(Polynomial):
     ) -> None:
         r"""
         coeffs: array of length $d+1$ where index $k$ corresponds to $x^{d-k}$, or a flint.fmpq_poly.
+        Coefficients are copied so caller mutations cannot invalidate cached results.
         """
         import flint
 
@@ -51,7 +52,7 @@ class RealRootedPolynomial(Polynomial):
 
         self._is_flint = False
         if isinstance(coeffs, flint.fmpq_poly):
-            poly = coeffs
+            poly = flint.fmpq_poly(coeffs)
             self._is_flint = True
         else:
             try:
@@ -83,6 +84,7 @@ class RealRootedPolynomial(Polynomial):
             self.degree: int = poly.degree() if poly.degree() >= 0 else 0
         else:
             self.degree = len(self.coeffs_sympy) - 1
+            self.coeffs_sympy.setflags(write=False)
 
         self._is_verified: bool = assume_real_rooted
         self._is_monic = monic
@@ -106,10 +108,10 @@ class RealRootedPolynomial(Polynomial):
 
     @property
     def coeffs(self) -> NDArray[np.object_]:
-        """Returns the coefficients in descending order as a NumPy array of SymPy Rationals."""
+        """Return a caller-owned copy of the descending coefficient array."""
         if self._is_flint:
             return np.array(fmpq_poly_to_sympy_coeffs(self._fmpq_poly), dtype=object)
-        return self.coeffs_sympy
+        return self.coeffs_sympy.copy()
 
     @property
     def variables(self) -> list[sp.Symbol]:
@@ -323,6 +325,7 @@ class RealRootedPolynomial(Polynomial):
         r"""
         Extracts the normalized elementary symmetric polynomial sequence
         $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as SymPy Rationals.
+        Returned arrays are read-only; use .copy() to obtain editable values.
         """
         if d is None:
             d = self.degree
@@ -358,6 +361,7 @@ class RealRootedPolynomial(Polynomial):
                     e_k.append(0)
 
         res_array = np.array(e_k, dtype=object)
+        res_array.setflags(write=False)
         if d == self.degree:
             self._normalized_coeffs_sympy_cached = res_array
         return res_array
@@ -408,7 +412,9 @@ class RealRootedPolynomial(Polynomial):
             return inst
 
     @classmethod
-    def from_roots(cls, roots: Sequence[Any]) -> "RealRootedPolynomial":
+    def from_roots(
+        cls, roots: Union[Sequence[Any], NDArray[Any]]
+    ) -> "RealRootedPolynomial":
         """
         Reconstructs the polynomial from its exact roots.
         Uses a divide-and-conquer product of C-level fmpq_poly linear factors
@@ -436,6 +442,7 @@ class RealRootedPolynomial(Polynomial):
         inst = cls(poly_flint, assume_real_rooted=True)
         float_roots = [flint_to_float(r) for r in roots]
         inst._roots_cached = np.sort(np.array(float_roots, dtype=np.float64))
+        inst._roots_cached.setflags(write=False)
         return inst
 
     def __str__(self) -> str:
@@ -500,6 +507,7 @@ class RealRootedPolynomial(Polynomial):
     ) -> NDArray[Any]:
         """
         Return sorted float64 roots with multiplicities after domain validation.
+        Returned arrays are read-only; use .copy() to obtain editable values.
         With exact=True (the default), first request Arb isolation; PrecisionContext
         controls the working precision. Numerical fallbacks can still be used if
         isolation fails, and returned floats are not interval error bounds.
@@ -515,6 +523,7 @@ class RealRootedPolynomial(Polynomial):
         if self._roots_cached is not None and (not exact or self._roots_cached_exact):
             return self._roots_cached
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
+        res.setflags(write=False)
         self._roots_cached = res
         self._roots_cached_exact = exact
         return res
@@ -1103,6 +1112,7 @@ class UnitaryPolynomial(RealRootedPolynomial):
     ) -> NDArray[Any]:
         """
         Computes the complex roots of the unitary polynomial.
+        Returned arrays are read-only; use .copy() to obtain editable values.
         Evaluates transcendental coefficients numerically using SymPy N(c)
         to avoid int() / float() casting errors of transcendental terms,
         and uses companion matrix eigensolver to compute complex roots on T.
@@ -1138,5 +1148,6 @@ class UnitaryPolynomial(RealRootedPolynomial):
         angles = np.angle(raw_roots)
         sorted_idx = np.argsort(angles)
         res = raw_roots[sorted_idx]
+        res.setflags(write=False)
         self._roots_cached = res
         return res
