@@ -148,7 +148,7 @@ The following showcase provides a visual representation of FiniteFree's features
 
 ??? "Determinantal Point Processes (`finitefree.dpp`)"
 
-    - **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula.
+    - **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula. Exact arguments retain their distinct values. Nearby distinct floating points use the finite basis sum to avoid a cancelled quotient; diagonal calls retain the derivative formula. An empty orthogonal basis gives the zero kernel. See the [API reference](api.md#orthogonal-polynomial-kernel-evaluation) for conditioning and timing scope.
     - **Gap Probabilities & Observables**: Evaluate exact discrete gap probabilities and approximate continuous Fredholm determinants via Nyström discretization, plus exact $k$-point correlation functions.
     - **HKPV Sampler**: Sample real symmetric DPP correlation kernels using floating-point spectral decomposition and Gram-Schmidt projections. Nonprojection kernels use Bernoulli eigenvector selection. Matrix shape, finiteness, symmetry and spectrum in $[0,1]$ are validated with $10^{-10}$ absolute roundoff tolerance.
 
