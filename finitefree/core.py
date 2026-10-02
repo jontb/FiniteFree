@@ -151,8 +151,10 @@ class RealRootedPolynomial(Polynomial):
 
     def verify_real_rootedness(self) -> bool:
         """
-        Lazily verify that the polynomial is real-rooted via Sturm sequences
-        or exact root bounding.
+        Lazily verify real-rootedness using exact Sturm sequences through
+        degree 30 and Arb isolation above that degree. Complex roots raise
+        ValueError; failure to obtain a certificate raises RuntimeError.
+        An explicit assume_real_rooted=True bypasses verification.
         """
         if self._is_verified:
             return True
@@ -497,13 +499,17 @@ class RealRootedPolynomial(Polynomial):
         self, parallel: bool = False, exact: bool = True
     ) -> NDArray[Any]:
         """
-        Computes the roots of the polynomial with high numerical stability.
-        By default, uses python-flint's Arb-based certified root isolation (exact=True)
-        to prevent numerical drift. If exact=False, first tries a scaled symmetric
-        tridiagonal solver for known orthogonal families, then companion-matrix
-        or parallelized Aberth-Ehrlich numerical solvers. Exact isolation remains
-        the fallback when those numerical methods fail.
-        Supports lazy caching to avoid redundant C-level solver evaluations.
+        Return sorted float64 roots with multiplicities after domain validation.
+        With exact=True (the default), first request Arb isolation; PrecisionContext
+        controls the working precision. Numerical fallbacks can still be used if
+        isolation fails, and returned floats are not interval error bounds.
+        With exact=False, first try a scaled symmetric tridiagonal solver for
+        supported orthogonal families and proven Hermite additive convolutions.
+        Otherwise use a balanced companion matrix, or parallelized Aberth-Ehrlich
+        when parallel=True, with high-precision/general numerical fallback.
+        An exact=True request bypasses a cache produced with exact=False.
+        Nonfinite/underflowed recurrences fall back; extreme affine scales or
+        shifts remain limited by float64 representability and conditioning.
         """
         self.verify_real_rootedness()
         if self._roots_cached is not None and (not exact or self._roots_cached_exact):

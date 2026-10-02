@@ -243,6 +243,7 @@ def sample_discrete(
     on those states, including subsets and permutations. The numerical matrix
     must be finite, symmetric, and have spectrum in [0, 1], up to 1e-10
     absolute roundoff. Invalid kernels raise ValueError before drawing samples.
+    States must be distinct and hashable. Empty state spaces return [].
     """
     M = len(state_space)
     if len(set(state_space)) != M:

@@ -77,8 +77,16 @@ jobs:
         export PYTHONPATH=.
         python -m pytest --import-mode=importlib tests/
 
-    - name: Verify README examples
+    - name: Verify documentation examples
       run: python scripts/check_readme_examples.py
+
+    - name: Build documentation strictly
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+      run: |
+        python -m pip install mkdocs-material "mkdocstrings[python]"
+        python scripts/sync_docs.py
+        git diff --exit-code -- docs/index.md
+        python -m mkdocs build --strict
 
     - name: Test installed wheel outside the source tree
       run: |

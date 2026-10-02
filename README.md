@@ -162,7 +162,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 - **`to_numpy_poly1d()`**: Safe rational coefficient `float64` casting, utilizing arbitrary-precision `decimal.Decimal` fallbacks to prevent `OverflowError` on coefficients with extreme magnitude ratios.
 - **`evaluate_roots_float64(exact=False)`**: Uses scaled symmetric tridiagonal eigenvalues for Hermite, Laguerre, Jacobi, Legendre and Chebyshev polynomials in their orthogonality domains, including GUE/Wishart expectations, affine transforms and proven Hermite additive convolutions. It avoids forming an ill-conditioned monomial companion matrix for these families.
-- **`evaluate_roots_float64(exact=True)`**: Retains the Arb isolation path as the default high-precision reference. A reference request after a numerical call recomputes the roots rather than reusing the approximate cache. Results from either path are returned as `float64`.
+- **`evaluate_roots_float64(exact=True)`**: Requests the Arb isolation path by default. A high-precision request after a numerical call bypasses the approximate cache. Results are returned as `float64`; if isolation fails, the general numerical fallbacks can still be used. See the [API reference](docs/api.md#root-evaluation-and-conditioning) for dispatch, precision and conditioning limits.
 
 </details>
 
@@ -181,7 +181,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 - **Kernels**: Construct exact discrete DPP kernels and orthogonal polynomial kernels (e.g., Hermite/Laguerre) via the Christoffel-Darboux formula.
 - **Gap Probabilities & Observables**: Evaluate exact discrete gap probabilities and approximate continuous Fredholm determinants via Nyström discretization, plus exact $k$-point correlation functions.
-- **HKPV Sampler**: Execute exact point configuration sampling from projection kernels via eigenvalues and Gram-Schmidt projections.
+- **HKPV Sampler**: Sample real symmetric DPP correlation kernels using floating-point spectral decomposition and Gram-Schmidt projections. Nonprojection kernels use Bernoulli eigenvector selection. Matrix shape, finiteness, symmetry and spectrum in $[0,1]$ are validated with $10^{-10}$ absolute roundoff tolerance.
 
 </details>
 
@@ -223,7 +223,7 @@ This project utilizes `hatchling` and `hatch-cython` to automatically compile Cy
 <summary><b>1. Polynomial Representation & Transformations</b></summary>
 <br>
 
-You can construct polynomials exactly from sequences of coefficients or find roots using numerical or certified (Arb) eigensolvers.
+You can construct polynomials exactly from sequences of rational coefficients and evaluate their roots using numerical eigensolvers or Arb isolation.
 
 ```python
 from finitefree.core import RealRootedPolynomial
@@ -308,9 +308,9 @@ t_transform = FiniteTTransform(poly)
 print(t_transform(0.5))
 ```
 
-**Compatibility note:** Finite free cumulants now use the normalization in [Definition 2.14 of Arizmendi et al.](https://arxiv.org/html/2408.09337v2#S2.SS5), $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence. Earlier code multiplied by $(n-1)!$, so values for $n\geq3$ were too large by $((n-1)!)^2$. Recompute stored cumulants, or divide old values by this factor. The first two cumulants are unchanged. `additive_power` uses the matching corrected inverse, preserving its valid polynomial coefficients. Orders above the ambient dimension continue to return zero as an API convention; they are outside the finite cumulant definition.
+Finite free cumulants use the normalization in [Definition 2.14 of Arizmendi et al.](https://arxiv.org/html/2408.09337v2#S2.SS5), $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence. `additive_power` uses the matching inverse. Orders above the ambient dimension return zero as an API convention; they are outside the finite cumulant definition.
 
-Reconstruction from normalized coefficients no longer certifies real-rootedness automatically. Root extraction and positive-root domain checks now reject complex-rooted inputs; formal coefficient convolutions remain available. `sample_discrete` rejects invalid correlation kernels instead of silently clipping their spectrum, while allowing $10^{-10}$ absolute numerical roundoff.
+Reconstruction from normalized coefficients produces a formal polynomial with lazy real-rootedness validation. Root extraction and positive-root domain checks reject complex-rooted inputs; formal coefficient convolutions remain available.
 
 Jacobi and Laguerre polynomials constructed outside their orthogonality domains are also validated lazily. Formal construction remains available, but a root request rejects a complex-rooted result such as `laguerre_polynomial(2, -3)`.
 
@@ -381,7 +381,7 @@ print(poly_sparse.expr)
 <summary><b>6. Determinantal Point Processes (DPPs)</b></summary>
 <br>
 
-Construct correlation kernels, evaluate k-point joint intensities exactly, compute Fredholm determinant gap probabilities, and sample point configurations algebraically.
+Construct correlation kernels, evaluate k-point joint intensities exactly, compute Fredholm determinant gap probabilities, and sample point configurations numerically.
 
 ```python
 from finitefree import (
@@ -484,7 +484,7 @@ FiniteFree is architected to bypass the combinatorial bottlenecks inherent in hi
 | **Asymmetric Additive Convolution ($\uplus_d$)** | Cauchy product of scaled sequences | $O(d \log d)$ | Exact $\mathbb{Q}$ |
 | **Multiplicative Convolution ($\boxtimes_d$)** | Pointwise multiplication of normalized coefficients | $O(d)$ | Exact $\mathbb{Q}$ |
 | **Sturm Real-Rootedness Verification** | Subresultant Polynomial Remainders Sequence (PRS) | $O(d^2)$ | Exact $\mathbb{Q}$ |
-| **Certified Root Isolation (Arb)** | Belyi-like complex interval bisection | $O(d^2)$ | Interval $\mathbb{C}$ |
+| **High-Precision Root Isolation (Arb)** | Adaptive complex ball arithmetic | Degree, conditioning and precision dependent | Interval $\mathbb{C}$ |
 | **Orthogonal-Family Root Approximation** | Symmetric tridiagonal eigenvalues, $O(d)$ matrix storage | $O(d^2)$ | Float $\mathbb{R}$ |
 | **General Root Approximation** | Dense balanced companion matrix eigenvalues | $O(d^3)$ | Float $\mathbb{C}$ |
 | **Finite R-Transform (Cumulants)** | Generating function recurrence relation | $O(d^2)$ | Exact $\mathbb{Q}$ |
@@ -497,7 +497,7 @@ All algebraic operations, polynomial recurrences, and convolutions are computed 
 For asymptotic root comparisons, known orthogonal families carry their three-term recurrence alongside the exact polynomial. The numerical path computes parameter differences before float conversion and scales the Jacobi matrix without centering, preserving tiny positive hard-edge roots. Affine shifts are applied after solving. This follows the [Jacobi-matrix characterization of zeros](https://dlmf.nist.gov/18.2#vi) and [classical recurrences](https://dlmf.nist.gov/18.9) using [SciPy's tridiagonal eigenvalue solver](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.eigvalsh_tridiagonal.html). Arbitrary convolutions, including compound-Wishart lognormal examples, do not inherit unproven recurrence metadata and retain the general solver/reference path. Nonfinite or underflowed recurrences fall back; extreme affine shifts can still lose differences that `float64` cannot represent.
 
 #### 2. Algebraic Domain Verification (Sturm PRS)
-Instead of seeking roots numerically to check domain boundaries (such as verifying real-rootedness of a convolution), the library employs exact algebraic verification. For polynomials of degree $d \le 30$, FiniteFree evaluates Sturm sequences using Euclidean division modulo in C. For higher degrees, it uses a subresultant Polynomial Remainder Sequence (PRS) to compute Sturm sequences without coefficient growth. If certified bounds are needed, it falls back to Flint’s complex interval bisection (Arb).
+The library verifies real-rootedness lazily. Through degree 30 it uses square-free factorization and exact Sturm sequences, with a subresultant Polynomial Remainder Sequence (PRS) for factors of degree at least 15. Higher degrees use Arb isolation. An imaginary ball merely containing zero is not a certificate; complex roots raise `ValueError`, and inability to certify raises `RuntimeError`. An explicit `assume_real_rooted=True` trusts the caller and bypasses verification.
 
 #### 3. Partition-Free Cumulant Recurrences
 Rather than explicitly constructing combinatorial structures (such as enumerating non-crossing partitions to calculate free cumulants), FiniteFree solves the finite $R$-transform and $S$-transform relationships using direct generating function recurrences. By rewriting the underlying algebraic equations into coefficient-level recurrence relations, the combinatorial explosion is reduced to a deterministic $O(d^2)$ exact rational arithmetic sweep.

@@ -26,6 +26,9 @@ def jacobi_polynomial(n: int, alpha: Any, beta: Any) -> RealRootedPolynomial:
     r"""
     Computes the Jacobi polynomial $P_n^{(\alpha, \beta)}(x)$ of degree $n$
     exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
+    For alpha, beta > -1, real-rootedness is known and exact=False root
+    evaluation uses a symmetric tridiagonal matrix. Other parameter values
+    produce formal polynomials with lazy real-rootedness validation.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
@@ -313,6 +316,9 @@ def laguerre_polynomial(n: int, alpha: Any) -> RealRootedPolynomial:
     r"""
     Computes the generalized Laguerre polynomial $L_n^{(\alpha)}(x)$
     exactly using the three-term recurrence relation over $\mathbb{Q}$ with flint.fmpq_poly.
+    Real-rootedness is known for alpha >= -1. The exact=False tridiagonal
+    root path requires alpha > -1; other parameters use the general path
+    and values below -1 require lazy real-rootedness validation.
     """
     if n < 0:
         raise ValueError("n must be non-negative")
