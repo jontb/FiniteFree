@@ -270,23 +270,39 @@ class RealRootedPolynomial(Polynomial):
                         "Polynomial is not real-rooted: complex root detected."
                     )
 
-            self._is_verified = True
-            # Isolation already found the roots. Reuse them instead of repeating
-            # Arb work or trying an ill-conditioned companion matrix afterward.
+        except ValueError:
+            raise
+        except Exception as inner_e:
+            raise RuntimeError("Could not certify real-rootedness.") from inner_e
+
+        self._is_verified = True
+        # A real-root certificate does not require float64 representability.
+        # Cache isolated roots only when the final numerical values are finite.
+        try:
             roots = [
                 flint_to_float(root.real)
                 for root, multiplicity in acb_roots
                 for _ in range(int(multiplicity))
             ]
-            self._roots_cached = np.sort(np.asarray(roots, dtype=np.float64))
-            self._roots_cached.setflags(write=False)
-            self._roots_cached_exact = True
-            self._roots_cached_prec = flint.ctx.prec
+            cached = self._finite_float64_root_array(np.sort(roots))
+        except (TypeError, ValueError, OverflowError, RuntimeError):
             return True
-        except ValueError:
-            raise
-        except Exception as inner_e:
-            raise RuntimeError("Could not certify real-rootedness.") from inner_e
+        self._roots_cached = cached
+        self._roots_cached_exact = True
+        self._roots_cached_prec = flint.ctx.prec
+        return True
+
+    @staticmethod
+    def _finite_float64_root_array(roots: Any) -> NDArray[np.float64]:
+        """Validate numerical representability before storing a root result."""
+        try:
+            result = np.asarray(roots, dtype=np.float64)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise RuntimeError("Roots cannot be converted to float64") from error
+        if not np.all(np.isfinite(result)):
+            raise RuntimeError("Roots are outside the finite float64 range")
+        result.setflags(write=False)
+        return result
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
         r"""
@@ -479,9 +495,11 @@ class RealRootedPolynomial(Polynomial):
 
         poly_flint = queue[0]
         inst = cls(poly_flint, assume_real_rooted=True)
-        float_roots = [flint_to_float(r) for r in roots]
-        inst._roots_cached = np.sort(np.array(float_roots, dtype=np.float64))
-        inst._roots_cached.setflags(write=False)
+        try:
+            float_roots = [flint_to_float(r) for r in roots]
+            inst._roots_cached = cls._finite_float64_root_array(np.sort(float_roots))
+        except (TypeError, ValueError, OverflowError, RuntimeError):
+            pass  # Exact construction is valid even beyond the float64 range.
         return inst
 
     def __str__(self) -> str:
@@ -556,6 +574,8 @@ class RealRootedPolynomial(Polynomial):
         when parallel=True, with high-precision/general numerical fallback.
         Arb validation retains isolated roots. An exact=True request bypasses
         an approximate cache or one recorded at a lower working precision.
+        Nonfinite numerical results raise RuntimeError without entering the cache;
+        exact construction and real-rootedness certification remain available.
         Nonfinite/underflowed recurrences fall back; extreme affine scales or
         shifts remain limited by float64 representability and conditioning.
         """
@@ -566,7 +586,7 @@ class RealRootedPolynomial(Polynomial):
         ):
             return self._roots_cached
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
-        res.setflags(write=False)
+        res = self._finite_float64_root_array(res)
         self._roots_cached = res
         self._roots_cached_exact = exact
         self._roots_cached_prec = flint.ctx.prec if exact else 0

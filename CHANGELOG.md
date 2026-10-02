@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Numerical real-root extraction rejects nonfinite final results before caching at every degree. Exact construction and real-rootedness certification remain available for roots outside the finite float64 range; representable values, multiplicities and read-only cache behavior are preserved.
+
 - Arb validation-created root caches obey the read-only array contract, including cache reuse and later precision upgrades. Cross-batch regressions also check nonmonic input snapshots, direct projections and shifted numerical cumulants together.
 
 - CI includes the advertised Python 3.9 minimum; documentation-tool annotations retain Python 3.9 compatibility.

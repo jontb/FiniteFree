@@ -10,6 +10,7 @@ This page describes the mathematical and numerical contracts with executable exa
 - `exact=True` requests python-flint/Arb isolation and remains the default. Use `PrecisionContext(degree=d, prec=192)` to request a working precision. This option selects the high-precision path; the returned floats are neither exact algebraic roots nor interval error bounds. SymPy/general numerical fallbacks may still be used if isolation fails.
 - An `exact=True` request bypasses a cache produced with `exact=False`, or a high-precision cache recorded at a lower working precision. An `exact=False` request can reuse any existing root result. Returned arrays are read-only and repeated calls may reuse the same array; call `.copy()` for editable values.
 - When real-rootedness validation uses Arb, it retains the isolated roots and working precision in that same read-only cache. Generic root calls can return this result directly, without another isolation or a companion-matrix pass. Without a suitable cache, dispatch follows the solver options below.
+- Numerical extraction raises `RuntimeError` if the final roots contain `NaN` or infinity; those values never enter a root cache. Exact rational construction, `from_roots`, and real-rootedness certification remain available when roots exceed the finite `float64` range. Tiny nonzero roots can still round to zero, and distinct roots can round to the same float.
 - If no usable recurrence is available, `exact=False` uses the existing balanced companion-matrix path, or the Aberth–Ehrlich path when `parallel=True`, with Arb/general numerical fallback. Generic monomial coefficients can be ill-conditioned. Fast recurrence metadata is preserved through affine transforms and proven Hermite additive convolutions, not through arbitrary coefficient operations.
 
 The recurrence path is available for degree at least two in these domains:
@@ -26,6 +27,19 @@ The recurrence path is available for degree at least two in these domains:
 | `symmetric_additive(p, q, d)` | Full-degree shifted/dilated Hermite inputs with exact family provenance |
 
 Nonfinite or underflowed recurrence entries and eigensolver failures fall back to the general path. Near-zero positive Laguerre roots require scaling without centering. Extreme scales or shifts can still overflow, underflow or erase root separations that `float64` cannot represent; `exact=True` cannot overcome final-output rounding. No uniform error guarantee is claimed for arbitrary polynomials. Compound-Wishart/lognormal convolutions retain the general solver.
+
+```python
+from finitefree import RealRootedPolynomial
+
+p = RealRootedPolynomial.from_roots([10**400, 10**400])
+assert p.verify_real_rootedness()  # Exact construction/certification still work.
+try:
+    p.evaluate_roots_float64()
+except RuntimeError:
+    pass
+else:
+    raise AssertionError("Out-of-range numerical roots were accepted")
+```
 
 ```python
 import numpy as np
