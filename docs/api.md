@@ -79,6 +79,35 @@ assert FiniteRTransform(p, order=3) == [1, 3, 9]
 assert list(p.additive_power(2).coeffs) == list(symmetric_additive(p, p, 3).coeffs)
 ```
 
+`numerical=True` uses Arb at `prec` bits (default 256) after centering the requested normalized-coefficient prefix exactly. The first cumulant is restored from the original mean; higher cumulants are invariant under translation. This avoids cancellation from large offsets while keeping the cumulant recurrence numerical. Centering uses the specified ambient dimension, including any zero padding. The precision setting is restored on return or failure. Results are float approximations rather than error bounds; increasing the order or using badly conditioned coefficients may require increasing `prec`.
+
+```python
+import numpy as np
+from finitefree import FiniteRTransform, gue_expected_poly
+
+p = gue_expected_poly(8).shift(10**50)
+values = FiniteRTransform(p, order=4, numerical=True, prec=128)
+assert values[0] == 1e50
+np.testing.assert_allclose(values[1:], [1, 0, 0], rtol=0, atol=1e-28)
+```
+
+For repeatable accuracy and timing checks, run `PYTHONPATH=. python scripts/benchmark_transforms.py --output transform-benchmark.json`. The default cases use degrees 60, 150 and 300, order 12, a shift of $10^{50}$ and 128-bit working precision. Hermite and Wishart analytic cumulants supply the reference. Transform times are best of three with normalized coefficients already cached; construction is reported separately. These cases test stability under translation, not arbitrary high-order inputs.
+
+### Finite T-transform
+
+`FiniteTTransform(p)` requires positive degree and non-negative roots. Its input must be a finite real value in $(0,1)$. It uses the right-continuous intervals in [Definition 6.3 and Remark 6.4](https://arxiv.org/html/2408.09337v2#S6.SS1), including the boundary of an atom at zero. Rational inputs and stored binary float values select intervals exactly, without a float multiplication that could round onto a neighboring grid boundary. Real symbolic constants are also supported. A float approximation to $k/d$ can lie on either side of that rational number; supply the rational value to select the exact boundary.
+
+```python
+import sympy as sp
+from finitefree import FiniteTTransform, RealRootedPolynomial
+
+T = FiniteTTransform(RealRootedPolynomial.from_roots([1, 2, 3, 4, 5]))
+assert T(sp.Rational(1, 10**400)) == sp.Rational(300, 137)
+assert T(1 - sp.Rational(1, 10**20)) == 3
+assert T(0.6) == sp.Rational(45, 17)  # stored float is below 3/5
+assert T(sp.Rational(3, 5)) == sp.Rational(17, 6)
+```
+
 ### Discrete DPP sampling
 
 `sample_discrete` uses floating-point spectral HKPV sampling for real symmetric correlation kernels. Nonprojection kernels first select eigenvectors with independent Bernoulli draws. It requires a finite square matrix matching the state-space size, symmetry, and spectrum in `[0, 1]`. Absolute roundoff up to `1e-10` is allowed; small asymmetry is symmetrized and eigenvalues are clipped only within that tolerance. Invalid kernels raise `ValueError` before sampling; loss of the projection basis raises `RuntimeError`.
