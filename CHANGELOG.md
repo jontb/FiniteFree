@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Numerical finite cumulants center the requested coefficient prefix exactly before the Arb recurrence, preserving higher cumulants under large translations without a full polynomial shift.
+- Finite T-transform interval selection preserves rational inputs near 0 and 1 and uses stored binary float values at grid boundaries. Degree-zero polynomials and invalid/nonfinite domain inputs raise `ValueError`. Use a rational input when an exact grid boundary is intended; rounded float products previously selected some neighboring intervals.
+
 - Matrix-pencil rational methods preserve supplied integer/rational values before preparing float64 numerical views. This fixes loss of integers above `2**53` in characteristic polynomials, SLP derivatives and multivariate determinants. Constructors validate square, consistent, finite real rational inputs; symmetric pencils require symmetry on the supplied values without approximate tolerance. Reconstruct a pencil to change its entries.
 - Cython modular evaluation reduces integers before int64 conversion, preventing overflow and repeated sparse interpolation retries for large entries.
 - Arb real-rootedness validation retains its roots for evaluation, avoiding duplicate isolation and a subsequent companion-matrix pass. Higher working-precision reference requests refresh the cache.
