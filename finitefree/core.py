@@ -1,8 +1,9 @@
 import abc
 import functools
 import math
+import operator
 import warnings
-from typing import Any, List, Sequence, Union
+from typing import Any, List, Sequence, SupportsIndex, Union
 
 import flint
 import numpy as np
@@ -969,18 +970,58 @@ class RealRootedPolynomial(Polynomial):
             res_poly, assume_real_rooted=self._is_verified, monic=monic
         )
 
-    def projection(self, j: int) -> "RealRootedPolynomial":
+    def projection(self, j: SupportsIndex) -> "RealRootedPolynomial":
         r"""
         Computes the projection $\partial^{j|d} p(x)$ which is the derivative
-        of order $d-j$, monic-normalized.
+        of order $d-j$, monic-normalized. Proper projections update only the
+        leading j+1 coefficients, without constructing intermediate derivatives.
+        Projection to the original degree returns self. Known Hermite provenance
+        preserves its variance, center and numerical root recurrence.
         """
-        if j < 0 or j > self.degree:
-            raise ValueError("Projection dimension j must be between 0 and degree.")
+        try:
+            dimension = operator.index(j)
+        except TypeError as error:
+            raise ValueError(
+                "Projection dimension j must be an integer between 0 and degree."
+            ) from error
+        if dimension < 0 or dimension > self.degree:
+            raise ValueError(
+                "Projection dimension j must be an integer between 0 and degree."
+            )
+        if dimension == self.degree:
+            return self
 
-        current = self
-        for _ in range(self.degree - j):
-            current = current.derivative()
-        return current
+        # For coefficient a_k of x^(d-k), monic differentiation multiplies
+        # a_k/a_0 by (j)_k/(d)_k. Accumulate that ratio exactly in O(j) updates.
+        multiplier = 1 / self._fmpq_poly[self.degree]
+        descending = []
+        for k in range(dimension + 1):
+            descending.append(self._fmpq_poly[self.degree - k] * multiplier)
+            if k < dimension:
+                multiplier *= flint.fmpq(dimension - k, self.degree - k)
+
+        result = RealRootedPolynomial(
+            flint.fmpq_poly(list(reversed(descending))),
+            assume_real_rooted=self._is_verified,
+        )
+        if self._hermite_variance is not None:
+            result._hermite_variance = self._hermite_variance
+            result._hermite_center = self._hermite_center
+            if self._root_recurrence is not None and dimension >= 2:
+                # Hermite derivatives use the leading principal Jacobi matrix.
+                # Keep the existing affine factors: variance itself may underflow
+                # in float64 while its square root and the roots remain usable.
+                diagonal, off_diagonal = self._root_recurrence
+                result._root_recurrence = (
+                    diagonal[:dimension].copy(),
+                    off_diagonal[: dimension - 1].copy(),
+                )
+                result._root_scale = self._root_scale
+                result._root_dilation = self._root_dilation
+                result._root_shift = self._root_shift
+                result._root_recurrence_driver = self._root_recurrence_driver
+                result._root_recurrence_positive = self._root_recurrence_positive
+        return result
 
     def additive_power(self, t: Any) -> "RealRootedPolynomial":
         r"""

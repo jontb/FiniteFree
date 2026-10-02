@@ -66,6 +66,34 @@ else:
     raise AssertionError("Complex-rooted reconstruction was accepted")
 ```
 
+### Polynomial projections
+
+For a rational polynomial of degree `d`, `p.projection(j)` computes the derivative of order `d-j`, monic-normalized when `j<d`. `j` must be an integer index in `[0,d]`, including NumPy integers. Projection to `d` returns `p` itself, preserving the existing identity boundary and any nonmonic leading coefficient. Proper projection to zero gives the unit constant polynomial.
+
+Writing $p(x)=\sum_{k=0}^{d}a_k x^{d-k}$, a proper projection uses
+
+$$
+\partial^{j\mid d}p(x)=\sum_{k=0}^{j}\frac{a_k}{a_0}
+\frac{(j)_k}{(d)_k}x^{j-k},
+$$
+
+where $(m)_k=m(m-1)\cdots(m-k+1)$ and $(m)_0=1$. The implementation reads only the leading `j+1` coefficients and accumulates the ratios in exact rational arithmetic. It avoids constructing intermediate derivatives and does not populate the full normalized-coefficient cache. The number of coefficient updates is linear in `j`; bit-arithmetic costs still depend on coefficient sizes. For monic input, the normalized coefficient prefix is unchanged, so for `1<=n<=j` the [finite-cumulant normalization](https://arxiv.org/html/2408.09337v2#S2.SS5) gives $\kappa_n^{(j)}(\partial^{j\mid d}p)=(j/d)^{n-1}\kappa_n^{(d)}(p)$.
+
+Projections preserve the source's verification flag. Known shifted/dilated Hermite inputs also preserve exact variance and center. The [Hermite derivative identity](https://dlmf.nist.gov/18.9#E25) permits copying the existing Jacobi-matrix prefix and its exact affine factors, including cases where the variance underflows in float64 while its square root remains usable. Family membership is not inferred from generic coefficient arrays. Proper projections of other families retain the general root-evaluation path; the numerical recurrence remains subject to the root conditioning limits above.
+
+```python
+import sympy as sp
+from finitefree import RealRootedPolynomial, gue_expected_poly
+
+p = RealRootedPolynomial.from_roots([1, 2, 3, 4])
+assert list(p.projection(2).coeffs) == [1, -5, sp.Rational(35, 6)]
+assert p.projection(4) is p
+projected = gue_expected_poly(100).projection(20)
+assert len(projected.evaluate_roots_float64(exact=False)) == 20
+```
+
+`PYTHONPATH=. python scripts/benchmark_projection.py --output projection-benchmark.json` times projections to degree 20 from GUE/Wishart degrees 100, 400 and 900. Exact Hermite/Laguerre derivative laws supply independent coefficient references. Source construction is reported separately; projection timings are best of five and exclude construction and reference generation. Results cover those families and degrees, not arbitrary coefficient sizes.
+
 ### Finite free cumulants
 
 `FiniteRTransform` uses $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence, following [Definition 2.14](https://arxiv.org/html/2408.09337v2#S2.SS5). `additive_power` uses the matching inverse: its polynomial coefficients agree with repeated symmetric additive convolution for positive integer powers. Requested orders above the ambient dimension return zero as an API convention, outside the finite cumulant definition.
