@@ -404,8 +404,10 @@ Linear root verification and extraction use the coefficient ratio, including num
 FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
 
 ```bash
-pytest tests/
+PYTHONPATH=. python -m pytest --import-mode=importlib tests/ scripts/tests/
 ```
+
+Documentation contributors can run `python scripts/sync_docs.py` followed by `mkdocs build --strict`. The synchronizer expects single-level `<details>` blocks with opening, summary and closing tags on separate lines. It preserves fenced examples, including literal HTML and links, while converting prose links from the README's `docs/` prefix. Missing input or malformed details blocks abort before changing the generated index. CI checks documentation tools with Ruff, strict mypy and `scripts/tests/` regressions.
 
 - **`test_core.py`**: Real-rootedness verification, divide-and-conquer root synthesis, and sequence extractions.
 - **`test_transformations.py`**: Exact algebraic variable scaling (dilation), shifts, powers, and reciprocal-root polynomial transformations.
