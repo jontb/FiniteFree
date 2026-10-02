@@ -310,6 +310,8 @@ print(t_transform(0.5))
 
 Finite free cumulants use the normalization in [Definition 2.14 of Arizmendi et al.](https://arxiv.org/html/2408.09337v2#S2.SS5), $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence. `additive_power` uses the matching inverse. Orders above the ambient dimension return zero as an API convention; they are outside the finite cumulant definition.
 
+`normalized_coeffs(d)` divides out the leading coefficient before applying the binomial normalization, so `e_0=1` even when a polynomial was stored with `monic=False`. Finite cumulants and coefficient convolutions therefore depend on the roots rather than a scalar multiple of the polynomial. The stored coefficients and polynomial evaluations retain that scalar; reconstructed/convolved results are monic. Larger ambient dimensions pad roots with zeros.
+
 Reconstruction from normalized coefficients produces a formal polynomial with lazy real-rootedness validation. Root extraction and positive-root domain checks reject complex-rooted inputs; formal coefficient convolutions remain available.
 
 Jacobi and Laguerre polynomials constructed outside their orthogonality domains are also validated lazily. Formal construction remains available, but a root request rejects a complex-rooted result such as `laguerre_polynomial(2, -3)`.

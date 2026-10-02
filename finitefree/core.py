@@ -299,7 +299,11 @@ class RealRootedPolynomial(Polynomial):
         return True
 
     def _normalized_coeffs_flint(self, d: Union[int, None] = None) -> list[Any]:
-        """Extracts the normalized elementary symmetric polynomial sequence as flint.fmpq."""
+        """Extract root-normalized elementary coefficients as flint.fmpq.
+
+        The leading coefficient is divided out, so e_0=1 even for a nonmonic
+        representation. Ambient dimensions above the degree pad roots with zero.
+        """
         if d is None:
             d = self.degree
 
@@ -316,12 +320,15 @@ class RealRootedPolynomial(Polynomial):
 
         if self._is_flint:
             e_k = []
+            leading = self._fmpq_poly[self.degree]
             curr_binom = flint.fmpz(1)
             for k in range(d + 1):
                 if k > 0:
                     curr_binom = (curr_binom * (d - k + 1)) // k
                 if k <= self.degree:
                     c_k = self._fmpq_poly[self.degree - k]
+                    if leading != 1:
+                        c_k /= leading
                     sign = (-1) ** k
                     val = c_k * flint.fmpq(flint.fmpz(sign), curr_binom)
                     e_k.append(val)
@@ -337,7 +344,10 @@ class RealRootedPolynomial(Polynomial):
     def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
         r"""
         Extracts the normalized elementary symmetric polynomial sequence
-        $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as SymPy Rationals.
+        $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as an object
+        array. Rational coefficients remain exact; symbolic coefficients use SymPy.
+        Divides out the leading coefficient, preserving the polynomial's stored
+        coefficients while making the sequence depend only on its roots.
         Returned arrays are read-only; use .copy() to obtain editable values.
         """
         if d is None:
@@ -357,11 +367,14 @@ class RealRootedPolynomial(Polynomial):
             e_k = [sp.Rational(int(val.p), int(val.q)) for val in raw]
         else:
             e_k = []
+            leading = self.coeffs_sympy[0]
             for k in range(d + 1):
                 if k <= self.degree:
                     binom = math.comb(d, k)
                     sign = (-1) ** k
                     c_k = self.coeffs_sympy[k]
+                    if leading != 1:
+                        c_k = sp.cancel(sp.sympify(c_k) / sp.sympify(leading))
                     val = sign * binom
                     if isinstance(c_k, (int, np.integer)):
                         if c_k % val == 0:

@@ -106,6 +106,22 @@ else:
 
 ### Finite free cumulants
 
+For $p(x)=\sum_{k=0}^{m}a_k x^{m-k}$ and ambient dimension $d\ge m$, `normalized_coeffs(d)` returns $\tilde e_k=(-1)^k a_k/(a_0\binom{d}{k})$ for `k<=m` and zero above `m`. The leading coefficient is divided out even for `monic=False`, so `e_0=1` and the sequence depends only on the roots, with zero padding when `d>m`. Rational normalization is exact; the SymPy path simplifies symbolic common factors. Stored coefficients, leading coefficient and polynomial evaluations are preserved, and normalization does not certify real-rootedness.
+
+Finite cumulants, additive powers and coefficient convolutions use this root-normalized sequence. Reconstructed/convolved outputs are monic. Ratio-based S/T transforms are unchanged by this scalar normalization. In particular, a nonmonic derivative from `derivative(monic=False)` has the same finite cumulants as its monic form.
+
+```python
+import sympy as sp
+from finitefree import FiniteRTransform, RealRootedPolynomial
+from finitefree.convolutions import symmetric_additive
+
+p = RealRootedPolynomial([2, -6, 4], monic=False)  # 2*(x-1)*(x-2)
+assert list(p.coeffs) == [2, -6, 4]
+assert list(p.normalized_coeffs()) == [1, sp.Rational(3, 2), 2]
+assert FiniteRTransform(p, order=2) == [sp.Rational(3, 2), sp.Rational(1, 2)]
+assert list(symmetric_additive(p, p, 2).coeffs) == [1, -6, sp.Rational(17, 2)]
+```
+
 `FiniteRTransform` uses $\kappa_n^{(d)}=(-d)^{n-1}c_n/(n-1)!$, where $c_n$ is the classical cumulant of the normalized coefficient sequence, following [Definition 2.14](https://arxiv.org/html/2408.09337v2#S2.SS5). `additive_power` uses the matching inverse: its polynomial coefficients agree with repeated symmetric additive convolution for positive integer powers. Requested orders above the ambient dimension return zero as an API convention, outside the finite cumulant definition.
 
 ```python

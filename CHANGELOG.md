@@ -6,6 +6,8 @@
 
 - Polynomial construction copies mutable FLINT inputs; symbolic coefficient access returns independent arrays. Normalized coefficients and real/unitary root arrays are now read-only, with `.copy()` available for editing. T-transforms own their coefficient list instead of exposing the polynomial's cache.
 
+- Normalized elementary coefficient sequences divide out the leading coefficient for `monic=False` inputs, making `e_0=1` and finite cumulants invariant under a nonzero scalar multiple. This also permits coefficient convolutions/reconstruction of nonmonic representations and corrects their additive powers. Stored coefficients and evaluations retain their scalar. Ratio-based S/T transforms preserve their existing values; symbolic common factors are simplified in the SymPy normalization path.
+
 - Finite free cumulants use `(-d)**(n-1) * c_n / (n-1)!`, following Definition 2.14 of Arizmendi et al. Earlier code multiplied by `(n-1)!`. For orders `n >= 3`, recompute saved cumulants or convert with `new = old / ((n-1)!)**2`. The first two cumulants are unchanged. The matching additive-power inverse is updated, preserving valid polynomial coefficients.
 - Reconstructed normalized coefficient sequences and Jacobi/Laguerre polynomials outside proven orthogonality domains are validated lazily. Root extraction and positive-root domain checks reject complex-rooted inputs rather than accepting false certificates. Inability to certify raises `RuntimeError`.
 - DPP sampling validates real symmetric correlation kernels, spectrum, shape and finiteness. Invalid kernels raise `ValueError`; numerical roundoff up to `1e-10` is allowed. Kernel subsets/permutations respect the requested state space.
