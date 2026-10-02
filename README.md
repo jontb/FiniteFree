@@ -172,6 +172,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 - **Matrix Samplers**: Fast generation of invariant random matrices for GOE ($O(d)$, $\beta=1$), GUE ($U(d)$, $\beta=2$), and GSE ($USp(2d)$, $\beta=4$).
 - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
+- **`EmpiricalComparison`**: Compares all sampled characteristic coefficients, including deterministic ones, with Bonferroni-adjusted two-sided Student-t bands. `alpha` controls the nominal family significance level; coefficient scaling prevents variance overflow/underflow. Samples must be finite Hermitian matrices of the matching size, with verified eigenvalue pairs for doubled-size representations. See the [API reference](docs/api.md#empirical-coefficient-comparison) for sample assumptions and numerical tolerances.
 
 </details>
 

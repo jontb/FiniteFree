@@ -165,6 +165,32 @@ assert T(0.6) == sp.Rational(45, 17)  # stored float is below 3/5
 assert T(sp.Rational(3, 5)) == sp.Rational(17, 6)
 ```
 
+### Empirical coefficient comparison
+
+`EmpiricalComparison(p, samples, generator)` stores eigenvalues and characteristic coefficients from at least two samples. Each sample must be a finite Hermitian matrix of shape `(d, d)`, where `d=p.degree`. A `(2d, 2d)` representation is accepted when its sorted eigenvalues occur in pairs; one eigenvalue from each pair supplies the degree-`d` characteristic polynomial. Hermitian and pairing checks permit absolute roundoff up to `1e-10` times the largest entry magnitude or eigenvalue magnitude, respectively. Matrix eigenvalues, sampled coefficients, and analytical coefficients must fit finite `float64` values.
+
+`verify_coefficients(alpha=0.05, *, rtol=1e-10, atol=0)` compares every coefficient mean to the analytical target with half-width
+
+$$
+t_{1-\alpha/(2(d+1)),\,N-1}\frac{s}{\sqrt{N}}
++\mathrm{atol}+\mathrm{rtol}\,|\mathrm{target}|.
+$$
+
+The Student-t mean band follows the [NIST definition](https://www.itl.nist.gov/div898/handbook/eda/section3/eda352.htm); [Bonferroni adjustment](https://www.itl.nist.gov/div898/handbook/prc/section4/prc473.htm) allocates `alpha` across the `d+1` coefficients without assuming independence between coefficients. Smaller `alpha` gives wider bands. Samples must be independent; Student-t coverage is exact for normal coefficient observations and is a large-sample approximation for other distributions. Characteristic coefficients of random matrices need not be normal. A return value of `True` reports no detected coefficient mismatch under this diagnostic, not proof of a sampler's distribution.
+
+Zero sample variance still requires agreement within the explicit numerical tolerances. The calculation divides each coefficient column and its target by their maximum magnitude before computing the mean and standard deviation, avoiding variance overflow or underflow across different coefficient scales. It cannot recover precision already lost in eigenvalues or characteristic coefficients. Nonfinite/invalid `alpha`, unrepresentable critical values, and negative/nonfinite tolerances raise `ValueError`.
+
+```python
+import numpy as np
+from finitefree import EmpiricalComparison, RealRootedPolynomial
+
+p = RealRootedPolynomial.from_roots([1, 2])
+matching = EmpiricalComparison(p, 3, lambda: np.diag([1, 2]))
+assert matching.verify_coefficients()
+mismatch = EmpiricalComparison(p, 3, lambda: np.zeros((2, 2)))
+assert not mismatch.verify_coefficients()
+```
+
 ### Discrete DPP sampling
 
 `sample_discrete` uses floating-point spectral HKPV sampling for real symmetric correlation kernels. Nonprojection kernels first select eigenvectors with independent Bernoulli draws. It requires a finite square matrix matching the state-space size, symmetry, and spectrum in `[0, 1]`. Absolute roundoff up to `1e-10` is allowed; small asymmetry is symmetrized and eigenvalues are clipped only within that tolerance. Invalid kernels raise `ValueError` before sampling; loss of the projection basis raises `RuntimeError`.
