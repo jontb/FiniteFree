@@ -312,6 +312,10 @@ Finite free cumulants use the normalization in [Definition 2.14 of Arizmendi et 
 
 `normalized_coeffs(d)` divides out the leading coefficient before applying the binomial normalization, so `e_0=1` even when a polynomial was stored with `monic=False`. Finite cumulants and coefficient convolutions therefore depend on the roots rather than a scalar multiple of the polynomial. The stored coefficients and polynomial evaluations retain that scalar; reconstructed/convolved results are monic. Larger ambient dimensions pad roots with zeros.
 
+`FiniteRTransform(..., numerical=True, prec=256)` centers the requested coefficient prefix in rational arithmetic, computes the recurrence with Arb, and restores the first cumulant (the mean). This avoids cancellation from large translations without shifting the entire polynomial or computing all cumulants exactly. Results are floats at the requested working precision; high-order cancellation can still require more precision. `scripts/benchmark_transforms.py` compares shifted Hermite/Wishart cumulants with their analytic values and reports transform time separately from construction.
+
+`FiniteTTransform` requires positive degree and non-negative roots, and evaluates a right-continuous step function for finite real inputs in $(0,1)$. Rational inputs retain their exact position, including values arbitrarily close to an endpoint. Floats select intervals using their stored binary values; use `sympy.Rational(k, d)` when an exact grid boundary is intended.
+
 Reconstruction from normalized coefficients produces a formal polynomial with lazy real-rootedness validation. Root extraction and positive-root domain checks reject complex-rooted inputs; formal coefficient convolutions remain available.
 
 Jacobi and Laguerre polynomials constructed outside their orthogonality domains are also validated lazily. Formal construction remains available, but a root request rejects a complex-rooted result such as `laguerre_polynomial(2, -3)`.
@@ -463,6 +467,7 @@ Documentation contributors can run `python scripts/sync_docs.py` followed by `mk
 - **`test_hyperbolic.py`**: Multivariate homogeneous polynomials, CRT grid interpolations, sparse FLINT arrays, and Jacobi SLP evaluations.
 - **`test_orthogonal.py`**: Exact hypergeometric and multivariate orthogonal polynomial families (Jacobi, Hahn, Jack).
 - **`test_numerical_roots.py`**: Independent 192-bit Arb comparisons, tiny positive hard-edge roots, affine scales, solver fallback and cache behavior.
+- **`test_transform_stability.py`**: Shifted Hermite/Wishart cumulants, tiny spreads beneath large translations, ambient dimensions, exact T-transform interval boundaries and the Marchenko–Pastur diagonal limit.
 - **`test_dpp.py`**: Correlation-kernel validation, state-space ordering and seeded projection/nonprojection sampling laws.
 
 For reproducible root benchmarks, run `PYTHONPATH=. python scripts/benchmark_roots.py --output roots-benchmark.json`. The script compares uncached numerical roots with independently isolated 192-bit Arb roots at degrees 32, 100 and 300, and reports construction time separately. On jon-desktop (Python 3.13, NumPy 2.2.4, SciPy 1.15.3, python-flint 0.9.0), degree-300 results were:
