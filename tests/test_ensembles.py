@@ -89,6 +89,7 @@ def test_haar_samplers() -> None:
 
 
 def test_empirical_gue_expected_poly() -> None:
+    np.random.seed(42)
     d = 4
     samples = 1000
     analytical_poly = gue_expected_poly(d)
@@ -103,11 +104,12 @@ def test_empirical_gue_expected_poly() -> None:
         generator=lambda: sample_gue(d),
     )
 
-    # Coefficient mean validation (5-sigma confidence)
-    assert comp.verify_coefficients()
+    # Use a small nominal rejection probability for this seeded smoke test.
+    assert comp.verify_coefficients(alpha=1e-6)
 
 
 def test_empirical_wishart_expected_poly() -> None:
+    np.random.seed(42)
     d = 3
     n = 6
     samples = 1000
@@ -121,7 +123,7 @@ def test_empirical_wishart_expected_poly() -> None:
         generator=lambda: sample_wishart(d, n, beta=2),
     )
 
-    assert comp.verify_coefficients()
+    assert comp.verify_coefficients(alpha=1e-6)
 
 
 def test_empirical_unitary_validation_beta2() -> None:
