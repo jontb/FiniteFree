@@ -20,8 +20,9 @@ def test_medium_squarefree_factors_reuse_a_certified_arb_root_cache(
         assert flint.ctx.prec == initial_precision
         assert p._roots_cached_exact
         assert p._roots_cached_prec == initial_precision
-        np.testing.assert_array_equal(p.evaluate_roots_float64(), expected)
-        assert not p._roots_cached.flags.writeable
+        roots = p.evaluate_roots_float64()
+        np.testing.assert_array_equal(roots, expected)
+        assert not roots.flags.writeable
 
 
 @pytest.mark.parametrize("degree", [15, 16, 20, 30])
