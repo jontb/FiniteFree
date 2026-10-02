@@ -7,6 +7,7 @@ blocks fail before the destination is written.
 
 import re
 from pathlib import Path
+from typing import Optional
 
 
 def is_list_item(line: str) -> bool:
@@ -27,7 +28,7 @@ def convert_readme(content: str) -> str:
     current_details_content: list[str] = []
     title = ""
     details_line = 0
-    fence: str | None = None
+    fence: Optional[str] = None
 
     i = 0
     while i < len(lines):
@@ -130,7 +131,7 @@ def convert_readme(content: str) -> str:
     return "\n".join(new_lines) + "\n"
 
 
-def sync(root_dir: Path | None = None) -> None:
+def sync(root_dir: Optional[Path] = None) -> None:
     if root_dir is None:
         root_dir = Path(__file__).parent.parent.resolve()
     readme_path = root_dir / "README.md"

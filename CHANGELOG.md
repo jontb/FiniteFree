@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CI includes the advertised Python 3.9 minimum; documentation-tool annotations retain Python 3.9 compatibility.
+
 - Linear symbolic roots are checked for realness instead of receiving an unconditional certificate. Certified numeric roots use their coefficient ratio for extraction and geometry; unknown realness/signs and nonnumeric/out-of-range numerical requests raise descriptive errors without poisoning caches.
 
 - Polynomial construction copies mutable FLINT inputs; symbolic coefficient access returns independent arrays. Normalized coefficients and real/unitary root arrays are now read-only, with `.copy()` available for editing. T-transforms own their coefficient list instead of exposing the polynomial's cache.

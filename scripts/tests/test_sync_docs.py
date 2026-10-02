@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -117,7 +118,7 @@ def test_sync_creates_parent_directories_and_writes_utf8(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("readme", [None, "<details>\n"])
 def test_cli_returns_failure_without_overwriting_the_index(
-    tmp_path: Path, readme: str | None
+    tmp_path: Path, readme: Optional[str]
 ) -> None:
     root = Path(__file__).resolve().parents[2]
     script = tmp_path / "scripts" / "sync_docs.py"
