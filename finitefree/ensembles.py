@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial
+from .utils.roots import _gaussian_roots, _laguerre_roots
 
 
 def sample_gue(d: int, scale: float = 1.0) -> Any:
@@ -126,7 +127,8 @@ def gue_expected_poly(d: int) -> RealRootedPolynomial:
             scaled_coeffs.append(coeff * factor)
 
     new_poly = flint.fmpq_poly(scaled_coeffs)
-    return RealRootedPolynomial(new_poly, assume_real_rooted=True)
+    result = RealRootedPolynomial(new_poly, assume_real_rooted=True)
+    return _gaussian_roots(result, flint.fmpq(1, d)) if d else result
 
 
 def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial:
@@ -154,7 +156,12 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
             scaled_coeffs.append(coeff * factor)
 
     new_poly = flint.fmpq_poly(scaled_coeffs)
-    return RealRootedPolynomial(new_poly, assume_real_rooted=True)
+    result = _laguerre_roots(
+        RealRootedPolynomial(new_poly, assume_real_rooted=True), n - d
+    )
+    if result._root_recurrence is not None:
+        result._root_dilation = flint.fmpq(1, n)
+    return result
 
 
 class EmpiricalComparison:

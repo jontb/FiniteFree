@@ -84,10 +84,11 @@ skip = ["pp*", "*-manylinux_i686", "*-musllinux_i686", "*-win32"]
 archs = ["auto64"]
 # Verbosity level to show internal build and repair logs
 build-verbosity = 1
+test-requires = ["pytest>=7.0"]
+test-command = "python {project}/scripts/test_installed_wheel.py"
 
 
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
 repair-wheel-command = ""
-
 

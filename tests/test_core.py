@@ -54,7 +54,8 @@ def test_from_normalized_coeffs() -> None:
     e_k = [1, 1, 1]
     poly = RealRootedPolynomial.from_normalized_coeffs(e_k)
     assert np.allclose(list(poly.coeffs), [1, -2, 1])
-    assert poly._is_verified
+    assert not poly._is_verified
+    assert poly.verify_real_rootedness()
 
 
 def test_verify_root_interlacing() -> None:
@@ -199,3 +200,41 @@ def test_derivative_non_monic() -> None:
     # Non-monic: returns 2x - 3
     dp_non_monic = p.derivative(monic=False)
     assert np.allclose(list(dp_non_monic.coeffs), [2, -3])
+
+
+@pytest.mark.parametrize("degree", [2, 16, 35])
+def test_near_real_complex_roots_rejected(degree: int) -> None:
+    # The imaginary parts are small enough to pass the former float tolerance.
+    quadratic = flint.fmpq_poly([flint.fmpq(1, 10**10), 0, 1])
+    real_factor = RealRootedPolynomial.from_roots(range(1, degree - 1))._fmpq_poly
+    p = RealRootedPolynomial(quadratic * real_factor)
+    with pytest.raises(ValueError, match="not real-rooted"):
+        p.verify_real_rootedness()
+    assert not p._is_verified
+
+
+def test_normalized_coefficients_do_not_certify_roots() -> None:
+    p = RealRootedPolynomial.from_normalized_coeffs([1, 0, 1])
+    assert list(p.coeffs) == [1, 0, 1]
+    assert not p._is_verified
+    with pytest.raises(ValueError, match="not real-rooted"):
+        p.evaluate_roots_float64()
+
+
+@pytest.mark.parametrize("coeffs", [[], [0, 1], [2, 1, 1]])
+def test_normalized_coefficients_require_monic_normalization(coeffs: list[int]) -> None:
+    with pytest.raises(ValueError, match="e_0 = 1"):
+        RealRootedPolynomial.from_normalized_coeffs(coeffs)
+
+
+@pytest.mark.parametrize("coeffs", [[0], [0, 0], flint.fmpq_poly([])])
+def test_zero_polynomial_rejected(coeffs: object) -> None:
+    with pytest.raises(ValueError, match="Zero polynomial"):
+        RealRootedPolynomial(coeffs)  # type: ignore[arg-type]
+
+
+def test_certified_high_degree_roots_with_multiplicities() -> None:
+    p = RealRootedPolynomial(RealRootedPolynomial.from_roots([1] * 35)._fmpq_poly)
+    assert not p._is_verified
+    assert p.verify_real_rootedness()
+    np.testing.assert_allclose(p.evaluate_roots_float64(), np.ones(35))

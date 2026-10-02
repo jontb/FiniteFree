@@ -25,6 +25,8 @@ def sync():
     print(f"Reading {readme_path}...")
     with open(readme_path, "r", encoding="utf-8") as f:
         content = f.read()
+    # Documentation links in README are relative to the repository root.
+    content = content.replace("](docs/", "](")
 
     # Convert details blocks
     lines = content.splitlines()

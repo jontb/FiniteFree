@@ -44,7 +44,23 @@ def symmetric_additive(
         val_res = C_poly[k] * curr_fact
         e_res.append(val_res)
 
-    return RealRootedPolynomial.from_normalized_coeffs(e_res)
+    result = RealRootedPolynomial.from_normalized_coeffs(e_res)
+    if (
+        p.degree == q.degree == d
+        and p._hermite_variance is not None
+        and q._hermite_variance is not None
+    ):
+        # Shifted/dilated Hermite polynomials are closed under boxplus_d.
+        # Keep exact provenance rather than inferring a family from rounded coefficients.
+        from .utils.roots import _gaussian_roots
+
+        result = _gaussian_roots(
+            result,
+            p._hermite_variance + q._hermite_variance,
+            p._hermite_center + q._hermite_center,
+        )
+        result._is_verified = True
+    return result
 
 
 def multiplicative(

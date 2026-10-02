@@ -27,12 +27,12 @@ def animate_asymptotic_convergence() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Pre-calculate roots using our high-precision isolation pipeline
+    # Pre-calculate roots using the stable Hermite tridiagonal solver.
     roots_dict = {}
     for d in degrees:
         p = gue_expected_poly(d)
         res = symmetric_additive(p, p, d)
-        roots = res.evaluate_roots_float64()
+        roots = res.evaluate_roots_float64(exact=False)
         scaled_roots = roots / np.sqrt(2.0)
         roots_dict[d] = scaled_roots
 
@@ -93,11 +93,11 @@ def animate_marchenko_pastur_convergence() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Pre-calculate roots using our high-precision isolation pipeline
+    # Pre-calculate roots using the stable Laguerre tridiagonal solver.
     roots_dict = {}
     for d in degrees:
         p = wishart_expected_poly(d, n=int(d * c_ratio))
-        roots = p.evaluate_roots_float64()
+        roots = p.evaluate_roots_float64(exact=False)
         scaled_roots = roots * c_ratio
         roots_dict[d] = scaled_roots
 
@@ -163,11 +163,11 @@ def animate_free_jacobi_arcsine_convergence() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Pre-calculate roots using our high-precision isolation pipeline
+    # Pre-calculate roots using the stable Jacobi tridiagonal solver.
     roots_dict = {}
     for d in degrees:
         p = jacobi_polynomial(d, alpha=0, beta=0)
-        roots = p.evaluate_roots_float64()
+        roots = p.evaluate_roots_float64(exact=False)
         roots_dict[d] = roots
 
     def update(frame: int) -> None:

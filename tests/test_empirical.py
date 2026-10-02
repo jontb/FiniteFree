@@ -12,7 +12,7 @@ from finitefree import (
 
 
 def test_discrete_finite_kernel() -> None:
-    # 3x3 identity matrix as a projection kernel of trace 2 (projection on 2 coordinates)
+    # A nonprojection correlation kernel with eigenvalues 1, 1, 1/3.
     K = [
         [flint.fmpq(2, 3), flint.fmpq(1, 3), flint.fmpq(0)],
         [flint.fmpq(1, 3), flint.fmpq(2, 3), flint.fmpq(0)],

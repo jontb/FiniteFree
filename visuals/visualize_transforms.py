@@ -459,7 +459,7 @@ def visualize_cauchy_domain_coloring():
 
     for idx, d in enumerate(d_vals):
         p = gue_expected_poly(d)
-        roots = p.evaluate_roots_float64()
+        roots = p.evaluate_roots_float64(exact=False)
 
         diff = Z[:, :, np.newaxis] - roots
         with np.errstate(divide="ignore", invalid="ignore"):
