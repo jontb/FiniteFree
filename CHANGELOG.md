@@ -20,7 +20,8 @@ The following development changes are being prepared for **0.2**, which is not p
 - Add real float64 batch evaluation with finite-input/coefficient/result checks and documented cancellation/underflow limits.
 - Reject negative/fractional/boolean derivative orders and nonhomogeneous multinomial normalization. These previously allowed silent no-op or mathematically undefined results.
 - Native exports now return independent copies; callers modifying the previously exposed live object must reconstruct a new polynomial explicitly.
-- Modular determinant reconstruction now uses a proved coefficient-size bound to determine the necessary CRT modulus. Consecutive agreement previously allowed large nonzero coefficients divisible by the early primes to be reconstructed as zero. Sparse support discovery remains randomized.
+- Modular determinant reconstruction now uses a proved coefficient-size bound to determine the necessary CRT modulus. Consecutive agreement previously allowed large nonzero coefficients divisible by the early primes to be reconstructed as zero.
+- Sparse determinant construction independently verifies randomized discovery with an exact bounded Kronecker encoding. Balanced-base recovery repairs omitted or incorrect terms and provides a fallback after eight failed prime fields. The new keyword-only `max_verification_bits=1_000_000` raises `ValueError` before discovery when verification exceeds its conservative integer-size bound; callers needing larger encodings must opt in explicitly or choose another constructor.
 
 ### Documentation and release preparation
 

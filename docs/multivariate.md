@@ -99,4 +99,27 @@ Determinant factories continue to accept the exact rational matrix-pencil snapsh
 
 After clearing denominators, modular reconstruction continues until the product of accepted primes exceeds twice a determinant coefficient bound. For integer matrices, one such bound is `n! * product_r max_c sum_j abs(A_j[r,c])`: each determinant permutation is a product of linear forms, and the coefficient sum of absolute values is bounded by the product of their coefficient sums. This guarantees a unique centered integer reconstruction of every recovered coefficient. Mere agreement between consecutive CRT reconstructions is insufficient.
 
-The dense grid covers the full homogeneous coefficient support. Sparse Zippel support discovery still uses randomized probes; the coefficient bound certifies recovered coefficient size, but does not by itself certify that randomized support discovery found every monomial. A general sparse support certificate remains a separate improvement.
+The dense grid covers the full homogeneous coefficient support. `from_symmetric_matrix_pencil_sparse` keeps randomized Zippel discovery, then independently verifies all coefficients and the complete support with one exact integer determinant. The coefficient bound alone does not prove support completeness.
+
+For a nonzero bound `B`, dehomogenize the integer determinant by setting the last variable to 1. Encode the other exponents in radix `n+1`, using weights `w_j=(n+1)**j`. Every homogeneous monomial then has a distinct encoded exponent. Evaluate at integer coordinates `x_j=b**w_j`, where `b=2*B+1`. Both the true coefficients and an accepted candidate's coefficients lie in `[-B, B]`. A nonzero difference has coefficients of magnitude at most `b-1`; its highest term at `b` strictly exceeds the sum of every lower term. Equality of the candidate value and the exact determinant therefore proves equality of every coefficient, including monomials omitted by discovery. This is a deterministic identity check, not a random point test.
+
+If the candidate fails its coefficient bounds or this identity check, balanced-base digits of the exact determinant recover the complete polynomial directly. Eight failed prime fields also trigger this exact fallback, avoiding unlimited retries of singular randomized systems. Negative digits, zero coefficients and denominator restoration are handled exactly. A zero row bound proves the determinant identically zero without discovery; an empty matrix has determinant 1.
+
+The encoding can grow exponentially with the variable count. The keyword-only `max_verification_bits` defaults to **1,000,000** and caps the conservative bound `(E+1)*b.bit_length()`, where `E=n*(n+1)**(m-2)` for `m>=2`. This bounds the encoded determinant and evaluated matrix-entry sizes. The check runs before randomized discovery or allocation of the large powers. Exceeding it raises `ValueError`; the method never returns a candidate without verification. Increase the limit explicitly only when the larger integers are feasible, or choose a different determinant constructor. This is an integer-size guard, not a total memory or runtime quota: determinant arithmetic, discovery and fallback decoding can still be expensive. One-variable, empty-matrix and proved-zero-row cases bypass the encoding.
+
+```python
+import sympy as sp
+from finitefree.hyperbolic import SymmetricMatrixPencil
+from finitefree.multivariate import MultivariatePolynomial
+
+pencil = SymmetricMatrixPencil([
+    [[1, 0], [0, 0]],
+    [[0, 0], [0, 1]],
+    [[0, 0], [0, -2]],
+])
+p = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(
+    pencil, max_verification_bits=1_000_000
+)
+x, y, z = p.variables
+assert sp.expand(p.expr - x * (y - 2*z)) == 0
+```

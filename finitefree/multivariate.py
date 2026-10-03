@@ -32,6 +32,101 @@ def _determinant_coefficient_bound(
     )
 
 
+def _determinant_encoding_parameters(
+    n: int, m: int, coefficient_bound: int, max_bits: int
+) -> tuple[int, tuple[int, ...]]:
+    """Bound the exact Kronecker encoding before allocating large powers.
+
+    Dehomogenize x_m=1 and encode exponent tuples in radix n+1. At integer
+    base b=2B+1, the determinant has balanced digits in [-B, B]. Its largest
+    exponent is E=n*(n+1)**(m-2), so (E+1)*b.bit_length() bounds its bit size
+    and every evaluated matrix entry. This is not a runtime or memory quota.
+    """
+    base = 2 * coefficient_bound + 1
+    weights = [1]
+    for i in range(m - 1):
+        if i:
+            weights.append(weights[-1] * (n + 1))
+        if (n * weights[-1] + 1) * base.bit_length() > max_bits:
+            raise ValueError(
+                "Deterministic sparse verification exceeds "
+                f"max_verification_bits={max_bits}; increase the limit explicitly "
+                "or use another determinant constructor"
+            )
+    return base, tuple(weights)
+
+
+def _decode_determinant_encoding(
+    value: int, n: int, m: int, base: int
+) -> dict[tuple[int, ...], int]:
+    """Recover all coefficients from the exact balanced-base determinant."""
+    coefficients = {}
+    encoded_exponent = 0
+    bound = (base - 1) // 2
+    while value:
+        value, coefficient = divmod(value, base)
+        if coefficient > bound:
+            coefficient -= base
+            value += 1
+        if coefficient:
+            remaining = encoded_exponent
+            exps = []
+            for _ in range(m - 1):
+                remaining, power = divmod(remaining, n + 1)
+                exps.append(power)
+            if remaining or sum(exps) > n:
+                raise RuntimeError("Invalid homogeneous determinant encoding")
+            coefficients[tuple(exps)] = coefficient
+        encoded_exponent += 1
+    return coefficients
+
+
+def _certify_sparse_determinant_coefficients(
+    matrices: Sequence[Sequence[Sequence[int]]],
+    coefficients: Mapping[tuple[int, ...], int],
+    coefficient_bound: int,
+    base: int,
+    weights: Sequence[int],
+) -> dict[tuple[int, ...], int]:
+    """Verify a sparse candidate exactly, decoding the determinant on failure.
+
+    Radix n+1 gives each dehomogenized monomial a distinct exponent. Candidate
+    and determinant coefficients must both lie in [-B, B]. Their difference
+    has digits at most 2B=b-1: its highest nonzero term strictly dominates the
+    sum of all lower terms at b. Equal integer values therefore prove equality
+    of all coefficients, including absent candidate monomials.
+    """
+    import flint
+
+    n = len(matrices[0])
+    point = [pow(base, weight) for weight in weights] + [1]
+    evaluated = flint.fmpz_mat(
+        [
+            [
+                sum(x * matrix[r][c] for x, matrix in zip(point, matrices))
+                for c in range(n)
+            ]
+            for r in range(n)
+        ]
+    )
+    determinant = int(evaluated.det())
+    candidate_is_bounded = all(
+        len(exps) == len(weights)
+        and all(0 <= power <= n for power in exps)
+        and sum(exps) <= n
+        and abs(coefficient) <= coefficient_bound
+        for exps, coefficient in coefficients.items()
+    )
+    if candidate_is_bounded:
+        candidate_value = sum(
+            coefficient * pow(base, sum(e * w for e, w in zip(exps, weights)))
+            for exps, coefficient in coefficients.items()
+        )
+        if candidate_value == determinant:
+            return {exps: c for exps, c in coefficients.items() if c}
+    return _decode_determinant_encoding(determinant, n, len(matrices), base)
+
+
 @functools.lru_cache(maxsize=None)
 def get_monomial_exponents(dim: int, deg: int) -> list[tuple[int, ...]]:
     if dim == 1:
@@ -546,23 +641,41 @@ class MultivariatePolynomial(Polynomial):
 
     @classmethod
     def from_symmetric_matrix_pencil_sparse(
-        cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
+        cls,
+        pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil],
+        *,
+        max_verification_bits: SupportsIndex = 1_000_000,
     ) -> "MultivariatePolynomial":
         r"""
         Constructs the multivariate polynomial $\det(x_1 A_1 + \dots + x_m A_m)$
         by evaluating the determinants modulo prime numbers exactly using fast
         C-level modular matrix mathematics and reconstructing exact coefficients
-        over $\mathbb{Q}$ using Zippel's sparse interpolation algorithm.
+        over $\mathbb{Q}$ using randomized Zippel discovery followed by exact
+        deterministic coefficient/support verification. A failed candidate or
+        eight failed prime fields triggers balanced-base exact reconstruction.
+
+        ``max_verification_bits`` caps the conservative bit-size bound for the
+        exact Kronecker verification before discovery starts. Exceeding it
+        raises ValueError rather than returning an uncertified polynomial.
+        Increasing the limit is explicit; it is not a runtime or memory quota.
         """
         import math
         import random
 
         import flint
 
+        if isinstance(max_verification_bits, (bool, np.bool_)):
+            raise TypeError("max_verification_bits must be a positive integer")
+        verification_limit = operator.index(max_verification_bits)
+        if verification_limit <= 0:
+            raise ValueError("max_verification_bits must be a positive integer")
+
         n = pencil.n
         m = pencil.m
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
+        if n == 0:
+            return cls(sp.Integer(1), variables)
         if m == 1:
             exact_A = pencil._get_matrices_sympy()[0]
             det_val = sp.Matrix(exact_A).det()
@@ -595,6 +708,13 @@ class MultivariatePolynomial(Polynomial):
                     row.append(int(val))
                 int_A.append(row)
             integer_matrices.append(int_A)
+
+        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
+        if coefficient_bound == 0:
+            return cls(sp.Integer(0), variables)
+        verification_base, verification_weights = _determinant_encoding_parameters(
+            n, m, coefficient_bound, verification_limit
+        )
 
         def eval_point_mod_p(pt: tuple[int, ...], p: int) -> int:
             M_pt = flint.nmod_mat(n, n, p)
@@ -706,18 +826,21 @@ class MultivariatePolynomial(Polynomial):
             return S
 
         primes_gen = prime_generator(1000000007)
-        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
         modulus = 1
-        reconstructed = None
+        reconstructed: dict[tuple[int, ...], int] = {}
         primes_used = []
         coeffs_by_prime = []
         exps = []
+        failed_primes = 0
 
         while True:
             p = next(primes_gen)
             try:
                 S_p = zippel_mod_p(p)
             except ValueError:
+                failed_primes += 1
+                if failed_primes >= 8:
+                    break
                 continue
 
             for exp in S_p:
@@ -739,6 +862,14 @@ class MultivariatePolynomial(Polynomial):
                 reconstructed = current_reconstruction
                 if modulus > 2 * coefficient_bound:
                     break
+
+        reconstructed = _certify_sparse_determinant_coefficients(
+            integer_matrices,
+            reconstructed,
+            coefficient_bound,
+            verification_base,
+            verification_weights,
+        )
 
         names = tuple(x.name for x in variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)

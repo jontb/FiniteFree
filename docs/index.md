@@ -131,7 +131,7 @@ The following pre-rendered figures illustrate selected finite-degree examples an
     - **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64` evaluates real batches with explicit rounding/range limits. Native inputs and `to_fmpq_mpoly()` exports are copied, with ordered variable contexts checked. Costs depend on monomial count, degree, batch size and coefficient sizes.
     - **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
     - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
-    - **Zippel Sparse Interpolation**: Uses randomized finite-field support discovery for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`). CRT reconstruction uses a proved coefficient bound; randomized support completeness is not separately certified. See [the construction limits](multivariate.md#homogeneous-normalization-and-matrix-pencils).
+    - **Zippel Sparse Interpolation**: Uses randomized finite-field discovery followed by deterministic coefficient/support verification for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`). An exact balanced-base fallback repairs incomplete discovery. A configurable integer-size limit bounds verification feasibility. See [the construction limits](multivariate.md#homogeneous-normalization-and-matrix-pencils).
     - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
     - **LMI Cone Verification**: Positive definiteness checks ($A(e) \succ 0$) to verify hyperbolic cones.
 
@@ -340,7 +340,7 @@ See [development instructions](development.md) for the in-place Cython build, co
     poly_crt = MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated(pencil)
     print(poly_crt.expr)
 
-    # Or utilize Zippel's randomized sparse interpolation over finite fields
+    # Or use sparse discovery with deterministic verification and exact fallback
     poly_sparse = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(pencil)
     print(poly_sparse.expr)
     ```
@@ -479,7 +479,7 @@ To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$ a
 * **Exact Rational Interpolation**: Computes characteristic polynomials of matrix pencils via exact rational interpolation over $\mathbb{Q}[t]$.
 * **Cython-Accelerated Modular Determinants**: Matrix evaluations are mapped to machine-precision finite fields $\mathbb{F}_p$ for fast C-level Gaussian elimination.
 * **Chinese Remainder Theorem (CRT) Reconstruction**: Coefficients computed over multiple distinct prime fields are reconstructed back to exact large integers/rationals over $\mathbb{Q}$.
-* **Zippel's Sparse Polynomial Interpolation**: Instead of using an exponential dense grid (which requires $O(n^m)$ points), Zippel's randomized algorithm discovers the non-zero monomial support of the polynomial step-by-step over finite fields, drastically reducing evaluation costs for sparse pencils.
+* **Zippel's Sparse Polynomial Interpolation**: Randomized discovery can reduce modular evaluation costs for sparse pencils. A bounded exact Kronecker encoding independently verifies complete support and repairs failed discovery; its integer size can still grow exponentially with the variable count.
 
 ## References
 

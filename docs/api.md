@@ -340,6 +340,8 @@ Generic straight-line gradients use reverse-mode differentiation of scalar opera
 
 `MultivariatePolynomial` stores rational sparse coefficients and supports exact evaluation through FLINT's positional callable interface, including python-flint 0.9.0. Native inputs must match the ordered variable names and are copied. Variable lists, sparse coefficient maps and `to_fmpq_mpoly()` exports are caller-owned. Rational algebra, exact polynomial gradient/Hessian and line restriction are described in [multivariate workflows](multivariate.md). Construction does not enforce homogeneity; `normalized_coefficients()` requires it. Algebra and line restriction do not infer stability, hyperbolicity or real-rootedness.
 
+`from_symmetric_matrix_pencil_sparse(pencil, *, max_verification_bits=1_000_000)` uses randomized discovery followed by deterministic coefficient/support verification and exact fallback. The positive integer limit bounds the conservative encoded integer size before discovery starts; exceeding it raises `ValueError` rather than returning an unverified candidate. It is not a memory or runtime quota. See [the proof and construction limits](multivariate.md#homogeneous-normalization-and-matrix-pencils).
+
 `evaluate_float64(points)` handles real batches with shape `(..., variable_count)`. It returns a float for one point and an array with the leading batch shape otherwise, including empty batches. Coordinates must be finite; unrepresentable coefficients or nonfinite arithmetic raise `RuntimeError`. Finite cancellation, underflow and rounding remain possible.
 
 ```python
