@@ -61,7 +61,13 @@ class MultivariatePolynomial(Polynomial):
     """
 
     def evaluate(self, x: Sequence[Any]) -> Any:
-        r"""Evaluates the multivariate polynomial at a point $x = (x_1, \dots, x_m)$."""
+        r"""
+        Evaluate at a rational point $x = (x_1, \dots, x_m)$.
+        Known compatibility limitation: python-flint 0.9.0 has no
+        fmpq_mpoly.evaluate method, so this path raises AttributeError there.
+        Until repaired, use expr.subs or call to_fmpq_mpoly() with positional
+        rational coordinates.
+        """
         from .utils.conversion import sympy_to_fmpq
 
         if len(x) != len(self.variables):

@@ -20,7 +20,7 @@ version = "0.1.0"
 description = "A Python library for exact finite free probability"
 readme = "README.md"
 authors = [
-    { name = "Author" }
+    { name = "Jonathan Borenstein" }
 ]
 license = {text = "MIT"}
 requires-python = ">=3.9"

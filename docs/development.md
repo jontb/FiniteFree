@@ -37,7 +37,7 @@ python scripts/test_installed_wheel.py
 python -m build
 ```
 
-The installed-wheel helper runs library tests in a temporary directory and confirms that the compiled extension is present. Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects the Python modular fallback; it does not remove the built extension. In PowerShell, set the corresponding variables with `$env:PYTHONPATH="."` and `$env:PYFFP_DISABLE_CYTHON="1"`, then clear them before installed-wheel checks.
+The installed-wheel helper runs library tests in a temporary directory and confirms that the compiled extension is present. Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects Python grid evaluation and CRT reconstruction; it does not remove the built extension, and `modular_det` can still use it. This checks those fallback paths rather than an extension-free installation. In PowerShell, set the corresponding variables with `$env:PYTHONPATH="."` and `$env:PYFFP_DISABLE_CYTHON="1"`, then clear them before installed-wheel checks.
 
 ## Documentation
 
@@ -68,6 +68,8 @@ PYTHONPATH=. python scripts/benchmark_projection.py --degrees 100 --dimension 20
 ```
 
 Larger defaults are optional and can be expensive. Root tools use independent Arb references; compound calls include domain validation and report cached latency separately. Transform tools compare shifted Hermite/Wishart analytic cumulants with cached normalized coefficients. Kernels use exact rational basis sums with warmed evaluation caches. Projections compare exact family derivative formulas, excluding construction/reference generation from timing. No benchmark establishes a universal accuracy or speed bound.
+
+For scaling studies, record the Git commit, script digest, dependency versions, input families and coefficient bit sizes. Run bounded serial subprocess repetitions with BLAS thread settings established before imports, and preserve individual timings and failures. Distinguish a first public call (including any lazy imports), a fresh-object call after warming the process, and a cached same-object call. Keep construction, reference generation and validation timing explicit; generic public root calls can include certification. Record native process peak RSS with its import/setup contribution, and verify independent accuracy references outside timing. Plot observed ranges and describe empirical slopes only for the measured inputs; they do not prove asymptotic complexity.
 
 `visuals/*.py` regenerate pre-rendered illustrations and require Matplotlib/Pillow. They may write many frames and use high-degree solvers or approximate grid sampling; their output is illustrative rather than part of the regression suite.
 

@@ -336,7 +336,17 @@ Invalid shape, inconsistent dimensions, empty matrix sequences, nonfinite/comple
 
 Generic straight-line gradients use reverse-mode differentiation of scalar operations. Determinant-pencil gradients and Hessians instead use determinant/inverse trace identities. Exact derivatives reject singular evaluated matrices. Numerical inverse/pseudoinverse formulas do not reliably give derivatives at singular points; use symbolic polynomial differentiation when singular-point derivatives are needed. `verify_hyperbolicity(e)` checks the sufficient positive-definite-pencil condition; numerical eigenvalues must exceed `1e-14`, while `exact=True` uses exact rational positivity.
 
-`MultivariatePolynomial` stores rational sparse coefficients and supports exact evaluation and differentiation. Construction does not enforce homogeneity; call `is_homogeneous()` before applying homogeneous geometric interpretations. `to_fmpq_mpoly()` exposes the stored object rather than a caller-owned copy.
+`MultivariatePolynomial` stores rational sparse coefficients and supports exact differentiation. Its public `evaluate` method currently calls a FLINT method absent from python-flint 0.9.0 and raises `AttributeError` on that version. Use symbolic substitution or FLINT's positional callable interface for exact evaluation until this compatibility defect is repaired. Construction does not enforce homogeneity; call `is_homogeneous()` before applying homogeneous geometric interpretations. `to_fmpq_mpoly()` exposes the stored object rather than a caller-owned copy.
+
+```python
+import sympy as sp
+from finitefree.multivariate import MultivariatePolynomial
+
+x, y = sp.symbols("x y")
+p = MultivariatePolynomial(x + y, [x, y])
+assert p.expr.subs({x: 1, y: 2}) == 3
+assert p.to_fmpq_mpoly()(1, 2) == 3
+```
 
 ```python
 from finitefree.hyperbolic import SymmetricMatrixPencil
