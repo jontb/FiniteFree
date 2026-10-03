@@ -86,6 +86,9 @@ def FiniteRTransform(
     using Arb at `prec` bits, then restores the first cumulant (the mean).
     Higher cumulants are invariant under translation. Numerical results remain
     precision-dependent approximations, particularly at high orders.
+    Only the requested normalized-coefficient prefix is extracted when possible.
+    A bounded per-polynomial prefix cache is separate from complete coefficients;
+    ambient dimensions retain their own exact binomial normalization.
     """
     import math
 
@@ -93,10 +96,10 @@ def FiniteRTransform(
 
     if d is None:
         d = p.degree
-    e_k = p._normalized_coeffs_flint(d)
+    count = max(0, min(order, d))
+    e_k = p._normalized_coeffs_flint_prefix(count, d)
 
     if numerical:
-        count = max(0, min(order, d))
         mean = e_k[1] if count else flint.fmpq(0)
         if mean != 0:
             # For a shift by -mean, normalized coefficients obey a binomial

@@ -30,6 +30,8 @@ The following development changes are being prepared for **0.2**, which is not p
 
 ### Implemented changes
 
+- Truncated cumulant requests normalize only the requested coefficient prefix. The native-dimension prefix cache is bounded by the polynomial degree and never masquerades as complete coefficients; ambient dimensions and nonmonic leading scalars retain exact normalization.
+
 - Exact rational conversion uses each Python/NumPy floating scalar's own integer ratio. NumPy extended-precision values are no longer narrowed through float64 before polynomial construction, affine transforms or exact matrix-pencil operations, including supplied-value symmetry checks. Numerical outputs retain their documented float64 limits.
 
 - Generic companion/Aberth root paths normalize nonmonic coefficients exactly before float conversion. This fixes incorrect roots such as the numerical result for `2*x**2-6*x+4` and avoids common-scalar overflow/underflow without changing stored coefficients.

@@ -94,6 +94,7 @@ class RealRootedPolynomial(Polynomial):
         self._is_verified: bool = assume_real_rooted
         self._is_monic = monic
         self._normalized_coeffs_flint_cached: Union[List[Any], None] = None
+        self._normalized_coeffs_flint_prefix_cached: Union[List[Any], None] = None
         self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
         self._roots_cached_exact = False
@@ -385,7 +386,50 @@ class RealRootedPolynomial(Polynomial):
 
         if d == self.degree:
             self._normalized_coeffs_flint_cached = e_k
+            self._normalized_coeffs_flint_prefix_cached = None
         return e_k
+
+    def _normalized_coeffs_flint_prefix(
+        self, count: int, d: Union[int, None] = None
+    ) -> list[Any]:
+        """Extract e_0 through e_count without normalizing unused coefficients.
+
+        A single largest requested prefix is cached only for the native dimension.
+        It is never exposed as a complete normalized sequence. Ambient dimensions
+        use uncached prefixes; a complete cache takes precedence when available.
+        """
+        if d is None:
+            d = self.degree
+        if d < self.degree:
+            raise ValueError("Ambient dimension cannot be less than polynomial degree.")
+        if count < 0:
+            raise ValueError("Prefix index must be nonnegative.")
+        count = min(count, d)
+        if not self._is_flint or count == d:
+            return self._normalized_coeffs_flint(d)[: count + 1]
+        if d == self.degree and self._normalized_coeffs_flint_cached is not None:
+            return self._normalized_coeffs_flint_cached[: count + 1]
+
+        prefix = (
+            self._normalized_coeffs_flint_prefix_cached if d == self.degree else None
+        )
+        if prefix is not None and len(prefix) > count:
+            return prefix[: count + 1]
+        values = list(prefix) if prefix is not None else []
+        binomial = (
+            flint.fmpz(math.comb(d, len(values) - 1)) if values else flint.fmpz(1)
+        )
+        leading = self._fmpq_poly[self.degree]
+        for k in range(len(values), count + 1):
+            if k:
+                binomial = binomial * (d - k + 1) // k
+            coefficient = (
+                self._fmpq_poly[self.degree - k] if k <= self.degree else flint.fmpq(0)
+            )
+            values.append(coefficient / leading * flint.fmpq((-1) ** k, binomial))
+        if d == self.degree:
+            self._normalized_coeffs_flint_prefix_cached = values
+        return values[: count + 1]
 
     def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
         r"""

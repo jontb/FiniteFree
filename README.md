@@ -500,6 +500,8 @@ FiniteFree is architected to bypass the combinatorial bottlenecks inherent in hi
 
 These count arithmetic operations rather than bit complexity. Exact arithmetic becomes more expensive as numerator/denominator sizes grow. An order-$n$ R-transform uses $O(n^2)$ updates, including rational centering in the numerical path.
 
+Low-order R-transform requests extract only the needed normalized-coefficient prefix. A polynomial retains its largest native-dimension prefix separately from complete coefficient caches; other ambient dimensions use their exact binomial normalization without adding persistent cache entries.
+
 ### Architectural Design Principles
 
 #### 1. Exact-to-Approximate Hybrid Pipeline
