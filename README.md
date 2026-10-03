@@ -5,13 +5,15 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-FiniteFree is a precision-focused Python framework designed to operationalize the discrete calculus of finite free probability. It extends classical free probability limits to finite-dimensional polynomial representations (characteristic polynomials), mapping linear deterministic operators against polynomial distributions.
+This README and the API reference describe the **unreleased development source**. The published package is [FiniteFree 0.1.0](https://pypi.org/project/finitefree/0.1.0/); its source is tagged [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). Install the development checkout to use the contracts described here. Preparation for 0.2 is recorded in the [changelog](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md); 0.2 is not available yet.
+
+FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
 
 To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.
 
 ## Visual Showcase
 
-The following showcase provides a visual representation of FiniteFree's features, organized by topic:
+The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
 
 <details>
 <summary><b>1. Limiting Distributions of Free Convolutions</b></summary>
@@ -58,7 +60,7 @@ Showcases GUE spectral universality and eigenvalue spacing statistics:
 <br>
 
 Illustrates exact algebraic properties, root interlacing constraints, and geometric distributions of FiniteFree polynomials:
-- **Root Interlacing Preservation**: Verifies that root interlacing relations ($p \prec q$) are strictly preserved under symmetric additive convolution ($p \boxplus_6 r \prec q \boxplus_6 r$) and multiplicative convolution ($p \boxtimes_6 r \prec q \boxtimes_6 r$).
+- **Root Interlacing Examples**: Illustrates interlacing under additive and multiplicative convolution in the displayed examples. Preservation theorems require the corresponding real-rooted and non-negative-root domains; strict interlacing is not an unconditional API guarantee.
 - **Multivariate Pencil Topography**: Visualizes the log-determinant topography and exact eigenvalue boundaries of random symmetric matrix pencils.
 - **Unitary Eigenvalue Repulsion**: Visualizes roots evolving on the complex unit circle $\mathbb{T}$ under unitary Hermite polynomial flows.
 
@@ -100,13 +102,13 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <br>
 
 - **Certified Real-Rooted Polynomial Validation**: Verified lazily with exact rational Sturm sequences for small squarefree factors and certified Arb isolation for larger factors. Exact Sturm remains a fallback through degree 30 when Arb cannot obtain a certificate.
-- **Unitary Circle Geometries ($\mathbb{T}$)**: Implements `UnitaryPolynomial` structures for polynomials with roots strictly on the complex unit circle, bypassing real-line Sturm sequence constraints and isolating angular arguments via complex eigensolvers (e.g., `unitary_hermite_polynomial`).
+- **Unitary Circle Geometries ($\mathbb{T}$)**: `UnitaryPolynomial` bypasses real-line verification and returns numerical complex roots ordered by angle. The constructor trusts the intended unit-circle domain; it does not certify it. `unitary_hermite_polynomial` stores its exponential coefficients symbolically.
 - **Lazy Geometric Domain Properties**: After certifying real-rootedness, `has_non_negative_roots` and `has_strictly_positive_roots` use an $O(d)$ coefficient sign check to enforce operator domains. Sign alternation alone cannot certify real-rootedness.
 - **Basic Polynomial Transformations**: Supports exact algebraic transformations including variable dilation (`dilation`), variable shift (`shift`), positive integer root powers (`power`), root-reciprocal reversing (`reversed_polynomial`), derivative (`derivative`), projection (`projection`), fractional additive convolution power (`additive_power`), and the Fujie-Ueda limiting polynomial $\Phi_d$ (`phi_d`). Noninteger root powers use numerical root isolation and reconstruction.
 - **Direct Projections**: `projection(j)` computes the monic derivative of order `d-j` from the leading `j+1` coefficients, avoiding intermediate derivative objects. Known Hermite inputs retain their variance, center and numerical root recurrence. Projection to the original degree returns the same object. See the [API reference](docs/api.md#polynomial-projections) for normalization and benchmark scope.
 - **High-Degree Scaling & Root Reconstruction**:
-  - **Divide-and-Conquer Polynomial Synthesis**: `RealRootedPolynomial.from_roots(roots)` executes a binary splitting tree algorithm operating in $O(d \log^2 d)$ time for high-speed, exact polynomial synthesis.
-- **Optimized Memory Pool Management**: Prevents FLINT/GMP memory fragmentation at extreme degrees ($d \ge 1000$) through a conditional, threshold-based garbage collection registry inside `PrecisionContext`.
+  - **Divide-and-Conquer Polynomial Synthesis**: `RealRootedPolynomial.from_roots(roots)` multiplies rational linear factors using a balanced product tree. Arithmetic costs depend on FLINT multiplication and coefficient bit sizes.
+- **Working Precision**: `PrecisionContext(degree, prec=None)` sets FLINT's process-wide precision to `prec`, or `max(53, int(2.5*degree))` bits, and restores the previous value on exit. It does not manage memory pools or provide independent thread-local precision.
 
 </details>
 
@@ -126,7 +128,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <br>
 
 - **Symmetric Additive ($\boxplus_d$)**: Exact analytical evaluation mapping polynomial convolutions against the symmetric finite combinatorial variance.
-- **Asymmetric Additive ($\uplus_d$)**: Validated combinatorial operator supporting mixed rank geometry via fractional squared weights.
+- **Asymmetric Additive ($\uplus_d$)**: Exact factorial-weighted coefficient convolution. Optional `weights=[a,b]` dilates the input roots by `a` and `b`; it does not change their degrees or rank.
 - **Multiplicative ($\boxtimes_d$)**: Exact discrete multiplicative root transformations via scaled Hadamard projections.
 
 </details>
@@ -139,7 +141,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 - **Finite S-Transform** ($S_p^{(d)}$): Discrete normalized evaluations bypassing non-linear mapping.
 - **Finite R-Transform** ($R_p^{(d)}$): Computes finite free cumulants ($\kappa_n^{(d)}$) via an exact $O(n^2)$ recursive generating function sequence map over $\mathbb{Q}$, bypassing exponential partition lattice enumeration while verifying exact additivity $\kappa_n^{(d)}(p \boxplus_d q) = \kappa_n^{(d)}(p) + \kappa_n^{(d)}(q)$.
 - **Finite T-Transform** ($T_p^{(d)}$): Step function mapping the right-continuous inverse to the Fujie-Ueda limit $\Phi_d$, evaluated in $O(d)$ algebraically using coefficient sign-alternation validation.
-- **Symmetric Finite S-Transform** ($\tilde{S}_p^{(2d)}$): Evaluates the discrete S-Transform over symmetric domains via exact root-squaring maps ($\mathbf{Sq}(p)$), bypassing zero-valued odd coefficients.
+- **Symmetric Finite S-Transform**: `SymmetricFiniteSTransform` currently returns the ratio of consecutive normalized even coefficients. This is the **square** of the transform in the cited mathematical definition. See the [API convention](docs/api.md#symmetric-finite-s-output-convention) before using it as a complex-valued transform.
 
 </details>
 
@@ -148,8 +150,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <br>
 
 - **`MultivariatePolynomial`**: Homogeneous multivariate polynomials with exact directional derivatives, mixed partials, and homogeneous multinomial normalization.
-- **Compiled Sparse Evaluations**: Features `to_fmpq_mpoly()` for $O(1)$ evaluation and substitution using compiled C-level sparse representations inside the FLINT library.
-- **Jacobi SLP & Reverse AD**: Straightline programs evaluating determinant gradients and Hessians via C-level FLINT evaluations and exact, linear-time Reverse-Mode Automatic Differentiation (AD) over $\mathbb{Q}$ (completely bypassing symbolic expansion).
+- **Compiled Sparse Evaluations**: `to_fmpq_mpoly()` exposes the stored FLINT sparse polynomial. Evaluation and differentiation costs depend on the monomial count, degrees and coefficient sizes.
+- **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
 - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
 - **Zippel Sparse Interpolation**: Deploys Zippel's probabilistic algorithm over $\mathbb{F}_p$ for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`), bounding interpolation complexity to the target monomial count rather than the maximum total-degree combinatorial grid.
 - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
@@ -161,7 +163,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <summary><b>Stable Numerical Root Evaluation</b></summary>
 <br>
 
-- **`to_numpy_poly1d()`**: Safe rational coefficient `float64` casting, utilizing arbitrary-precision `decimal.Decimal` fallbacks to prevent `OverflowError` on coefficients with extreme magnitude ratios.
+- **`to_numpy_poly1d()`**: Direct coefficient export to NumPy, with a warning above degree 20. It does not rescale coefficients or guarantee finite values; prefer `evaluate_roots_float64()` for root extraction.
 - **`evaluate_roots_float64(exact=False)`**: Uses scaled symmetric tridiagonal eigenvalues for Hermite, Laguerre, Jacobi, Legendre and Chebyshev polynomials in their orthogonality domains, including GUE/Wishart expectations, affine transforms and proven Hermite additive convolutions. It avoids forming an ill-conditioned monomial companion matrix for these families.
 - **`evaluate_roots_float64(exact=True)`**: Requests the Arb isolation path by default. A high-precision request after a numerical call bypasses the approximate cache. Results are returned as `float64`; if isolation fails, the general numerical fallbacks can still be used. See the [API reference](docs/api.md#root-evaluation-and-conditioning) for dispatch, precision and conditioning limits.
 
@@ -171,7 +173,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <summary><b>Random Matrix Ensembles (`finitefree.ensembles`)</b></summary>
 <br>
 
-- **Matrix Samplers**: Fast generation of invariant random matrices for GOE ($O(d)$, $\beta=1$), GUE ($U(d)$, $\beta=2$), and GSE ($USp(2d)$, $\beta=4$).
+- **Matrix Samplers**: Dense random matrices for GOE (orthogonal invariance, $\beta=1$), GUE (unitary invariance, $\beta=2$), and GSE (symplectic invariance, $\beta=4$). Here $O(d)$ denotes the orthogonal group, not a runtime bound.
 - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
 - **`EmpiricalComparison`**: Compares all sampled characteristic coefficients, including deterministic ones, with Bonferroni-adjusted two-sided Student-t bands. `alpha` controls the nominal family significance level; coefficient scaling prevents variance overflow/underflow. Samples must be finite Hermitian matrices of the matching size, with verified eigenvalue pairs for doubled-size representations. See the [API reference](docs/api.md#empirical-coefficient-comparison) for sample assumptions and numerical tolerances.
 
@@ -189,33 +191,36 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 ## Installation
 
-This project utilizes `hatchling` and `hatch-cython` to automatically compile Cython extension modules (`modular_fast.pyx`) on install, conforming to PEP 517/621.
+To install the published release, run `python -m pip install finitefree==0.1.0`. That release has its own tagged implementation and does not include all contracts described in this development README.
+
+Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 
 ### Requirements
-- **Python**: `3.9` or higher
-- **C Compiler**: A working C compiler (e.g., `gcc` or `clang`) must be available on your system to compile the Cython modules.
+- **Python**: declared minimum `3.9`; the development CI targets CPython `3.9`–`3.13` on Linux, macOS and Windows. This is the configured support range, not evidence that every unpublished commit has run on every platform.
+- **Source builds**: a working C compiler (`gcc`, `clang`, or the matching Windows MSVC toolchain). `python-flint` source builds additionally need FLINT/GMP/MPFR and their headers; prefer its compatible wheels when available.
+- **Runtime dependencies**: `numpy>=1.24`, `sympy>=1.12`, `python-flint>=0.6.0`, `scipy>=1.10`. Pip selects versions compatible with the interpreter.
 
 ### Setup Instructions
 
-1. Clone the repository and initialize a virtual environment:
+1. Clone the development repository and initialize a virtual environment:
    ```bash
+   git clone https://github.com/jontb/FiniteFree.git
+   cd FiniteFree
    python -m venv .venv
    source .venv/bin/activate
    ```
+   On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
 2. Install the package locally:
    * **Standard Install**:
      ```bash
-     pip install .
+     python -m pip install .
      ```
-   * **Development / Testing Install** (includes Cython source compilation in editable mode and dev tools like `pytest`):
+   * **Development / Testing Install** (dev tools include `pytest`, Ruff and mypy):
      ```bash
-     pip install -e ".[dev]"
+     python -m pip install -e ".[dev]"
      ```
-- `numpy >= 1.24`
-- `sympy >= 1.12`
-- `python-flint >= 0.6.0`
-- `scipy >= 1.10`
-- `cupy` *(Optional, required for GPU-accelerated root finding)*
+
+See [development instructions](docs/development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. CuPy is only attempted by the parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)`; these paths can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
 
 *Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.6.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
 
@@ -275,7 +280,7 @@ q = RealRootedPolynomial([1, 0, -4])  # roots: -2, 2
 res_add = symmetric_additive(p, q, d=2)
 print(res_add.coeffs)  # [1, -3, -2]
 
-# Asymmetric Additive Convolution (p [u]_d q) with fractional rank weights
+# Asymmetric Additive Convolution (p [u]_d q), after dilating each input by 1/2
 res_asym = asymmetric_additive(p, q, weights=[sp.Rational(1, 2), sp.Rational(1, 2)], d=2)
 print(res_asym.coeffs)
 
@@ -314,7 +319,7 @@ Finite free cumulants use the normalization in [Definition 2.14 of Arizmendi et 
 
 `normalized_coeffs(d)` divides out the leading coefficient before applying the binomial normalization, so `e_0=1` even when a polynomial was stored with `monic=False`. Finite cumulants and coefficient convolutions therefore depend on the roots rather than a scalar multiple of the polynomial. The stored coefficients and polynomial evaluations retain that scalar; reconstructed/convolved results are monic. Larger ambient dimensions pad roots with zeros.
 
-`FiniteRTransform(..., numerical=True, prec=256)` centers the requested coefficient prefix in rational arithmetic, computes the recurrence with Arb, and restores the first cumulant (the mean). This avoids cancellation from large translations without shifting the entire polynomial or computing all cumulants exactly. Results are floats at the requested working precision; high-order cancellation can still require more precision. `scripts/benchmark_transforms.py` compares shifted Hermite/Wishart cumulants with their analytic values and reports transform time separately from construction.
+`FiniteRTransform(..., numerical=True, prec=256)` centers the requested coefficient prefix in rational arithmetic, computes the recurrence with Arb, and restores the first cumulant (the mean). This avoids cancellation from large translations without shifting the entire polynomial or computing all cumulants exactly. Working arithmetic uses the requested precision, but outputs are Python floats rather than arbitrary-precision values or error bounds. High orders can require more precision, and float range/rounding still apply.
 
 `FiniteTTransform` requires positive degree and non-negative roots, and evaluates a right-continuous step function for finite real inputs in $(0,1)$. Rational inputs retain their exact position, including values arbitrarily close to an endpoint. Floats select intervals using their stored binary values; use `sympy.Rational(k, d)` when an exact grid boundary is intended.
 
@@ -453,13 +458,13 @@ Polynomial construction copies caller inputs, and `coeffs` returns an independen
 
 Linear root verification and extraction use the coefficient ratio, including numeric symbolic roots such as `sqrt(2)`. Nonreal roots are rejected, unknown symbolic realness/signs remain uncertified, and nonnumeric or out-of-range numerical root requests fail explicitly. See [real-rootedness](docs/api.md#real-rootedness).
 
-FiniteFree ships with a consolidated robust verification suite designed to run under `pytest`. 
+Run the regression suites from the checkout:
 
 ```bash
 PYTHONPATH=. python -m pytest --import-mode=importlib tests/ scripts/tests/
 ```
 
-Documentation contributors can run `python scripts/sync_docs.py` followed by `mkdocs build --strict`. The synchronizer expects single-level `<details>` blocks with opening, summary and closing tags on separate lines. It preserves fenced examples, including literal HTML and links, while converting prose links from the README's `docs/` prefix. Missing input or malformed details blocks abort before changing the generated index. CI checks documentation tools with Ruff, strict mypy and `scripts/tests/` regressions.
+The [development guide](docs/development.md) gives the complete lint, typing, compiled/fallback, wheel and strict docs commands. Edit README rather than its generated `docs/index.md`. The synchronizer expects single-level `<details>` blocks with opening, summary and closing tags on separate lines; malformed input aborts before changing the index. Documented Python blocks run independently through `scripts/check_readme_examples.py`. The [worked tutorial](docs/tutorial.md) uses current public APIs.
 
 - **`test_core.py`**: Real-rootedness verification, divide-and-conquer root synthesis, and sequence extractions.
 - **`test_transformations.py`**: Exact algebraic variable scaling (dilation), shifts, powers, and reciprocal-root polynomial transformations.
@@ -472,18 +477,7 @@ Documentation contributors can run `python scripts/sync_docs.py` followed by `mk
 - **`test_transform_stability.py`**: Shifted Hermite/Wishart cumulants, tiny spreads beneath large translations, ambient dimensions, exact T-transform interval boundaries and the Marchenko–Pastur diagonal limit.
 - **`test_dpp.py`**: Correlation-kernel validation, state-space ordering and seeded projection/nonprojection sampling laws.
 
-For reproducible root benchmarks, run `PYTHONPATH=. python scripts/benchmark_roots.py --output roots-benchmark.json`. The script compares uncached numerical roots with independently isolated 192-bit Arb roots at degrees 32, 100 and 300, and reports construction time separately. On jon-desktop (Python 3.13, NumPy 2.2.4, SciPy 1.15.3, python-flint 0.9.0), degree-300 results were:
-
-| Family | Numerical roots | Arb roots | Maximum scaled error |
-| :--- | ---: | ---: | ---: |
-| GUE additive convolution | 1.29 ms | 1.24 s | $8.5\times10^{-16}$ |
-| Square Wishart | 0.97 ms | 17.45 s | $2.6\times10^{-15}$ |
-| Rectangular Wishart ($n=2d$) | 0.99 ms | 21.64 s | $3.6\times10^{-15}$ |
-| Legendre | 1.23 ms | 1.68 s | $7.8\times10^{-16}$ |
-| Laguerre ($\alpha=-1+10^{-12}$) | 0.95 ms | 17.47 s | $4.6\times10^{-15}$ |
-| Jacobi ($\alpha=-1+10^{-12}$, $\beta=3/2$) | 1.27 ms | 6.86 s | $1.4\times10^{-15}$ |
-
-Scaled error means $\max_i|\hat\lambda_i-\lambda_i|/\max(1,\max_i|\lambda_i|)$. The smallest Laguerre root was $3.33\times10^{-15}$, with relative error $3.1\times10^{-13}$. Timings are measurements on this machine, not CI thresholds; they exclude polynomial construction. Construction at degree 300 took 5.8–191 ms across these cases.
+The [benchmark commands](docs/development.md#benchmarks) compare numerical roots against independently isolated Arb roots and coefficients against analytic family identities. Scaled root error means $\max_i|\hat\lambda_i-\lambda_i|/\max(1,\max_i|\lambda_i|)$. Construction, first extraction and cached latency have separate timing scopes. Timings are case-specific measurements, not CI thresholds or accuracy guarantees.
 
 ## Computational Complexity & Architecture
 
@@ -493,46 +487,39 @@ FiniteFree is architected to bypass the combinatorial bottlenecks inherent in hi
 
 | Operation | Mathematical Method | Time Complexity | Arithmetic Space |
 | :--- | :--- | :---: | :---: |
-| **Polynomial Multiplication** | C-level FFT / Kronecker substitution | $O(d \log d)$ | Exact $\mathbb{Q}$ |
-| **Root Reconstruction (`from_roots`)** | Binary divide-and-conquer splitting tree | $O(d \log^2 d)$ | Exact $\mathbb{Q}$ |
-| **Symmetric Additive Convolution ($\boxplus_d$)** | EGF coefficient multiplication | $O(d \log d)$ | Exact $\mathbb{Q}$ |
-| **Asymmetric Additive Convolution ($\uplus_d$)** | Cauchy product of scaled sequences | $O(d \log d)$ | Exact $\mathbb{Q}$ |
+| **Polynomial Multiplication** | FLINT backend chosen for degrees and coefficient sizes | $M(d)$ backend-dependent arithmetic work | Exact $\mathbb{Q}$ |
+| **Root Reconstruction (`from_roots`)** | Balanced product tree | Typically $O(M(d)\log d)$ arithmetic work | Exact $\mathbb{Q}$ |
+| **Symmetric Additive Convolution ($\boxplus_d$)** | EGF coefficient multiplication | One multiplication plus $O(d)$ coefficient updates | Exact $\mathbb{Q}$ |
+| **Asymmetric Additive Convolution ($\uplus_d$)** | Cauchy product of scaled sequences | One multiplication plus $O(d)$ coefficient updates | Exact $\mathbb{Q}$ |
 | **Multiplicative Convolution ($\boxtimes_d$)** | Pointwise multiplication of normalized coefficients | $O(d)$ | Exact $\mathbb{Q}$ |
-| **Sturm Real-Rootedness Verification** | Subresultant Polynomial Remainders Sequence (PRS) | $O(d^2)$ | Exact $\mathbb{Q}$ |
+| **Sturm Real-Rootedness Verification** | Square-free factorization and remainder sequences | Factor degree, coefficient size and backend dependent | Exact $\mathbb{Q}$ |
 | **High-Precision Root Isolation (Arb)** | Adaptive complex ball arithmetic | Degree, conditioning and precision dependent | Interval $\mathbb{C}$ |
 | **Orthogonal-Family Root Approximation** | Symmetric tridiagonal eigenvalues, $O(d)$ matrix storage | $O(d^2)$ | Float $\mathbb{R}$ |
 | **General Root Approximation** | Dense balanced companion matrix eigenvalues | $O(d^3)$ | Float $\mathbb{C}$ |
 | **Finite R-Transform (Cumulants)** | Generating function recurrence relation | $O(d^2)$ | Exact $\mathbb{Q}$ |
 
+These count arithmetic operations rather than bit complexity. Exact arithmetic becomes more expensive as numerator/denominator sizes grow. An order-$n$ R-transform uses $O(n^2)$ updates, including rational centering in the numerical path.
+
 ### Architectural Design Principles
 
 #### 1. Exact-to-Approximate Hybrid Pipeline
-All algebraic operations, polynomial recurrences, and convolutions are computed in exact rational arithmetic ($\mathbb{Q}$) using GMP/FLINT backends (`fmpq_poly`). Floating-point approximations are deferred entirely to the final egress stage (e.g. root isolation or evaluation), preventing early-stage rounding errors and numerical drift from compounding during intensive convolution chains.
+Rational coefficient operations use GMP/FLINT (`fmpq_poly`). Supplied Python/NumPy floats preserve their own stored binary ratios, including extended precision when available. Symbolic coefficients use a separate SymPy path with more limited geometric certification. Noninteger root powers reconstruct from numerical roots, while evaluation at floating arguments, root solvers, matrix samplers and continuous Fredholm determinants use floating arithmetic. Exact storage does not make those numerical results exact.
 
 For asymptotic root comparisons, known orthogonal families carry their three-term recurrence alongside the exact polynomial. The numerical path computes parameter differences before float conversion and scales the Jacobi matrix without centering, preserving tiny positive hard-edge roots. Affine shifts are applied after solving. This follows the [Jacobi-matrix characterization of zeros](https://dlmf.nist.gov/18.2#vi) and [classical recurrences](https://dlmf.nist.gov/18.9) using [SciPy's tridiagonal eigenvalue solver](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.eigvalsh_tridiagonal.html). Arbitrary convolutions, including compound-Wishart lognormal examples, do not inherit unproven recurrence metadata and retain the general solver/reference path. Nonfinite or underflowed recurrences fall back; extreme affine shifts can still lose differences that `float64` cannot represent.
 
 When domain validation uses Arb, it retains the isolated roots for subsequent evaluation. Generic root calls can therefore return the validation result directly. An `exact=True` request at a higher working precision refreshes the root cache; `exact=False` can reuse any available root result. Small-degree generic calls still use exact Sturm validation and may be dominated by coefficient growth. `scripts/benchmark_compound_roots.py` measures first public root calls, including validation, against independent higher-precision Arb roots, with construction and repeat-cache latency reported separately.
 
-For compound-Wishart polynomials with degree $d$, $n=d^2$, and $d$ identical multiplicative factors, measurements on the same jon-desktop environment at 192-bit working precision were:
-
-| Degree | Construction | First root call (`exact=False`, including validation) |
-| ---: | ---: | ---: |
-| 30 | 0.8 ms | 0.967 s |
-| 60 | 6.3 ms | 0.052 s |
-| 100 | 60.0 ms | 0.237 s |
-| 150 | 304.4 ms | 1.403 s |
-
-Root timings are the best of three fresh calls, excluding construction and library warm-up. Degree-60–150 results matched the independently isolated 384-bit reference after float64 conversion. Degree 10 retained the companion-matrix path with maximum scaled error $5.2\times10^{-13}$; degree 30 was dominated by Sturm verification. Runtime depends on coefficient size and the validation backend as well as degree. No orthogonal-family recurrence is inferred for these compound polynomials.
+Numerical root extraction rejects nonfinite final results before caching. Exact construction and real-rootedness certification can still work beyond the float64 range. Tiny roots can underflow to zero and distinct roots can round to the same float. Generic companion/Aberth inputs divide out nonmonic leading coefficients exactly before conversion; ordinary evaluations preserve the original scalar and can still overflow.
 
 #### 2. Algebraic Domain Verification (Sturm PRS)
-The library verifies real-rootedness lazily. Through degree 30 it uses square-free factorization and exact Sturm sequences, with a subresultant Polynomial Remainder Sequence (PRS) for factors of degree at least 15. Higher degrees use Arb isolation. An imaginary ball merely containing zero is not a certificate; complex roots raise `ValueError`, and inability to certify raises `RuntimeError`. An explicit `assume_real_rooted=True` trusts the caller and bypasses verification.
+The library verifies real-rootedness lazily. For total degrees through 30, square-free factors below degree 15 use exact Sturm sequences; if any factor has degree at least 15, certified Arb isolation is tried first. Exact Sturm/subresultant PRS remains a fallback if Arb cannot obtain a certificate. Total degrees above 30 use Arb directly. An imaginary ball merely containing zero is not a certificate; complex roots raise `ValueError`, and inability to certify raises `RuntimeError`. An explicit `assume_real_rooted=True` trusts the caller and bypasses verification.
 
 #### 3. Partition-Free Cumulant Recurrences
 Rather than explicitly constructing combinatorial structures (such as enumerating non-crossing partitions to calculate free cumulants), FiniteFree solves the finite $R$-transform and $S$-transform relationships using direct generating function recurrences. By rewriting the underlying algebraic equations into coefficient-level recurrence relations, the combinatorial explosion is reduced to a deterministic $O(d^2)$ exact rational arithmetic sweep.
 
 #### 4. High-Performance Multivariate Matrix Pencil Interpolation
 To evaluate multivariate pencils of the form $\det(x_1 A_1 + \dots + x_m A_m)$ and compute exact characteristic polynomials without symbolic expansion blowups, the library avoids symbolic determinant bottlenecks via the following complementary strategies:
-* **Reverse-Mode Automatic Differentiation**: Replaces numerical approximations with an exact, linear-time Reverse-Mode AD engine for straight-line programs (SLPs) over $\mathbb{Q}$ to evaluate gradients and Hessians.
+* **Straight-Line Programs**: Generic SLP gradients use a reverse pass through scalar operations. Determinant-pencil gradients and Hessians use Jacobi's matrix identities. Exact derivatives reject singular evaluated matrices; numerical inverse/pseudoinverse formulas remain conditioning-dependent.
 * **Exact Rational Interpolation**: Computes characteristic polynomials of matrix pencils via exact rational interpolation over $\mathbb{Q}[t]$.
 * **Cython-Accelerated Modular Determinants**: Matrix evaluations are mapped to machine-precision finite fields $\mathbb{F}_p$ for fast C-level Gaussian elimination.
 * **Chinese Remainder Theorem (CRT) Reconstruction**: Coefficients computed over multiple distinct prime fields are reconstructed back to exact large integers/rationals over $\mathbb{Q}$.

@@ -29,10 +29,11 @@ def weight_func_hermite(x):
 
 
 def hermite_function_kernel_matrix(d: int, xs: np.ndarray) -> np.ndarray:
-    """
-    Computes the weighted GUE kernel K_d(x, y) * exp(-x^2/2 - y^2/2) / pi^1/4
-    exactly and stably using the Hermite function recurrence.
-    This avoids numerical overflow and underflow in float64.
+    r"""
+    Approximate the weighted Hermite kernel using a normalized recurrence.
+    The weight factors are exp(-(x^2+y^2)/2)/sqrt(pi). Working arithmetic is
+    float64; the recurrence avoids explicit large monomial coefficients but does
+    not establish exactness or a uniform overflow/underflow guarantee.
     """
     M = len(xs)
     phi = np.zeros((d + 1, M))
@@ -66,10 +67,10 @@ def hermite_function_kernel_matrix(d: int, xs: np.ndarray) -> np.ndarray:
 
 
 def project_kernel_to_rank(K_weighted: np.ndarray, d: int) -> np.ndarray:
-    """
-    Projects the discretized kernel matrix K_weighted to a true rank d projection matrix.
-    This ensures eigenvalues are exactly 1.0 (d times) and 0.0 (rest), which guarantees
-    HKPV samples exactly d points and matches the expected polynomial.
+    r"""
+    Form a numerical rank-d projection from the leading eigenvectors.
+    Eigenvalues are close to zero/one within floating roundoff. Sampling represents
+    the selected discretized projection, not an exact continuous GUE process.
     """
     eigenvalues, eigenvectors = np.linalg.eigh(K_weighted)
     idx = np.argsort(eigenvalues)[::-1][:d]

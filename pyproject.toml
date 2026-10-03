@@ -18,6 +18,7 @@ packages = ["finitefree"]
 name = "finitefree"
 version = "0.1.0"
 description = "A Python library for exact finite free probability"
+readme = "README.md"
 authors = [
     { name = "Author" }
 ]
@@ -91,4 +92,3 @@ test-command = "python {project}/scripts/test_installed_wheel.py"
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
 repair-wheel-command = ""
-

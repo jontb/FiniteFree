@@ -1,6 +1,6 @@
 # API Reference
 
-This page describes the mathematical and numerical contracts with executable examples, followed by reference sections generated from docstrings and source signatures.
+This page describes the **unreleased development implementation**, with executable examples and reference sections generated from its docstrings. The published [0.1.0 package](https://pypi.org/project/finitefree/0.1.0/) corresponds to [tag v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0), not all contracts below. See the [development guide](development.md) and [0.2 preparation and migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md).
 
 ## Root evaluation and conditioning
 
@@ -59,11 +59,37 @@ np.testing.assert_allclose(numerical, reference, atol=1e-13, rtol=1e-13)
 assert len(numerical) == d
 ```
 
-The [reproducible benchmark and measured results](index.md#testing-protocol) compare six families at degrees 32, 100 and 300 against independently isolated Arb roots. Root timings exclude polynomial construction and cached results; construction is reported separately. Degree-300 numerical extraction took 0.95–1.29 ms on jon-desktop with maximum scaled error `4.51e-15`. These measurements are not performance or accuracy guarantees for other inputs or machines.
+The [reproducible benchmarks](development.md#benchmarks) compare six families against independently isolated Arb roots. Timings exclude polynomial construction and cached results; construction is separate. These cases do not provide performance or accuracy guarantees for other inputs or machines.
 
 For generic compound-Wishart convolutions, `PYTHONPATH=. python scripts/benchmark_compound_roots.py --output compound-roots.json` measures first public root calls with domain validation included, at degrees 10, 30, 60, 100 and 150. It compares 192-bit working precision with an independent 384-bit reference and counts isolation calls. Construction, numerical-library warm-up and repeat-cache latency are excluded from first-call timings and reported separately where applicable. These polynomials retain the general solver rather than inheriting an orthogonal-family recurrence.
 
 ## Validation and mathematical contracts
+
+### Exact and numerical evaluation
+
+Coefficient sequences are descending; FLINT polynomials use ascending storage. Construction defaults to monic normalization. On a rational polynomial, integer/rational `evaluate(x)` arguments use exact FLINT evaluation, while Python/NumPy floating arguments select float64 Horner arithmetic. That numerical path can overflow or underflow even when exact coefficients are valid. `to_numpy_poly1d()` directly casts stored coefficients and warns above degree 20; it does not rescale or certify them.
+
+`PrecisionContext` changes FLINT's process-wide precision to the requested bits, defaulting to `max(53, int(2.5*degree))`, and restores the old value on exit. It does not provide thread-local isolation or a memory pool. Concurrent code that changes FLINT precision needs coordination.
+
+Positive integer `power(c)` uses exact rational operations and requires non-negative roots. Noninteger root powers reconstruct from numerical roots and inherit their float64 limits. `additive_power(t)` scales cumulants for positive rational `t`; fractional powers are formal coefficient constructions with lazy geometry validation, not an unconditional real-root preservation guarantee.
+
+### Convolution dimensions and domains
+
+The three coefficient convolutions accept an ambient integer dimension `d` covering both polynomial degrees. They divide out leading scalars, pad normalized sequences with zeros, and return monic degree-`d` results. Writing `e_k` for the normalized coefficients:
+
+$$
+e_k(p\boxplus_d q)=\sum_{i=0}^k\binom{k}{i}e_i(p)e_{k-i}(q),
+\qquad e_k(p\boxtimes_d q)=e_k(p)e_k(q).
+$$
+
+The asymmetric operation uses
+
+$$
+e_k(p\uplus_d q)=\frac{k!}{d!(d-k)!}
+\sum_{i=0}^k\frac{(d-i)!(d-k+i)!}{i!(k-i)!}e_i(p)e_{k-i}(q).
+$$
+
+Optional asymmetric `weights=[a,b]` dilate the input roots before this calculation. They do not represent rank or alter dimensions. Real-root preservation uses real-rooted inputs for symmetric addition, non-negative-root inputs for asymmetric addition, and real-rooted inputs with one non-negative-root input for multiplication. The implementation permits formal coefficients without checking those domains eagerly; root requests validate reconstructed outputs.
 
 ### Coefficient ownership and cached arrays
 
@@ -93,7 +119,7 @@ np.testing.assert_allclose(p.evaluate_roots_float64(), [1, 2])
 
 Verification uses square-free factorization and exact Sturm sequences for factors below degree 15. Factors of degree at least 15 first request certified Arb isolation of the polynomial; degrees above 30 use Arb directly. Degrees through 30 retain exact Sturm/subresultant PRS as a fallback if Arb cannot obtain a certificate. Repeated small factors keep the inexpensive exact path. An imaginary ball merely containing zero is not accepted as a real-root certificate. Complex-rooted inputs raise `ValueError`; inability to certify raises `RuntimeError`. Passing `assume_real_rooted=True` explicitly trusts the caller's claim and bypasses this verification. Jacobi/Laguerre construction outside a known orthogonality domain remains available but validates lazily.
 
-`PYTHONPATH=. python scripts/benchmark_compound_roots.py --degrees 10 15 20 25 30 32 --precision 192 --repeats 3 --output certification-benchmark.json` measures fresh public calls, including validation, against an independent 384-bit Arb reference. On jon-desktop, the degree-30 call decreased from approximately 0.99 seconds to 0.0097 seconds with the new dispatch. Degrees 15–30 matched the reference after float64 conversion; smaller and larger tested cases retained their prior accuracy. Construction and warm-up are excluded, cache latency is separate, and this is a measured improvement for the specified family rather than a universal timing or accuracy guarantee.
+`scripts/benchmark_compound_roots.py` measures fresh public calls, including validation, against Arb references at twice the requested precision. Construction and warm-up are excluded; cache latency is separate. See the [benchmark commands](development.md#benchmarks).
 
 Degree-one polynomials use the coefficient ratio `-a_1/a_0`. A symbolic nonreal root is rejected; unknown realness raises `RuntimeError`. Known real roots can be certified without a numerical value. Their positive/nonnegative domain checks also require a known sign. Numerical extraction requires a numeric root in the finite `float64` range; otherwise it raises `RuntimeError` without filling the root cache. Rational and numeric symbolic linear roots use direct coefficient division rather than a general eigensolver or Arb isolation. Higher-degree symbolic certification retains its existing limitations.
 
@@ -183,7 +209,7 @@ assert FiniteRTransform(p, order=3) == [1, 3, 9]
 assert list(p.additive_power(2).coeffs) == list(symmetric_additive(p, p, 3).coeffs)
 ```
 
-`numerical=True` uses Arb at `prec` bits (default 256) after centering the requested normalized-coefficient prefix exactly. The first cumulant is restored from the original mean; higher cumulants are invariant under translation. This avoids cancellation from large offsets while keeping the cumulant recurrence numerical. Centering uses the specified ambient dimension, including any zero padding. The precision setting is restored on return or failure. Results are float approximations rather than error bounds; increasing the order or using badly conditioned coefficients may require increasing `prec`.
+`numerical=True` uses Arb at `prec` bits (default 256) after centering the requested normalized-coefficient prefix exactly. The first cumulant is restored from the original mean; higher cumulants are invariant under translation. This avoids cancellation from large offsets while keeping the cumulant recurrence numerical. Centering uses the specified ambient dimension, including any zero padding. The precision setting is restored on return or failure. Results are Python float approximations rather than arbitrary-precision values or error bounds; increasing the order or using badly conditioned coefficients may require increasing `prec`. Final float conversion can still overflow or underflow, and this transform does not have the root API's final-finiteness check.
 
 ```python
 import numpy as np
@@ -211,6 +237,28 @@ assert T(1 - sp.Rational(1, 10**20)) == 3
 assert T(0.6) == sp.Rational(45, 17)  # stored float is below 3/5
 assert T(sp.Rational(3, 5)) == sp.Rational(17, 6)
 ```
+
+### Symmetric finite S-output convention
+
+`FiniteSTransform(p)` returns `e_{k-1}/e_k` at node `-k/d` for `k=1,...,d` and ordinarily requires strictly positive roots. `exact=True` returns SymPy rationals; `exact=False` converts to float64. The coefficient path requires rational-convertible inputs; the unit-circle positivity exemption does not supply general symbolic support.
+
+For an even rational polynomial of degree `2d` with zero multiplicity `2r`, `SymmetricFiniteSTransform(p)` returns an array of length `d-r` with entry `e_{2(k-1)}/e_{2k}` at `-k/d`. It checks even parity but does not certify real-rootedness. This output is the **square** of the complex transform in [Definition 8.1](https://arxiv.org/html/2408.09337v2#S8.SS1), which takes the positive-imaginary square root for symmetric real-rooted inputs. Use the implemented ratio explicitly; its public-name/output convention remains a release compatibility decision.
+
+```python
+import sympy as sp
+from finitefree import RealRootedPolynomial, SymmetricFiniteSTransform
+
+p = RealRootedPolynomial.from_roots([-1, 1])
+ratio = SymmetricFiniteSTransform(p)[0]
+assert ratio == -1
+assert sp.sqrt(ratio) == sp.I
+```
+
+### Unitary and interpolated root distributions
+
+`UnitaryPolynomial` trusts the intended unit-circle domain instead of certifying it. Its root method returns complex128 values ordered by angle, with optional CuPy acceleration; `parallel` does not change this implementation. It has no Arb precision path or real-root API final-finiteness check.
+
+`to_scipy_dist()` constructs a continuous piecewise-linear CDF through numerical roots and requires at least two root entries. It is an interpolation, not the atomic empirical root measure; repeated roots remain present.
 
 ### Empirical coefficient comparison
 
@@ -286,6 +334,10 @@ else:
 
 Invalid shape, inconsistent dimensions, empty matrix sequences, nonfinite/complex entries or nonsymmetric supplied entries in `SymmetricMatrixPencil` raise `ValueError`. Symmetry uses the rational entries without an approximate tolerance, so float rounding cannot hide a difference between large integers. Coordinate sequences must match the number of matrices in numerical and rational evaluation. Modular paths reduce integer entries modulo each prime before int64 conversion for Cython calculations.
 
+Generic straight-line gradients use reverse-mode differentiation of scalar operations. Determinant-pencil gradients and Hessians instead use determinant/inverse trace identities. Exact derivatives reject singular evaluated matrices. Numerical inverse/pseudoinverse formulas do not reliably give derivatives at singular points; use symbolic polynomial differentiation when singular-point derivatives are needed. `verify_hyperbolicity(e)` checks the sufficient positive-definite-pencil condition; numerical eigenvalues must exceed `1e-14`, while `exact=True` uses exact rational positivity.
+
+`MultivariatePolynomial` stores rational sparse coefficients and supports exact evaluation and differentiation. Construction does not enforce homogeneity; call `is_homogeneous()` before applying homogeneous geometric interpretations. `to_fmpq_mpoly()` exposes the stored object rather than a caller-owned copy.
+
 ```python
 from finitefree.hyperbolic import SymmetricMatrixPencil
 
@@ -323,3 +375,7 @@ assert pencil.evaluate([1])[0, 0] == float(large)
 
 ::: finitefree.hyperbolic
 ::: finitefree.multivariate
+
+## Working precision
+
+::: finitefree.utils.precision

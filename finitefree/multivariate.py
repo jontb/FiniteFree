@@ -53,9 +53,11 @@ from .core import Polynomial
 
 
 class MultivariatePolynomial(Polynomial):
-    """
-    Represents a homogeneous multivariate polynomial exactly using Flint's fmpq_mpoly
-    as the primary computational backend.
+    r"""
+    Store a rational multivariate polynomial in FLINT's sparse fmpq_mpoly.
+    Homogeneous geometry operations are available, but construction does not
+    require homogeneity; use is_homogeneous() when that assumption is needed.
+    Inputs must be convertible to rational coefficients.
     """
 
     def evaluate(self, x: Sequence[Any]) -> Any:
@@ -188,8 +190,10 @@ class MultivariatePolynomial(Polynomial):
         return normalized
 
     def to_fmpq_mpoly(self) -> Any:
-        """
-        Returns the compiled C-level fmpq_mpoly sparse polynomial.
+        r"""
+        Return the stored FLINT sparse polynomial object without copying.
+        Evaluation/substitution costs depend on monomials, degrees and coefficient
+        sizes; exposing the object does not make those operations constant-time.
         """
         return self._mpoly
 

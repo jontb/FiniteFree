@@ -49,7 +49,9 @@ jobs:
       - name: Construct static documentation assets
         run: |
           python scripts/sync_docs.py
-          mkdocs build
+          git diff --exit-code -- docs/index.md
+          python scripts/check_readme_examples.py
+          mkdocs build --strict
 
       - name: Configure GitHub Pages environment
         uses: actions/configure-pages@v4

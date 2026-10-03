@@ -30,9 +30,12 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
 
 def FiniteSTransform(p: RealRootedPolynomial, exact: bool = True) -> NDArray[Any]:
     r"""
-    Computes the finite S-Transform discretely on $\{-k/d\}$.
-    Returns a dense array of length $d$, where index $k-1$ maps to $-k/d$.
-    Raises ValueError if strict positivity constraint is violated.
+    Return coefficient-ratio S values at the nodes -k/d, k=1,...,d.
+    Index k-1 contains e_{k-1}/e_k. The ordinary real-root API requires strictly
+    positive roots; zero roots raise ValueError. Unit-circle objects bypass that
+    positivity gate, but this coefficient path still requires rational inputs and
+    nonzero neighboring coefficients. exact=True returns SymPy rationals;
+    exact=False returns float64 values without a final-finiteness guarantee.
     """
     if not isinstance(p, UnitaryPolynomial) and not p.has_strictly_positive_roots:
         raise ValueError(
@@ -242,10 +245,15 @@ class FiniteTTransform:
 def SymmetricFiniteSTransform(
     p: RealRootedPolynomial, exact: bool = True
 ) -> NDArray[Any]:
-    """
-    Computes the symmetric finite S-Transform discretely on {-k/d}.
-    p must be symmetric of even degree 2d.
-    Returns an array of length d-r, where index k-1 maps to -k/d.
+    r"""
+    Return consecutive normalized-even-coefficient ratios of an even polynomial.
+    For degree 2d and zero multiplicity 2r, the array has length d-r; index k-1
+    corresponds to -k/d and contains e_{2(k-1)} / e_{2k}.
+    This is the square of the symmetric finite S-transform in Definition 8.1 of
+    Arizmendi et al., arXiv:2408.09337v2; no complex square root is taken.
+    Even degree and parity are checked, but real-rootedness is not certified here.
+    The present path requires rational coefficients. exact=True returns SymPy
+    rationals; exact=False returns float64 ratios with rounding/range limits.
     """
     if p.degree % 2 != 0:
         raise ValueError(

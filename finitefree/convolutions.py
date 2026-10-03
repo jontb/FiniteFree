@@ -8,9 +8,13 @@ def symmetric_additive(
     p: RealRootedPolynomial, q: RealRootedPolynomial, d: int
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free symmetric additive convolution $(p \boxplus_d q)$.
-    Optimized via exponential generating function (EGF) polynomial multiplication
-    using python-flint's GMP-backed fmpq_poly in $O(d \log d)$ time in C.
+    Compute the symmetric finite additive coefficient convolution.
+    For ambient d>=max(p.degree,q.degree), use monic normalized coefficients
+    with zero padding: $e_k(r)=\sum_{i=0}^k\binom{k}{i}e_i(p)e_{k-i}(q)$.
+    An EGF polynomial product and O(d) scaling updates use exact FLINT rationals.
+    Arithmetic/bit cost depends on polynomial multiplication and coefficient sizes.
+    Real-rooted inputs give a real-rooted result, but formal construction does not
+    eagerly verify input/output geometry.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
@@ -67,7 +71,12 @@ def multiplicative(
     p: RealRootedPolynomial, q: RealRootedPolynomial, d: int
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free multiplicative convolution $(p \boxtimes_d q)$.
+    Compute the monic finite multiplicative coefficient convolution.
+    Ambient d must cover both degrees; normalized sequences are zero padded and
+    $e_k(r)=e_k(p)e_k(q)$. Rational arithmetic is exact and scale-invariant.
+    Real-root preservation requires real-rooted inputs with at least one having
+    non-negative roots. The coefficient API does not enforce that domain and its
+    formal result is validated lazily.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
@@ -89,10 +98,13 @@ def asymmetric_additive(
     weights: Optional[Sequence[Any]] = None,
 ) -> RealRootedPolynomial:
     r"""
-    Computes the finite free asymmetric additive convolution $(p \uplus_d q)$
-    exactly. Optimized to run in $O(d \log d)$ time via a Cauchy product of
-    scaled coefficient sequences using python-flint's compiled C-level fmpq_poly
-    multiplication.
+    Compute the factorial-weighted asymmetric additive convolution exactly.
+    Ambient d must cover both input degrees. A scaled FLINT polynomial Cauchy
+    product constructs the monic output; bit cost depends on coefficient sizes.
+    When weights is supplied, weights[0] and weights[1] dilate the respective
+    input roots before convolution; they are not rank or dimension parameters.
+    The real-root preservation theorem uses non-negative-root inputs; this formal
+    coefficient implementation does not enforce that theorem's domain eagerly.
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+The following development changes are being prepared for **0.2**, which is not published or tagged yet. PyPI's released baseline is [0.1.0, 2026-06-19](https://pypi.org/project/finitefree/0.1.0/), from [v0.1.0 / e1acff6](https://github.com/jontb/FiniteFree/tree/v0.1.0). The source version field is still 0.1.0 pending release finalization.
+
+### Migration from 0.1.0
+
+- Recompute saved cumulants of orders 3 and higher with the corrected normalization. For the same normalized input and ambient dimension, an old cumulant can be converted with `new = old / ((n-1)!)**2`. This factor alone does not repair separately incorrect nonmonic normalization or precision already lost in saved data.
+- Cached normalized coefficients and real/unitary root arrays are read-only; use `.copy()` before editing. Constructors now snapshot polynomial and matrix inputs.
+- Lazy geometry checks and nonfinite root errors are intentional contracts. `exact=True` selects a high-precision path with numerical fallbacks; outputs remain float64, not certified intervals or exact algebraic values.
+- Empirical coefficient verification now honors `alpha` and checks every coefficient. A passing diagnostic is not proof of a sample distribution.
+- Exact T-grid boundaries require rational inputs; floats are evaluated at their stored binary positions.
+
+### Documentation and release preparation
+
+- README/API now distinguish unreleased source from published 0.1.0. Installation, development checks, tutorial, precision/evaluation boundaries, determinant derivative limits and implementation-dependent complexity are documented consistently.
+- README is included as the package long description for future builds. The version remains unchanged; no release action is taken.
+- The current `SymmetricFiniteSTransform` output is documented explicitly as the even-coefficient ratio, the square of Definition 8.1's complex-valued transform. Deciding whether 0.2 preserves, renames or replaces that output requires a compatibility decision; library behavior is unchanged by this documentation pass.
+
+### Implemented changes
+
 - Exact rational conversion uses each Python/NumPy floating scalar's own integer ratio. NumPy extended-precision values are no longer narrowed through float64 before polynomial construction, affine transforms or exact matrix-pencil operations, including supplied-value symmetry checks. Numerical outputs retain their documented float64 limits.
 
 - Generic companion/Aberth root paths normalize nonmonic coefficients exactly before float conversion. This fixes incorrect roots such as the numerical result for `2*x**2-6*x+4` and avoids common-scalar overflow/underflow without changing stored coefficients.
@@ -44,9 +62,14 @@ For stored cumulants from the earlier implementation:
 
 ```python
 from math import factorial
+from fractions import Fraction
 
 saved_old_cumulants = [1, 3, 36]
-migrated = [value / factorial(n - 1)**2
+migrated = [Fraction(value, factorial(n - 1)**2)
             for n, value in enumerate(saved_old_cumulants, start=1)]
 assert migrated == [1, 3, 9]
 ```
+
+## 0.1.0 — 2026-06-19
+
+Published on PyPI from `v0.1.0`. Requires Python ≥3.9. Its original cumulant formula multiplied by `(n-1)!` and its contracts predate the development fixes above. Published Python 3.9 wheels do not validate runtime compatibility of subsequent local changes.

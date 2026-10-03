@@ -47,8 +47,10 @@ def sample_gse(d: int, scale: float = 1.0) -> Any:
 
 def sample_wishart(d: int, n: int, beta: int = 2, scale: float = 1.0) -> NDArray[Any]:
     r"""
-    Generates a sample Wishart (LUE for $\beta=2$, LOE for $\beta=1$, LSE for $\beta=4$)
-    matrix $W = X X^H / n$.
+    Sample a real/complex/quaternionic Wishart representation.
+    For beta=1 or 2, return a d-by-d matrix XX^H/n. For beta=4, the complex
+    representation has shape (2d,2d), paired eigenvalues, and normalization
+    XX^H/(2n). scale multiplies the matrix. beta must be 1, 2 or 4.
     """
     if beta == 1:
         X = np.random.randn(d, n)
@@ -134,9 +136,12 @@ def gue_expected_poly(d: int) -> RealRootedPolynomial:
 
 def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial:
     r"""
-    Computes the exact expected characteristic polynomial of a $d \times d$ Wishart matrix:
-    $\mathbb{E}[\det(xI - W)] = n^{-d} d! (-1)^d L_d^{(n - d)}(n x)$
-    using the generalized Laguerre polynomial from orthogonal.py.
+    Construct the monic rational Wishart expectation polynomial.
+    For positive integer dimensions with n>=d, coefficients are those of
+    $n^{-d}d!(-1)^d L_d^{(n-d)}(nx)$. They match the d eigenvalues used by the
+    normalized sampler, including one eigenvalue per pair for beta=4.
+    The beta argument is retained but does not change this coefficient formula.
+    Known Laguerre recurrence metadata is used only in its supported domain.
     """
     import flint
 

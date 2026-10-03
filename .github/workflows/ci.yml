@@ -58,9 +58,9 @@ jobs:
     - name: Verify Code Formatting & Linting (Linux only)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        python -m ruff format --check finitefree/ tests/ scripts/
-        python -m ruff check finitefree/ tests/ scripts/
-        python -m mypy finitefree/ tests/ scripts/
+        python -m ruff format --check finitefree/ tests/ scripts/ examples/
+        python -m ruff check finitefree/ tests/ scripts/ examples/
+        python -m mypy finitefree/ tests/ scripts/ examples/
 
     - name: Test with pytest and coverage (Cython Enabled)
       run: |
@@ -78,7 +78,9 @@ jobs:
         python -m pytest --import-mode=importlib tests/
 
     - name: Verify documentation examples
-      run: python scripts/check_readme_examples.py
+      run: |
+        python scripts/check_readme_examples.py
+        PYTHONPATH=. python examples/showcase.py
 
     - name: Test documentation tools
       run: python -m pytest --import-mode=importlib scripts/tests/
