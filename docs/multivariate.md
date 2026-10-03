@@ -96,3 +96,7 @@ else:
 `normalized_coefficients()` computes `c_alpha / multinomial(d, alpha)` for a homogeneous degree-`d` polynomial. Nonhomogeneous inputs raise `ValueError`; the zero polynomial returns an empty coefficient mapping. The normalization is an algebraic convention and does not imply a multivariate finite convolution or geometric certificate.
 
 Determinant factories continue to accept the exact rational matrix-pencil snapshots described in [the API](api.md#matrix-pencil-input-contract). Direct, grid-interpolated and sparse constructions can all use the same evaluation/algebra workflows above. Interpolation, coefficient count, degree and bit size can still dominate construction.
+
+After clearing denominators, modular reconstruction continues until the product of accepted primes exceeds twice a determinant coefficient bound. For integer matrices, one such bound is `n! * product_r max_c sum_j abs(A_j[r,c])`: each determinant permutation is a product of linear forms, and the coefficient sum of absolute values is bounded by the product of their coefficient sums. This guarantees a unique centered integer reconstruction of every recovered coefficient. Mere agreement between consecutive CRT reconstructions is insufficient.
+
+The dense grid covers the full homogeneous coefficient support. Sparse Zippel support discovery still uses randomized probes; the coefficient bound certifies recovered coefficient size, but does not by itself certify that randomized support discovery found every monomial. A general sparse support certificate remains a separate improvement.

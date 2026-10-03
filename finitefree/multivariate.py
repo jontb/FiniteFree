@@ -12,6 +12,26 @@ from .utils.modular import _as_modular_array, crt, prime_generator
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
 
 
+def _determinant_coefficient_bound(
+    matrices: Sequence[Sequence[Sequence[int]]],
+) -> int:
+    """Bound every coefficient of det(sum_j x_j A_j) for integer matrices.
+
+    Each determinant permutation contributes a product of linear forms.
+    The coefficient l1 norm of that product is at most the product of their
+    coefficient l1 norms. Summing over n! permutations gives the rowwise bound
+    n! * product_r max_c sum_j abs(A_j[r,c]).
+    """
+    n = len(matrices[0])
+    return math.factorial(n) * math.prod(
+        max(
+            (sum(abs(matrix[r][c]) for matrix in matrices) for c in range(n)),
+            default=0,
+        )
+        for r in range(n)
+    )
+
+
 @functools.lru_cache(maxsize=None)
 def get_monomial_exponents(dim: int, deg: int) -> list[tuple[int, ...]]:
     if dim == 1:
@@ -472,6 +492,8 @@ class MultivariatePolynomial(Polynomial):
             integer_matrices.append(int_A)
 
         primes_gen = prime_generator(1000000007)
+        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
+        modulus = 1
         reconstructed = None
         primes_used = []
         coeffs_by_prime = []
@@ -497,20 +519,17 @@ class MultivariatePolynomial(Polynomial):
                     if c_p is not None:
                         coeffs_by_prime.append(c_p)
                         primes_used.append(p_res)
+                        modulus *= p_res
 
-                if len(primes_used) >= 2:
+                if primes_used:
                     current_reconstruction = []
                     for i in range(N):
                         vals = [coeffs_by_prime[k][i] for k in range(len(primes_used))]
                         current_reconstruction.append(crt(vals, primes_used))
 
-                    if (
-                        reconstructed is not None
-                        and current_reconstruction == reconstructed
-                    ):
-                        reconstructed = current_reconstruction
-                        break
                     reconstructed = current_reconstruction
+                    if modulus > 2 * coefficient_bound:
+                        break
 
         names = tuple(x.name for x in variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)
@@ -687,6 +706,8 @@ class MultivariatePolynomial(Polynomial):
             return S
 
         primes_gen = prime_generator(1000000007)
+        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
+        modulus = 1
         reconstructed = None
         primes_used = []
         coeffs_by_prime = []
@@ -705,8 +726,9 @@ class MultivariatePolynomial(Polynomial):
 
             coeffs_by_prime.append(S_p)
             primes_used.append(p)
+            modulus *= p
 
-            if len(primes_used) >= 2:
+            if primes_used:
                 current_reconstruction = {}
                 for exp in exps:
                     vals = []
@@ -714,13 +736,9 @@ class MultivariatePolynomial(Polynomial):
                         vals.append(coeffs_by_prime[k].get(exp, 0))
                     current_reconstruction[exp] = crt(vals, primes_used)
 
-                if (
-                    reconstructed is not None
-                    and current_reconstruction == reconstructed
-                ):
-                    reconstructed = current_reconstruction
-                    break
                 reconstructed = current_reconstruction
+                if modulus > 2 * coefficient_bound:
+                    break
 
         names = tuple(x.name for x in variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)
