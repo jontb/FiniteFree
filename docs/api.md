@@ -186,6 +186,8 @@ For $p(x)=\sum_{k=0}^{m}a_k x^{m-k}$ and ambient dimension $d\ge m$, `normalized
 
 Finite cumulants, additive powers and coefficient convolutions use this root-normalized sequence. Reconstructed/convolved outputs are monic. Ratio-based S/T transforms are unchanged by this scalar normalization. In particular, a nonmonic derivative from `derivative(monic=False)` has the same finite cumulants as its monic form.
 
+Truncated R-transform calls extract only the needed coefficient prefix. The largest requested native-dimension prefix is cached separately, bounded by the polynomial degree; complete coefficient requests still return the complete sequence. Ambient dimensions use their exact binomial factors without accumulating persistent cache entries. Numerical centering remains exact before the Arb recurrence.
+
 ```python
 import sympy as sp
 from finitefree import FiniteRTransform, RealRootedPolynomial
