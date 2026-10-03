@@ -12,6 +12,15 @@ The following development changes are being prepared for **0.2**, which is not p
 - Empirical coefficient verification now honors `alpha` and checks every coefficient. A passing diagnostic is not proof of a sample distribution.
 - Exact T-grid boundaries require rational inputs; floats are evaluated at their stored binary positions.
 
+### Multivariate rational polynomial foundations
+
+- Repair exact public evaluation on python-flint 0.9.0 using its positional callable interface.
+- Own native polynomial inputs, exported native copies, coefficient maps and variable lists. Reject native context/name order mismatches and duplicate variable names rather than silently relabeling coordinates.
+- Add sparse coefficient construction/roundtrip, rational addition/subtraction/multiplication and nonnegative integer powers, exact gradient/Hessian polynomials, and scalar-preserving line restriction with lazy univariate geometry certification.
+- Add real float64 batch evaluation with finite-input/coefficient/result checks and documented cancellation/underflow limits.
+- Reject negative/fractional/boolean derivative orders and nonhomogeneous multinomial normalization. These previously allowed silent no-op or mathematically undefined results.
+- Native exports now return independent copies; callers modifying the previously exposed live object must reconstruct a new polynomial explicitly.
+
 ### Documentation and release preparation
 
 - README/API now distinguish unreleased source from published 0.1.0. Installation, development checks, tutorial, precision/evaluation boundaries, determinant derivative limits and implementation-dependent complexity are documented consistently.

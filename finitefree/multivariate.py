@@ -1,8 +1,11 @@
 import functools
 import math
-from typing import Any, Dict, Sequence, Tuple, Union
+import operator
+from typing import Any, Dict, Mapping, Optional, Sequence, SupportsIndex, Tuple, Union
 
+import numpy as np
 import sympy as sp
+from numpy.typing import NDArray
 
 from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from .utils.modular import _as_modular_array, crt, prime_generator
@@ -49,7 +52,7 @@ def get_grid_points(
     return pts
 
 
-from .core import Polynomial
+from .core import Polynomial, RealRootedPolynomial
 
 
 class MultivariatePolynomial(Polynomial):
@@ -58,44 +61,189 @@ class MultivariatePolynomial(Polynomial):
     Homogeneous geometry operations are available, but construction does not
     require homogeneity; use is_homogeneous() when that assumption is needed.
     Inputs must be convertible to rational coefficients.
+    Variable order is explicit. Coefficients and exported native objects are owned
+    copies. Algebra does not certify stability, hyperbolicity or real-rootedness.
     """
+
+    _mpoly: Any
+    _float_terms_cached: Optional[Tuple[Tuple[Tuple[int, ...], float], ...]]
 
     def evaluate(self, x: Sequence[Any]) -> Any:
         r"""
         Evaluate at a rational point $x = (x_1, \dots, x_m)$.
-        Known compatibility limitation: python-flint 0.9.0 has no
-        fmpq_mpoly.evaluate method, so this path raises AttributeError there.
-        Until repaired, use expr.subs or call to_fmpq_mpoly() with positional
-        rational coordinates.
+        Floating coordinates retain their stored binary ratios. The result is an
+        exact FLINT rational; use evaluate_float64 for approximate batch evaluation.
         """
         from .utils.conversion import sympy_to_fmpq
 
         if len(x) != len(self.variables):
             raise ValueError(f"Expected {len(self.variables)} values, got {len(x)}")
         x_fmpq = [sympy_to_fmpq(xi) for xi in x]
-        return self._mpoly.evaluate(x_fmpq)  # type: ignore[attr-defined, unused-ignore]
+        return self._mpoly(*x_fmpq)
+
+    def evaluate_float64(self, points: Any) -> Union[float, NDArray[np.float64]]:
+        """Evaluate real points shaped (..., variable_count) with NumPy.
+
+        A single point returns a float; batches retain their leading dimensions.
+        Coefficients are converted once, and terms are evaluated across each batch.
+        Nonfinite inputs, coefficients or results raise errors. Finite cancellation,
+        underflow and rounding remain possible; outputs have no certified error bound.
+        """
+        if np.iscomplexobj(points):
+            raise ValueError("Numerical coordinates must be real.")
+        try:
+            coordinates = np.asarray(points, dtype=np.float64)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(
+                "Numerical coordinates must be finite real values."
+            ) from error
+        if coordinates.ndim == 0 or coordinates.shape[-1] != len(self._variables):
+            raise ValueError(
+                f"Expected final coordinate dimension {len(self._variables)}."
+            )
+        if not np.all(np.isfinite(coordinates)):
+            raise ValueError("Numerical coordinates must be finite.")
+        if self._float_terms_cached is None:
+            from .utils.conversion import flint_to_float
+
+            terms = tuple(
+                (tuple(int(k) for k in alpha), flint_to_float(c))
+                for alpha, c in self._mpoly.to_dict().items()
+            )
+            if not all(math.isfinite(c) for _, c in terms):
+                raise RuntimeError("Polynomial coefficients exceed the float64 range.")
+            self._float_terms_cached = terms
+        result = np.zeros(coordinates.shape[:-1], dtype=np.float64)
+        try:
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                for alpha, coefficient in self._float_terms_cached:
+                    term = np.full(result.shape, coefficient, dtype=np.float64)
+                    for i, exponent in enumerate(alpha):
+                        if exponent:
+                            term *= coordinates[..., i] ** exponent
+                    result += term
+        except FloatingPointError as error:
+            raise RuntimeError(
+                "Numerical polynomial evaluation is nonfinite."
+            ) from error
+        if not np.all(np.isfinite(result)):
+            raise RuntimeError("Numerical polynomial evaluation is nonfinite.")
+        return float(result) if result.ndim == 0 else result
 
     @property
     def variables(self) -> list[sp.Symbol]:
-        return self._variables
+        """Return a caller-owned list in the stored coordinate order."""
+        return list(self._variables)
 
     def __init__(self, expr: Any, variables: Sequence[sp.Symbol]) -> None:
         import flint
 
         from .utils.conversion import sympy_to_fmpq
 
-        self._variables = list(variables)
+        self._variables = tuple(variables)
+        if not self._variables or not all(
+            isinstance(x, sp.Symbol) for x in self._variables
+        ):
+            raise ValueError("Variables must be a nonempty sequence of SymPy symbols.")
         names = tuple(x.name for x in self._variables)
+        if len(set(names)) != len(names):
+            raise ValueError("Variable names must be distinct.")
         self._ctx = flint.fmpq_mpoly_ctx.get(names=names)
+        self._float_terms_cached = None
 
         if isinstance(expr, flint.fmpq_mpoly):
-            self._mpoly = expr
+            if expr.context().names() != names:
+                raise ValueError("Native polynomial context must match variable order.")
+            self._mpoly = (
+                expr + 0
+                if expr.context() == self._ctx
+                else self._ctx.from_dict(expr.to_dict())
+            )
         else:
             poly_sym = sp.Poly(sp.expand(sp.sympify(expr)), self._variables)
             flint_dict = {}
             for exp, c in poly_sym.as_dict().items():
                 flint_dict[exp] = sympy_to_fmpq(c)
             self._mpoly = self._ctx.from_dict(flint_dict)
+
+    @classmethod
+    def from_coefficients(
+        cls, coefficients: Mapping[Tuple[int, ...], Any], variables: Sequence[sp.Symbol]
+    ) -> "MultivariatePolynomial":
+        """Construct from sparse nonnegative exponent tuples and rational values."""
+        from .utils.conversion import sympy_to_fmpq
+
+        result = cls(0, variables)
+        terms = {
+            result._nonnegative_indices(alpha, "Exponent"): sympy_to_fmpq(c)
+            for alpha, c in coefficients.items()
+        }
+        result._mpoly = result._ctx.from_dict(terms)
+        return result
+
+    def coefficients(self) -> Dict[Tuple[int, ...], sp.Rational]:
+        """Return an owned sparse mapping of exponent tuples to exact coefficients."""
+        return {
+            tuple(int(k) for k in alpha): sp.Rational(int(c.p), int(c.q))
+            for alpha, c in self._mpoly.to_dict().items()
+        }
+
+    def _nonnegative_indices(
+        self, values: Sequence[SupportsIndex], label: str
+    ) -> Tuple[int, ...]:
+        if len(values) != len(self._variables):
+            raise ValueError(f"{label} count must match variable count.")
+        indices = []
+        for value in values:
+            if isinstance(value, (bool, np.bool_)):
+                raise TypeError(f"{label} values must be integers, not booleans.")
+            try:
+                index = operator.index(value)
+            except TypeError as error:
+                raise TypeError(f"{label} values must be integers.") from error
+            if index < 0:
+                raise ValueError(f"{label} values must be nonnegative.")
+            indices.append(index)
+        return tuple(indices)
+
+    def _coerce_operand(self, other: Any) -> Any:
+        if isinstance(other, MultivariatePolynomial):
+            if other._variables != self._variables:
+                raise ValueError("Polynomial variable sequences must match exactly.")
+            return other._mpoly
+        from .utils.conversion import sympy_to_fmpq
+
+        return sympy_to_fmpq(other)
+
+    def __add__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly + self._coerce_operand(other), self._variables)
+
+    def __radd__(self, other: Any) -> "MultivariatePolynomial":
+        return self.__add__(other)
+
+    def __sub__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly - self._coerce_operand(other), self._variables)
+
+    def __rsub__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._coerce_operand(other) - self._mpoly, self._variables)
+
+    def __mul__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly * self._coerce_operand(other), self._variables)
+
+    def __rmul__(self, other: Any) -> "MultivariatePolynomial":
+        return self.__mul__(other)
+
+    def __neg__(self) -> "MultivariatePolynomial":
+        return type(self)(-self._mpoly, self._variables)
+
+    def __pow__(self, exponent: SupportsIndex) -> "MultivariatePolynomial":
+        """Raise to a nonnegative integer power within the rational polynomial ring."""
+        if isinstance(exponent, (bool, np.bool_)):
+            raise TypeError("Exponent must be an integer, not a boolean.")
+        power = operator.index(exponent)
+        if power < 0:
+            raise ValueError("Exponent must be nonnegative.")
+        return type(self)(self._mpoly**power, self._variables)
 
     @property
     def expr(self) -> sp.Expr:
@@ -151,24 +299,77 @@ class MultivariatePolynomial(Polynomial):
         return MultivariatePolynomial(deriv_poly, self.variables)
 
     def mixed_partial_derivative(
-        self, orders: Sequence[int]
+        self, orders: Sequence[SupportsIndex]
     ) -> "MultivariatePolynomial":
         """
         Computes mixed partial derivatives exactly and efficiently by
         performing C-level differentiation.
         """
-        if len(orders) != len(self.variables):
-            raise ValueError(
-                f"Orders length ({len(orders)}) must match "
-                f"variable count ({len(self.variables)})."
-            )
+        indices = self._nonnegative_indices(orders, "Derivative order")
+        if sum(indices) > self.degree():
+            return MultivariatePolynomial(0, self.variables)
 
         res = self._mpoly
-        for i, ord_val in enumerate(orders):
+        for i, ord_val in enumerate(indices):
             for _ in range(ord_val):
                 res = res.derivative(i)
 
         return MultivariatePolynomial(res, self.variables)
+
+    def partial_derivative(
+        self, variable: sp.Symbol, order: SupportsIndex = 1
+    ) -> "MultivariatePolynomial":
+        """Differentiate in a stored variable with a nonnegative integer order."""
+        if variable not in self._variables:
+            raise ValueError("Derivative variable must be in the stored variables.")
+        if isinstance(order, (bool, np.bool_)):
+            raise TypeError("Derivative order must be an integer, not a boolean.")
+        orders = [0] * len(self._variables)
+        orders[self._variables.index(variable)] = operator.index(order)
+        return self.mixed_partial_derivative(orders)
+
+    def gradient(self) -> list["MultivariatePolynomial"]:
+        """Return exact polynomial derivatives in stored variable order."""
+        return [self.partial_derivative(x) for x in self._variables]
+
+    def hessian(self) -> list[list["MultivariatePolynomial"]]:
+        """Return exact second polynomial derivatives, including at singular points."""
+        return [
+            [p.partial_derivative(y) for y in self._variables] for p in self.gradient()
+        ]
+
+    def restrict_line(
+        self, base_point: Sequence[Any], direction: Sequence[Any]
+    ) -> "RealRootedPolynomial":
+        """Form P(base_point + t*direction) exactly, retaining its leading scalar.
+
+        The returned univariate object certifies real-rootedness lazily. A generic
+        restriction can have complex roots; no hyperbolicity assumption is inferred.
+        Identically zero restrictions raise ValueError because the univariate class
+        cannot represent the zero polynomial.
+        """
+        import flint
+
+        from .utils.conversion import sympy_to_fmpq
+
+        if len(base_point) != len(self._variables) or len(direction) != len(
+            self._variables
+        ):
+            raise ValueError("Line coordinates must match variable count.")
+        factors = [
+            flint.fmpq_poly([sympy_to_fmpq(a), sympy_to_fmpq(b)])
+            for a, b in zip(base_point, direction)
+        ]
+        result = flint.fmpq_poly([])
+        for alpha, coefficient in self._mpoly.to_dict().items():
+            term = flint.fmpq_poly([coefficient])
+            for factor, exponent in zip(factors, alpha):
+                if exponent:
+                    term *= factor**exponent
+            result += term
+        if result.degree() < 0:
+            raise ValueError("Line restriction is identically zero.")
+        return RealRootedPolynomial(result, monic=False)
 
     def normalized_coefficients(self) -> Dict[Tuple[int, ...], Any]:
         r"""
@@ -178,6 +379,10 @@ class MultivariatePolynomial(Polynomial):
         """
         import flint
 
+        if not self.is_homogeneous():
+            raise ValueError(
+                "Normalized coefficients require a homogeneous polynomial."
+            )
         d = self.degree()
 
         def multinomial_coeff(total: int, alpha: Tuple[int, ...]) -> int:
@@ -197,11 +402,11 @@ class MultivariatePolynomial(Polynomial):
 
     def to_fmpq_mpoly(self) -> Any:
         r"""
-        Return the stored FLINT sparse polynomial object without copying.
+        Return a caller-owned copy of the FLINT sparse polynomial.
         Evaluation/substitution costs depend on monomials, degrees and coefficient
         sizes; exposing the object does not make those operations constant-time.
         """
-        return self._mpoly
+        return self._mpoly + 0
 
     @classmethod
     def from_symmetric_matrix_pencil_interpolated(

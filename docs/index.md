@@ -127,8 +127,8 @@ The following pre-rendered figures illustrate selected finite-degree examples an
 
 ??? "Multivariate Hyperbolic Geometry & Matrix Pencils"
 
-    - **`MultivariatePolynomial`**: Homogeneous multivariate polynomials with exact directional derivatives, mixed partials, and homogeneous multinomial normalization.
-    - **Compiled Sparse Evaluations**: `to_fmpq_mpoly()` exposes the stored FLINT sparse polynomial. Evaluation and differentiation costs depend on the monomial count, degrees and coefficient sizes.
+    - **`MultivariatePolynomial`**: Sparse rational polynomials with exact evaluation, rational algebra, partial/directional derivatives, gradient/Hessian polynomials and exact line restriction. Homogeneous multinomial normalization requires a homogeneous input; construction and algebra do not certify stability or hyperbolicity. See [multivariate workflows](multivariate.md).
+    - **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64` evaluates real batches with explicit rounding/range limits. Native inputs and `to_fmpq_mpoly()` exports are copied, with ordered variable contexts checked. Costs depend on monomial count, degree, batch size and coefficient sizes.
     - **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
     - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
     - **Zippel Sparse Interpolation**: Deploys Zippel's probabilistic algorithm over $\mathbb{F}_p$ for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`), bounding interpolation complexity to the target monomial count rather than the maximum total-degree combinatorial grid.
