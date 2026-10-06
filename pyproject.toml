@@ -95,8 +95,6 @@ test-command = "python {project}/scripts/test_installed_wheel.py"
 # binaries compatible with each container instead of compiling newer releases
 # whose wheels require a newer glibc. python-flint may still build on musl.
 environment = {PIP_ONLY_BINARY = "numpy,scipy"}
-# Pin a verified current builder while retaining musllinux 1.2 wheel tags.
-musllinux-x86_64-image = "quay.io/pypa/musllinux_1_2_x86_64@sha256:ff786af69d772d7ac3e318c00a2b682428a352cc822d6175f6a0d4b431c0d44d"
 
 [[tool.cibuildwheel.overrides]]
 select = "*-musllinux*"
