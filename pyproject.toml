@@ -90,6 +90,12 @@ build-verbosity = 1
 test-requires = ["pytest>=7.0"]
 test-command = "python {project}/scripts/test_installed_wheel.py"
 
+[[tool.cibuildwheel.overrides]]
+select = "*-musllinux*"
+# python-flint 0.9 provides no musllinux wheel; its test-environment source
+# installation needs FLINT 3, GMP and MPFR headers in the Alpine container.
+before-all = "apk add --no-cache flint-dev gmp-dev mpfr-dev"
+
 
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
