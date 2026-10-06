@@ -90,6 +90,18 @@ build-verbosity = 1
 test-requires = ["pytest>=7.0"]
 test-command = "python {project}/scripts/test_installed_wheel.py"
 
+[tool.cibuildwheel.linux]
+# Keep the manylinux2014 compatibility floor while selecting NumPy/SciPy
+# binaries compatible with each container instead of compiling newer releases
+# whose wheels require a newer glibc. python-flint may still build on musl.
+environment = {PIP_ONLY_BINARY = "numpy,scipy"}
+
+[[tool.cibuildwheel.overrides]]
+select = "*-musllinux*"
+# python-flint has no musllinux wheel. The supported PyPA Alpine image lacks
+# a FLINT package, so build a pinned, checksum-verified native dependency.
+before-all = "sh {project}/scripts/build_flint_musllinux.sh"
+
 
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries

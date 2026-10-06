@@ -1,0 +1,62 @@
+name: Build Release Artifacts Only
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+    paths:
+      - ".github/workflows/build-release.yml"
+      - ".github/workflows/publish.yml"
+      - "pyproject.toml"
+      - "finitefree/**"
+      - "tests/**"
+      - "scripts/test_installed_wheel.py"
+      - "scripts/build_flint_musllinux.sh"
+  push:
+    # A branch pointing to reviewed main runs the matrix on that exact commit.
+    # Branch pushes never match publish.yml's release-tag trigger.
+    branches: ["release-review/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_wheels:
+    name: Build and test wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test the publishing wheel policy
+        # Shared Python, architecture, skip and installed-wheel test policy
+        # comes from pyproject.toml, using the same action as publish.yml.
+        uses: pypa/cibuildwheel@v2.21.3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-review-wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  build_sdist:
+    name: Build release source archive
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build
+      - run: python -m build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-review-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
