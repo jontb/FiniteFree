@@ -42,6 +42,7 @@ nav:
   - Tutorial: tutorial.md
   - Multivariate Workflows: multivariate.md
   - Development: development.md
+  - Release Review: release.md
 validation:
   links:
     not_found: warn

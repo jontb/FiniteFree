@@ -64,8 +64,11 @@ def test_exact_matrix_entries_and_parameters_keep_extended_precision(
     value, expected = extended_value()
     entry = pencil_type([np.array([[value]], dtype=np.longdouble)])
     parameter = pencil_type([[[1]]])
-    assert list(entry.characteristic_polynomial([1])) == [-expected, 1]
-    assert list(parameter.characteristic_polynomial([value])) == [-expected, 1]
+    for polynomial in (
+        entry.characteristic_polynomial([1]),
+        parameter.characteristic_polynomial([value]),
+    ):
+        assert [sp.Rational(int(c.p), int(c.q)) for c in polynomial] == [-expected, 1]
     assert entry.evaluate([1])[0, 0] == 1.0
 
 

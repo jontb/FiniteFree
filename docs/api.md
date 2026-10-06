@@ -244,16 +244,21 @@ assert T(sp.Rational(3, 5)) == sp.Rational(17, 6)
 
 `FiniteSTransform(p)` returns `e_{k-1}/e_k` at node `-k/d` for `k=1,...,d` and ordinarily requires strictly positive roots. `exact=True` returns SymPy rationals; `exact=False` converts to float64. The coefficient path requires rational-convertible inputs; the unit-circle positivity exemption does not supply general symbolic support.
 
-For an even rational polynomial of degree `2d` with zero multiplicity `2r`, `SymmetricFiniteSTransform(p)` returns an array of length `d-r` with entry `e_{2(k-1)}/e_{2k}` at `-k/d`. It checks even parity but does not certify real-rootedness. This output is the **square** of the complex transform in [Definition 8.1](https://arxiv.org/html/2408.09337v2#S8.SS1), which takes the positive-imaginary square root for symmetric real-rooted inputs. Use the implemented ratio explicitly; its public-name/output convention remains a release compatibility decision.
+For an even rational polynomial of degree `2d` with zero multiplicity `2r`, `SymmetricFiniteSTransform(p, convention="ratio")` returns an array of length `d-r` with entry `e_{2(k-1)}/e_{2k}` at `-k/d`. This remains the default and checks even parity without certifying real-rootedness. It is the **square** of the complex transform in [Definition 8.1](https://arxiv.org/html/2408.09337v2#S8.SS1).
+
+Use `convention="standard"` for that definition's positive-imaginary square root. This requires positive degree and real-rootedness certification, honoring the existing explicit `assume_real_rooted=True` trust contract. Odd-degree, non-even, nonrational or complex-rooted inputs are rejected. A positive-degree polynomial whose roots are all zero has an empty node domain. Exact outputs are SymPy expressions; `exact=False` returns complex128 values and raises `RuntimeError` if a nonzero result cannot fit that range. The square root is taken before float conversion, allowing representable results even when the squared ratio overflows or underflows float64.
 
 ```python
 import sympy as sp
 from finitefree import RealRootedPolynomial, SymmetricFiniteSTransform
 
 p = RealRootedPolynomial.from_roots([-1, 1])
-ratio = SymmetricFiniteSTransform(p)[0]
+ratio = SymmetricFiniteSTransform(p)[0]  # compatible default
+standard = SymmetricFiniteSTransform(p, convention="standard")[0]
 assert ratio == -1
-assert sp.sqrt(ratio) == sp.I
+assert standard == sp.I
+assert standard**2 == ratio
+assert SymmetricFiniteSTransform(p, exact=False, convention="standard")[0] == 1j
 ```
 
 ### Unitary and interpolated root distributions
@@ -290,9 +295,11 @@ assert not mismatch.verify_coefficients()
 
 ### Orthogonal polynomial kernel evaluation
 
-`OrthogonalPolynomialKernel(polys, norms)` represents the unweighted kernel $K(x,y)=\sum_{j=0}^{n-1}p_j(x)p_j(y)/h_j$, with `n=len(norms)` and polynomials through $p_n$. The supplied polynomials, norms and any explicit leading coefficients must form a consistent orthogonal family; construction does not certify orthogonality. Evaluation uses the [Christoffel–Darboux identity and its confluent form](https://dlmf.nist.gov/18.2#v). Exact arguments use exact equality to select the diagonal, preserving distinct integers beyond the float64 range. An empty basis (`norms=[]`, with $p_0$ supplied) returns zero.
+`OrthogonalPolynomialKernel(polys, norms)` represents the unweighted kernel $K(x,y)=\sum_{j=0}^{n-1}p_j(x)p_j(y)/h_j$, with `n=len(norms)` and polynomials through $p_n$. Construction snapshots the polynomials, norms and leading coefficients; their public properties return independent copies. Reconstruct a kernel to change its basis. The supplied values must form a consistent orthogonal family; construction does not certify general orthogonality. Exact evaluation uses the [Christoffel–Darboux identity and its confluent form](https://dlmf.nist.gov/18.2#v), with exact equality selecting the diagonal and preserving distinct integers beyond the float64 range. An empty basis (`norms=[]`, with $p_0$ supplied) returns zero.
 
-If either argument is a floating scalar, both coordinates are converted to float64. The derivative formula evaluates equal stored coordinates. Distinct points with separation at most `sqrt(float64_eps) * max(1, abs(x), abs(y))` use the finite basis sum with `math.fsum`; other points use the Christoffel–Darboux quotient. Nearby distinct coordinates are not replaced with a diagonal approximation. The basis sum adds polynomial evaluations, while diagonal and separated calls retain the fast path. It still uses floating polynomial evaluation and cannot eliminate badly conditioned coefficients, overflow, underflow or final-output rounding.
+If either argument is a floating scalar, both coordinates must fit finite float64 values. For exactly verified probabilists' Hermite polynomials `He_j`, norms `j!` and leading coefficients 1, every floating call uses the normalized three-term recurrence and a finite basis sum with `math.fsum`. Verification checks actual coefficients through `p_n`, so a name or stale provenance cannot select this path. Nonfinite recurrence arithmetic raises `RuntimeError`.
+
+Other families retain the derivative formula for equal stored coordinates and the Christoffel–Darboux quotient for separated points. Distinct points with separation at most `sqrt(float64_eps) * max(1, abs(x), abs(y))` use the finite basis sum with `math.fsum`, preserving both coordinates. Generic polynomial evaluation retains its conditioning, overflow, underflow and output-rounding limits. The Hermite recurrence improves the tested cases but is not a uniform accuracy certificate.
 
 ```python
 from finitefree import OrthogonalPolynomialKernel, hermite_polynomial
@@ -326,6 +333,21 @@ except ValueError:
     pass
 else:
     raise AssertionError("Invalid correlation spectrum was accepted")
+```
+
+For repeated samples from the same kernel, `PreparedDiscreteDPP(kernel, state_space)` validates and decomposes it once. It owns immutable array storage and a tuple of the supplied hashable labels; mutable label objects themselves are not deep-copied. `kernel_matrix` and `eigenvalues` return independent read-only copies. Preparation consumes no random numbers. Each `sample()` owns its working projection basis.
+
+Both `prepared.sample(rng=generator)` and `sample_discrete(kernel, states, rng=generator)` accept a NumPy `Generator`. Omitting `rng` preserves the legacy global NumPy RNG. `sample_discrete(prepared)` reuses the prepared state; an explicitly supplied state space must exactly match its stored order. Construct a new prepared object when the kernel or state space changes.
+
+```python
+import numpy as np
+from finitefree import PreparedDiscreteDPP, sample_discrete
+
+prepared = PreparedDiscreteDPP(np.diag([0.0, 1.0]), ["excluded", "included"])
+rng = np.random.default_rng(73)
+assert prepared.sample(rng=rng) == ["included"]
+assert sample_discrete(prepared, rng=rng) == ["included"]
+assert prepared.state_space == ("excluded", "included")
 ```
 
 ## Matrix-pencil input contract

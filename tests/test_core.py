@@ -1,6 +1,7 @@
 import flint
 import numpy as np
 import pytest
+import sympy as sp
 
 from finitefree import PrecisionContext, RealRootedPolynomial
 
@@ -21,7 +22,7 @@ def test_precision_context() -> None:
 def test_real_rooted_polynomial_monic() -> None:
     # 2x^2 - 8 -> x^2 - 4
     poly = RealRootedPolynomial([2, 0, -8])
-    assert np.allclose(list(poly.coeffs), [1, 0, -4])
+    assert list(poly.coeffs) == [1, 0, -4]
     assert poly.degree == 2
 
 
@@ -47,13 +48,13 @@ def test_normalized_coeffs() -> None:
     # k=2: c_2 = 1 * 1 * e_2 => 1 = 1 e_2 => e_2 = 1
     poly = RealRootedPolynomial([1, -2, 1], assume_real_rooted=True)
     e_k = poly.normalized_coeffs()
-    assert np.allclose(list(e_k), [1, 1, 1])
+    assert list(e_k) == [1, 1, 1]
 
 
 def test_from_normalized_coeffs() -> None:
     e_k = [1, 1, 1]
     poly = RealRootedPolynomial.from_normalized_coeffs(e_k)
-    assert np.allclose(list(poly.coeffs), [1, -2, 1])
+    assert list(poly.coeffs) == [1, -2, 1]
     assert not poly._is_verified
     assert poly.verify_real_rootedness()
 
@@ -151,14 +152,14 @@ def test_polynomial_boundary_cases() -> None:
     # Degree 0 polynomial: constant p(x) = 5 (normalized to 1)
     p0 = RealRootedPolynomial([5])
     assert p0.degree == 0
-    assert np.allclose(list(p0.coeffs), [1])
+    assert list(p0.coeffs) == [1]
     assert p0.verify_real_rootedness() is True
     assert len(p0.evaluate_roots_float64()) == 0
 
     # Degree 1 polynomial: p(x) = 2x - 3 (normalized to x - 1.5)
     p1 = RealRootedPolynomial([2, -3])
     assert p1.degree == 1
-    assert np.allclose(list(p1.coeffs), [1, -1.5])
+    assert list(p1.coeffs) == [1, sp.Rational(-3, 2)]
     assert p1.verify_real_rootedness() is True
     roots = p1.evaluate_roots_float64()
     assert len(roots) == 1
@@ -195,11 +196,11 @@ def test_derivative_non_monic() -> None:
 
     # Monic (default): returns x - 1.5
     dp_monic = p.derivative(monic=True)
-    assert np.allclose(list(dp_monic.coeffs), [1, -1.5])
+    assert list(dp_monic.coeffs) == [1, sp.Rational(-3, 2)]
 
     # Non-monic: returns 2x - 3
     dp_non_monic = p.derivative(monic=False)
-    assert np.allclose(list(dp_non_monic.coeffs), [2, -3])
+    assert list(dp_non_monic.coeffs) == [2, -3]
 
 
 @pytest.mark.parametrize("degree", [2, 16, 35])

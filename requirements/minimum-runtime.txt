@@ -1,0 +1,5 @@
+# Direct runtime floors for the supported Python 3.10 environment.
+python-flint==0.9.0
+numpy==1.24.0
+sympy==1.12
+scipy==1.10.0

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 import numpy as np
 import sympy as sp
@@ -246,24 +246,37 @@ class FiniteTTransform:
 
 
 def SymmetricFiniteSTransform(
-    p: RealRootedPolynomial, exact: bool = True
+    p: RealRootedPolynomial,
+    exact: bool = True,
+    *,
+    convention: Literal["ratio", "standard"] = "ratio",
 ) -> NDArray[Any]:
     r"""
-    Return consecutive normalized-even-coefficient ratios of an even polynomial.
+    Return the legacy ratio or standard symmetric finite S-transform.
     For degree 2d and zero multiplicity 2r, the array has length d-r; index k-1
     corresponds to -k/d and contains e_{2(k-1)} / e_{2k}.
-    This is the square of the symmetric finite S-transform in Definition 8.1 of
-    Arizmendi et al., arXiv:2408.09337v2; no complex square root is taken.
-    Even degree and parity are checked, but real-rootedness is not certified here.
-    The present path requires rational coefficients. exact=True returns SymPy
-    rationals; exact=False returns float64 ratios with rounding/range limits.
+    The default convention="ratio" preserves the existing squared-transform
+    output and parity-only validation. convention="standard" implements the
+    positive-imaginary square root in Definition 8.1 of Arizmendi et al.,
+    arXiv:2408.09337v2. It requires positive degree and checks real-rootedness
+    using the polynomial's validation contract, including explicit assumptions.
+    Both paths require rational coefficients. exact=True returns SymPy values;
+    exact=False returns float64 ratios or finite nonzero complex128 values.
     """
+    if convention not in ("ratio", "standard"):
+        raise ValueError("convention must be 'ratio' or 'standard'")
+    if not p._is_flint:
+        raise ValueError("Symmetric finite S-transform requires rational coefficients")
+    if convention == "standard" and p.degree == 0:
+        raise ValueError("Standard symmetric S-transform requires positive degree")
     if p.degree % 2 != 0:
         raise ValueError(
             "Polynomial degree must be even (2d) for symmetric S-transform."
         )
     if not p.is_symmetric():
         raise ValueError("Polynomial must be symmetric.")
+    if convention == "standard":
+        p.verify_real_rootedness()
 
     d = p.degree // 2
     e_k = p._normalized_coeffs_flint()
@@ -278,7 +291,10 @@ def SymmetricFiniteSTransform(
             zero_mult += 1
     r = zero_mult // 2
 
-    s_transform = np.zeros(d - r, dtype=object if exact else np.float64)
+    dtype = (
+        object if exact else (np.complex128 if convention == "standard" else np.float64)
+    )
+    s_transform = np.zeros(d - r, dtype=dtype)
 
     for k in range(1, d - r + 1):
         val_num = e_k[2 * (k - 1)]
@@ -288,7 +304,24 @@ def SymmetricFiniteSTransform(
             raise ValueError(f"Zero division encountered: e_tilde_{2 * k} is zero.")
 
         res = val_num / val_den
-        if exact:
+        if convention == "standard":
+            if res >= 0:
+                raise ValueError(
+                    "Standard symmetric S-transform requires real symmetric roots"
+                )
+            magnitude = sp.sqrt(-sp.Rational(int(res.p), int(res.q)))
+            if exact:
+                s_transform[k - 1] = sp.I * magnitude
+            else:
+                # Take the square root before narrowing: its square may overflow
+                # or underflow float64 while the transform remains representable.
+                value = float(magnitude)
+                if not np.isfinite(value) or value == 0:
+                    raise RuntimeError(
+                        "Standard symmetric S-transform exceeds finite complex128 range"
+                    )
+                s_transform[k - 1] = complex(0, value)
+        elif exact:
             s_transform[k - 1] = sp.Rational(int(res.p), int(res.q))
         else:
             s_transform[k - 1] = flint_to_float(res)

@@ -7,17 +7,18 @@ This guide describes the unreleased development implementation. A `MultivariateP
 Native FLINT polynomials must have the same variable names in the same order. Inputs are copied; `variables`, `coefficients()` and `to_fmpq_mpoly()` return caller-owned values. Variable names must be distinct, including when SymPy symbols have different assumptions.
 
 ```python
+import flint
 import sympy as sp
 from finitefree.multivariate import MultivariatePolynomial
 
 x, y = sp.symbols("x y")
 p = MultivariatePolynomial(x**2 + sp.Rational(1, 3)*y + 2, [x, y])
-assert p.evaluate([sp.Rational(1, 2), 3]) == sp.Rational(13, 4)
+assert p.evaluate([sp.Rational(1, 2), 3]) == flint.fmpq(13, 4)
 q = MultivariatePolynomial.from_coefficients(p.coefficients(), p.variables)
 assert q.expr == p.expr
 ```
 
-`evaluate` accepts integer/rational coordinates and finite floating coordinates interpreted by their stored binary ratios. It returns an exact FLINT rational. Coordinate count must match the stored variables. The python-flint 0.9.0 public evaluation path uses its positional callable interface.
+`evaluate` accepts integer/rational coordinates and finite floating coordinates interpreted by their stored binary ratios. It returns an exact FLINT rational. Compare with a FLINT rational, or convert explicitly with `sp.Rational(int(value.p), int(value.q))` when comparing to SymPy; SymPy 1.12's implicit FLINT conversion can lose exactness. Coordinate count must match the stored variables. The python-flint 0.9.0 public evaluation path uses its positional callable interface.
 
 ## Rational algebra and derivatives
 
@@ -71,7 +72,8 @@ p = MultivariatePolynomial(3*(x+y)**2, [x, y])
 q = p.restrict_line([1, 0], [0, 1])
 assert list(q.coeffs) == [3, 6, 3]
 assert q.verify_real_rootedness()
-assert q.evaluate(sp.Rational(1, 3)) == sp.Rational(16, 3)
+value = q.evaluate(sp.Rational(1, 3))
+assert sp.Rational(int(value.p), int(value.q)) == sp.Rational(16, 3)
 ```
 
 A generic rational polynomial need not have real-rooted line restrictions:

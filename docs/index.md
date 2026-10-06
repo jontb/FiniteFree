@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-Ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
-[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe the **unreleased development source**. The published package is [FiniteFree 0.1.0](https://pypi.org/project/finitefree/0.1.0/); its source is tagged [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). Install the development checkout to use the contracts described here. Preparation for 0.2 is recorded in the [changelog](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md); 0.2 is not available yet.
+This README and the API reference describe the **0.2.0 source prepared for release**. The published package is [FiniteFree 0.1.0](https://pypi.org/project/finitefree/0.1.0/); its source is tagged [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). Install the development checkout to use the contracts described here. See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release review](release.md); 0.2.0 is not published or tagged yet.
 
 FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
 
@@ -122,7 +122,7 @@ The following pre-rendered figures illustrate selected finite-degree examples an
     - **Finite S-Transform** ($S_p^{(d)}$): Discrete normalized evaluations bypassing non-linear mapping.
     - **Finite R-Transform** ($R_p^{(d)}$): Computes finite free cumulants ($\kappa_n^{(d)}$) via an exact $O(n^2)$ recursive generating function sequence map over $\mathbb{Q}$, bypassing exponential partition lattice enumeration while verifying exact additivity $\kappa_n^{(d)}(p \boxplus_d q) = \kappa_n^{(d)}(p) + \kappa_n^{(d)}(q)$.
     - **Finite T-Transform** ($T_p^{(d)}$): Step function mapping the right-continuous inverse to the Fujie-Ueda limit $\Phi_d$, evaluated in $O(d)$ algebraically using coefficient sign-alternation validation.
-    - **Symmetric Finite S-Transform**: `SymmetricFiniteSTransform` currently returns the ratio of consecutive normalized even coefficients. This is the **square** of the transform in the cited mathematical definition. See the [API convention](api.md#symmetric-finite-s-output-convention) before using it as a complex-valued transform.
+    - **Symmetric Finite S-Transform**: `SymmetricFiniteSTransform(p, convention="standard")` returns the positive-imaginary square root defined for symmetric real-rooted inputs. The default `convention="ratio"` preserves the existing ratio of consecutive normalized even coefficients. See the [API convention](api.md#symmetric-finite-s-output-convention).
 
 
 ??? "Multivariate Hyperbolic Geometry & Matrix Pencils"
@@ -165,9 +165,9 @@ Source installations use `hatchling` and `hatch-cython` to compile `modular_fast
 
 ### Requirements
 
-- **Python**: declared minimum `3.9`; the development CI targets CPython `3.9`–`3.13` on Linux, macOS and Windows. This is the configured support range, not evidence that every unpublished commit has run on every platform.
+- **Python**: `>=3.10`; CI targets CPython `3.10`–`3.13` on Linux, macOS and Windows, with a separate Python 3.10 minimum-dependency job. Verify checks on the intended release commit.
 - **Source builds**: a working C compiler (`gcc`, `clang`, or the matching Windows MSVC toolchain). `python-flint` source builds additionally need FLINT/GMP/MPFR and their headers; prefer its compatible wheels when available.
-- **Runtime dependencies**: `numpy>=1.24`, `sympy>=1.12`, `python-flint>=0.6.0`, `scipy>=1.10`. Pip selects versions compatible with the interpreter.
+- **Runtime dependencies**: `numpy>=1.24`, `sympy>=1.12`, `python-flint>=0.9.0`, `scipy>=1.10`. FLINT 0.9 supplies the rational multivariate API; the former Python 3.9 / FLINT 0.6 minimum lacks that API. See the [compatibility change](release.md#compatibility).
 
 ### Setup Instructions
 
@@ -193,7 +193,7 @@ Source installations use `hatchling` and `hatch-cython` to compile `modular_fast
 
 See [development instructions](development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. CuPy is only attempted by the parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)`; these paths can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
 
-*Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.6.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
+*Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.9.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
 
 ### Usage Guide
 

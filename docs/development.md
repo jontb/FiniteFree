@@ -1,10 +1,10 @@
 # Development and documentation
 
-These instructions target the unreleased source checkout. [PyPI 0.1.0](https://pypi.org/project/finitefree/0.1.0/) corresponds to tag [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). The source metadata still reads `0.1.0`; an installed development wheel can therefore report the same version as that release. Record the Git commit when reproducing development results.
+These instructions target the source prepared for 0.2.0, whose metadata now reads `0.2.0`. [PyPI 0.1.0](https://pypi.org/project/finitefree/0.1.0/) corresponds to tag [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). A locally built 0.2.0 wheel is a release candidate until publication. Record the Git commit when reproducing results.
 
 ## Installation
 
-Use the [README setup instructions](index.md#installation) to create a virtual environment. The declared minimum is Python 3.9. CI is configured for CPython 3.9–3.13 on Linux, macOS and Windows; verify the matrix on the intended release commit. Dependency minima are declarations, not a separately tested minimum-dependency matrix.
+Use the [README setup instructions](index.md#installation) to create a virtual environment with Python 3.10 or later. CI covers CPython 3.10–3.13 on Linux, macOS and Windows, plus the exact runtime floors in `requirements/minimum-runtime.txt` on Python 3.10. Verify the matrix on the intended release commit. The former Python 3.9 / FLINT 0.6 declaration failed an actual rational multivariate construction; see [release compatibility](release.md#compatibility).
 
 For standard installation, tests and documentation:
 
@@ -36,6 +36,17 @@ PYTHONPATH=. python examples/showcase.py
 python scripts/test_installed_wheel.py
 python -m build
 ```
+
+To reproduce the minimum-runtime job in a fresh Python 3.10 environment, install the pinned runtime before the package and build against its NumPy headers:
+
+```bash
+python -m pip install --only-binary=python-flint -r requirements/minimum-runtime.txt
+python -m pip install "pytest==7.0.0" hatchling hatch-cython Cython "setuptools<77" wheel build
+python -m pip install --no-deps --no-build-isolation .
+python -m pip check
+```
+
+Then build the source extension and run both source suites, examples and the installed-wheel helper above. Building with isolation would select newer build dependencies and would not check the minimum NumPy headers.
 
 The installed-wheel helper runs library tests in a temporary directory and confirms that the compiled extension is present. Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects Python grid evaluation and CRT reconstruction; it does not remove the built extension, and `modular_det` can still use it. This checks those fallback paths rather than an extension-free installation. In PowerShell, set the corresponding variables with `$env:PYTHONPATH="."` and `$env:PYFFP_DISABLE_CYTHON="1"`, then clear them before installed-wheel checks.
 
@@ -75,4 +86,4 @@ For scaling studies, record the Git commit, script digest, dependency versions, 
 
 ## Preparing 0.2
 
-No 0.2 package or tag is created by these instructions. Before a release, integrate the reviewed fixes, run the complete supported-platform matrix on that commit, finalize [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md), choose the symmetric S-output convention, update the version metadata and documentation scope, and inspect the built wheel/sdist metadata. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+The version metadata, compatible symmetric S convention and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) are prepared. Follow the [release review checklist](release.md) to inspect artifacts and checks on the final commit. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.

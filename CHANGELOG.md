@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — prepared for release
 
-The following development changes are being prepared for **0.2**, which is not published or tagged yet. PyPI's released baseline is [0.1.0, 2026-06-19](https://pypi.org/project/finitefree/0.1.0/), from [v0.1.0 / e1acff6](https://github.com/jontb/FiniteFree/tree/v0.1.0). The source version field is still 0.1.0 pending release finalization.
+These changes and the `0.2.0` version metadata are prepared for release; 0.2.0 is not published or tagged yet. PyPI's released baseline is [0.1.0, 2026-06-19](https://pypi.org/project/finitefree/0.1.0/), from [v0.1.0 / e1acff6](https://github.com/jontb/FiniteFree/tree/v0.1.0). See the [release review checklist](docs/release.md).
 
 ### Migration from 0.1.0
 
+- Python 3.10 and `python-flint>=0.9.0` are now required. An actual Python 3.9 / FLINT 0.6 test reproduced the missing rational multivariate API. Stable FLINT 0.7/0.8 require Python 3.11; FLINT 0.9 supports Python 3.10 and supplies the needed API. The remaining runtime floors are unchanged and pinned in the minimum-dependency CI job.
+- `SymmetricFiniteSTransform` keeps the existing even-coefficient ratio by default. Opt into Definition 8.1's positive-imaginary complex transform with `convention="standard"`; its domain requires positive degree and real-rootedness.
+- Orthogonal kernels now snapshot their basis, norms and leading coefficients. Public exports are independent copies; reconstruct the kernel rather than mutating an exported basis to change it.
 - Recompute saved cumulants of orders 3 and higher with the corrected normalization. For the same normalized input and ambient dimension, an old cumulant can be converted with `new = old / ((n-1)!)**2`. This factor alone does not repair separately incorrect nonmonic normalization or precision already lost in saved data.
 - Cached normalized coefficients and real/unitary root arrays are read-only; use `.copy()` before editing. Constructors now snapshot polynomial and matrix inputs.
 - Lazy geometry checks and nonfinite root errors are intentional contracts. `exact=True` selects a high-precision path with numerical fallbacks; outputs remain float64, not certified intervals or exact algebraic values.
@@ -15,6 +18,7 @@ The following development changes are being prepared for **0.2**, which is not p
 ### Multivariate rational polynomial foundations
 
 - Repair exact public evaluation on python-flint 0.9.0 using its positional callable interface.
+- Convert native FLINT exponents to Python integers at symbolic exports and normalized coefficient keys, preserving exact integer powers with SymPy 1.12. Minimum-dependency tests compare rational values explicitly across the two backends.
 - Own native polynomial inputs, exported native copies, coefficient maps and variable lists. Reject native context/name order mismatches and duplicate variable names rather than silently relabeling coordinates.
 - Add sparse coefficient construction/roundtrip, rational addition/subtraction/multiplication and nonnegative integer powers, exact gradient/Hessian polynomials, and scalar-preserving line restriction with lazy univariate geometry certification.
 - Add real float64 batch evaluation with finite-input/coefficient/result checks and documented cancellation/underflow limits.
@@ -26,10 +30,16 @@ The following development changes are being prepared for **0.2**, which is not p
 ### Documentation and release preparation
 
 - README/API now distinguish unreleased source from published 0.1.0. Installation, development checks, tutorial, precision/evaluation boundaries, determinant derivative limits and implementation-dependent complexity are documented consistently.
-- README is included as the package long description for future builds. The version remains unchanged; no release action is taken.
-- The current `SymmetricFiniteSTransform` output is documented explicitly as the even-coefficient ratio, the square of Definition 8.1's complex-valued transform. Deciding whether 0.2 preserves, renames or replaces that output requires a compatibility decision; library behavior is unchanged by this documentation pass.
+- README is included as the package long description. The version is set to 0.2.0, with wheel/sdist builds and a release checklist; publication remains a separate action.
+- The 12-job supported-platform CI matrix is supplemented by actual pinned minimum-runtime tests on Python 3.10 and release-candidate artifact builds.
 
 ### Implemented changes
+
+- Add `PreparedDiscreteDPP`, which validates and snapshots a correlation kernel and state order, decomposes it once, and reuses the eigensystem for independent HKPV draws. Both prepared and raw samplers accept an optional NumPy `Generator`; default calls preserve the legacy global RNG. Tests compare seeded outputs and independent principal-minor probabilities for small projection and nonprojection kernels.
+
+- Floating kernels with exactly verified probabilists' Hermite coefficients, norms `j!` and leading coefficients 1 use a normalized three-term recurrence and `math.fsum` for all coordinate pairs. Generic bases retain the established Christoffel–Darboux and nearby finite-sum paths. Construction snapshots inputs; finite/range errors are explicit. Independent exact Hermite references test nearby, diagonal and separated points through degree 80.
+
+- Add the standard complex symmetric-S convention while retaining the default ratio. Exact expressions take the positive-imaginary branch; numerical square roots precede float narrowing and reject nonzero outputs outside complex128 range.
 
 - Truncated cumulant requests normalize only the requested coefficient prefix. The native-dimension prefix cache is bounded by the polynomial degree and never masquerades as complete coefficients; ambient dimensions and nonmonic leading scalars retain exact normalization.
 
@@ -43,7 +53,7 @@ The following development changes are being prepared for **0.2**, which is not p
 
 - Arb validation-created root caches obey the read-only array contract, including cache reuse and later precision upgrades. Cross-batch regressions also check nonmonic input snapshots, direct projections and shifted numerical cumulants together.
 
-- CI includes the advertised Python 3.9 minimum; documentation-tool annotations retain Python 3.9 compatibility.
+- Documentation-tool annotations avoid unsupported evaluation of newer annotation syntax. The runtime support floor is now Python 3.10 after testing the original dependency declaration.
 
 - Linear symbolic roots are checked for realness instead of receiving an unconditional certificate. Certified numeric roots use their coefficient ratio for extraction and geometry; unknown realness/signs and nonnumeric/out-of-range numerical requests raise descriptive errors without poisoning caches.
 
@@ -62,7 +72,7 @@ The following development changes are being prepared for **0.2**, which is not p
 
 - `EmpiricalComparison.verify_coefficients(alpha=0.05)` now checks every coefficient, including zero/tiny variance cases, and honors `alpha` using Bonferroni-adjusted two-sided Student-t bands. It replaces the fixed five-standard-error heuristic and no longer skips standard errors at or below `1e-10`. New keyword tolerances default to `rtol=1e-10, atol=0`; all sample variances are computed after coefficient scaling. Comparisons require at least two samples, finite Hermitian matrices of the matching dimension, and eigenvalue pairs for doubled-size samples.
 
-- Orthogonal-polynomial kernels retain exact equality when selecting the Christoffel–Darboux diagonal formula; distinct integers above `2**53` are no longer conflated by float conversion. Nearby distinct floating points use the finite basis sum, preserving both coordinates and reducing quotient cancellation at additional evaluation cost. Diagonal and separated floating calls retain the fast formulas. An empty basis returns the zero kernel.
+- Orthogonal-polynomial kernels retain exact equality when selecting the Christoffel–Darboux diagonal formula; distinct integers above `2**53` are no longer conflated by float conversion. Nearby distinct floating points use the finite basis sum, preserving both coordinates. Generic diagonal and separated calls retain the fast formulas; verified Hermite inputs use the recurrence described above. An empty basis returns the zero kernel.
 
 - Proper polynomial projections compute the leading `j+1` coefficients directly rather than constructing `d-j` intermediate derivatives. Exact coefficients and monic normalization are retained, including nonmonic inputs. Known Hermite projections preserve variance, center and numerical recurrence provenance. Full-degree projections retain object identity. Invalid noninteger or out-of-range dimensions raise `ValueError`.
 

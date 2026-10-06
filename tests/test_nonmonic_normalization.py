@@ -41,7 +41,9 @@ def test_normalized_coefficients_match_root_definition(
         for k in range(dimension + 1)
     ]
     assert list(p.normalized_coeffs(dimension)) == expected
-    assert p._normalized_coeffs_flint(dimension) == expected
+    assert [
+        sp.Rational(int(v.p), int(v.q)) for v in p._normalized_coeffs_flint(dimension)
+    ] == expected
     assert list(p.coeffs) == stored
     reconstructed = RealRootedPolynomial.from_normalized_coeffs(expected)
     assert reconstructed.degree == dimension

@@ -103,7 +103,7 @@ def test_prefixes_pad_ambient_zeros_without_geometry_certification() -> None:
     p = RealRootedPolynomial([1, 0, 1])
     prefix = p._normalized_coeffs_flint_prefix(5, d=8)
     expected = [1, 0, sp.Rational(1, 28), 0, 0, 0]
-    assert prefix == expected
+    assert [sp.Rational(int(v.p), int(v.q)) for v in prefix] == expected
     assert not p._is_verified
     with pytest.raises(ValueError):
         FiniteRTransform(p, order=1, d=1)

@@ -8,13 +8,18 @@ import sympy as sp
 from finitefree.multivariate import MultivariatePolynomial
 
 
+def _rational(value: Any) -> sp.Rational:
+    # SymPy 1.12 does not implement exact mixed equality with FLINT rationals.
+    return sp.Rational(int(value.p), int(value.q))
+
+
 def test_exact_evaluation_against_symbolic_substitution() -> None:
     x, y = sp.symbols("x y")
     expression = sp.Rational(2, 3) * x**3 * y - x + 7
     p = MultivariatePolynomial(expression, [x, y])
     for point in ([1, 2], [sp.Rational(1, 3), -2], [0.1, np.float64(0.3)]):
         exact = [sp.Rational(v) for v in point]
-        assert p.evaluate(point) == expression.subs(dict(zip((x, y), exact)))
+        assert _rational(p.evaluate(point)) == expression.subs(dict(zip((x, y), exact)))
 
 
 def test_native_context_does_not_silently_relabel_variables() -> None:
@@ -134,7 +139,9 @@ def test_rational_ring_identities_against_sympy(seed: int) -> None:
     ):
         assert actual.expr == sp.expand(expected)
         point = [sp.Rational(1, 3), sp.Rational(-2, 5)]
-        assert actual.evaluate(point) == expected.subs(dict(zip((x, y), point)))
+        assert _rational(actual.evaluate(point)) == expected.subs(
+            dict(zip((x, y), point))
+        )
     assert ((p + q) * p).expr == (p * p + q * p).expr
     assert (p * 0).expr == 0 and (p * 0).degree() == -1
     assert (p**0).expr == 1
@@ -248,7 +255,7 @@ def test_exact_line_restriction_preserves_scalar_and_polynomial_identity() -> No
         {x: base[0] + t * direction[0], y: base[1] + t * direction[1]}
     )
     for value in (sp.Rational(1, 3), -2, 0):
-        assert q.evaluate(value) == expected.subs(t, value)
+        assert _rational(q.evaluate(value)) == expected.subs(t, value)
     assert q.coeffs[0] == sp.Poly(expected, t).LC()
     assert (
         MultivariatePolynomial(3, [x, y]).restrict_line([1, 2], [0, 0]).coeffs[0] == 3
@@ -273,6 +280,7 @@ def test_homogeneous_normalization_reconstruction_and_zero() -> None:
     x, y = sp.symbols("x y")
     p = MultivariatePolynomial(2 * x**3 + sp.Rational(3, 2) * x * y**2, [x, y])
     normalized = p.normalized_coefficients()
+    assert all(type(k) is int for alpha in normalized for k in alpha)
     reconstructed = sum(
         c
         * sp.factorial(3)
@@ -313,4 +321,6 @@ def test_public_evaluation_of_matrix_polynomials_matches_exact_determinant(
     }
     p = factories[method](pencil)
     for a, b in ((1, 2), (sp.Rational(1, 3), sp.Rational(-2, 5)), (0, 0)):
-        assert p.evaluate([a, b]) == (a * matrices[0] + b * matrices[1]).det()
+        assert (
+            _rational(p.evaluate([a, b])) == (a * matrices[0] + b * matrices[1]).det()
+        )

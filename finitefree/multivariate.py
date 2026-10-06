@@ -369,7 +369,9 @@ class MultivariatePolynomial(Polynomial):
             term = sp.Rational(int(c.p), int(c.q))
             for x_i, power in zip(self.variables, exp):
                 if power > 0:
-                    term *= x_i**power
+                    # SymPy 1.12 sympifies FLINT integers through float();
+                    # preserve the exact exponent at this backend boundary.
+                    term *= x_i ** int(power)
             res_expr += term
         return res_expr
 
@@ -511,7 +513,9 @@ class MultivariatePolynomial(Polynomial):
         for alpha, c in self._mpoly.to_dict().items():
             weight = multinomial_coeff(d, alpha)
             val = c / flint.fmpq(weight, 1)
-            normalized[alpha] = sp.Rational(int(val.p), int(val.q))
+            normalized[tuple(int(k) for k in alpha)] = sp.Rational(
+                int(val.p), int(val.q)
+            )
 
         return normalized
 
