@@ -27,6 +27,11 @@ jobs:
       - name: Build wheels via cibuildwheel
         uses: pypa/cibuildwheel@v2.21.3
 
+      - name: Set up Python for archive checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
       - name: Verify wheel extension inventories
         run: python scripts/check_wheel_contents.py wheelhouse
 
