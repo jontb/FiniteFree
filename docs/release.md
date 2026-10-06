@@ -25,4 +25,6 @@ The shared cibuildwheel policy installs GMP/MPFR headers and builds checksum-ver
 
 Linux build and test environments select compatible NumPy/SciPy binary wheels. This preserves the manylinux2014 glibc floor instead of attempting unsupported source builds of newer dependency releases. These container tests cover the resolved compatible versions; ordinary source CI separately tests current dependencies on current runners.
 
+Each wheel build removes compiled extensions left by earlier Python/libc targets in the reused build checkout. Both workflows then require each wheel to contain exactly one modular extension matching its Python tag, alongside the installed-wheel regression suite.
+
 The `publish.yml` workflow builds platform wheels with cibuildwheel and uploads through PyPI trusted publishing. A matching `v*.*.*` tag or manual workflow dispatch starts that upload. Creating `v0.2.0` is therefore a publication action, not a harmless preparation step. Do not create the tag or dispatch publishing before the release review is complete. Its manual input defaults to TestPyPI; choosing `false` selects production. Tag routing only checks for `rc` or `dev`: other matching prerelease names can reach production. The tag does not change the static package version in `pyproject.toml`.

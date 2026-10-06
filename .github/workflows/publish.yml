@@ -27,6 +27,9 @@ jobs:
       - name: Build wheels via cibuildwheel
         uses: pypa/cibuildwheel@v2.21.3
 
+      - name: Verify wheel extension inventories
+        run: python scripts/check_wheel_contents.py wheelhouse
+
       - name: Upload compiled wheels
         uses: actions/upload-artifact@v4
         with:

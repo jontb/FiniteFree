@@ -11,6 +11,8 @@ on:
       - "tests/**"
       - "scripts/test_installed_wheel.py"
       - "scripts/build_flint_musllinux.sh"
+      - "scripts/clean_wheel_extensions.py"
+      - "scripts/check_wheel_contents.py"
   push:
     # A branch pointing to reviewed main runs the matrix on that exact commit.
     # Branch pushes never match publish.yml's release-tag trigger.
@@ -39,6 +41,8 @@ jobs:
         # Shared Python, architecture, skip and installed-wheel test policy
         # comes from pyproject.toml, using the same action as publish.yml.
         uses: pypa/cibuildwheel@v2.21.3
+      - name: Verify wheel extension inventories
+        run: python scripts/check_wheel_contents.py wheelhouse
       - uses: actions/upload-artifact@v4
         with:
           name: release-review-wheels-${{ matrix.os }}
