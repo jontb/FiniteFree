@@ -89,6 +89,9 @@ archs = ["auto64"]
 build-verbosity = 1
 test-requires = ["pytest>=7.0"]
 test-command = "python {project}/scripts/test_installed_wheel.py"
+# hatch-cython builds in place; each interpreter must start without binaries
+# generated for previous Python/libc targets in the reused project directory.
+before-build = "python {project}/scripts/clean_wheel_extensions.py"
 
 [tool.cibuildwheel.linux]
 # Keep the manylinux2014 compatibility floor while selecting NumPy/SciPy
