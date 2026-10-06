@@ -1,11 +1,11 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 import numpy as np
 import sympy as sp
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial, UnitaryPolynomial
-from .utils.conversion import flint_to_float
+from .utils.conversion import flint_to_float, sympy_to_fmpq
 
 
 def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
@@ -30,9 +30,12 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
 
 def FiniteSTransform(p: RealRootedPolynomial, exact: bool = True) -> NDArray[Any]:
     r"""
-    Computes the finite S-Transform discretely on $\{-k/d\}$.
-    Returns a dense array of length $d$, where index $k-1$ maps to $-k/d$.
-    Raises ValueError if strict positivity constraint is violated.
+    Return coefficient-ratio S values at the nodes -k/d, k=1,...,d.
+    Index k-1 contains e_{k-1}/e_k. The ordinary real-root API requires strictly
+    positive roots; zero roots raise ValueError. Unit-circle objects bypass that
+    positivity gate, but this coefficient path still requires rational inputs and
+    nonzero neighboring coefficients. exact=True returns SymPy rationals;
+    exact=False returns float64 values without a final-finiteness guarantee.
     """
     if not isinstance(p, UnitaryPolynomial) and not p.has_strictly_positive_roots:
         raise ValueError(
@@ -79,6 +82,13 @@ def FiniteRTransform(
     Uses Definition 2.14 of Arizmendi et al., arXiv:2408.09337:
     the classical cumulant of the normalized coefficients is scaled by
     $(-d)^{n-1}/(n-1)!$. Orders above d are returned as zero.
+    The numerical path centers the requested coefficient prefix exactly before
+    using Arb at `prec` bits, then restores the first cumulant (the mean).
+    Higher cumulants are invariant under translation. Numerical results remain
+    precision-dependent approximations, particularly at high orders.
+    Only the requested normalized-coefficient prefix is extracted when possible.
+    A bounded per-polynomial prefix cache is separate from complete coefficients;
+    ambient dimensions retain their own exact binomial normalization.
     """
     import math
 
@@ -86,9 +96,25 @@ def FiniteRTransform(
 
     if d is None:
         d = p.degree
-    e_k = p._normalized_coeffs_flint(d)
+    count = max(0, min(order, d))
+    e_k = p._normalized_coeffs_flint_prefix(count, d)
 
     if numerical:
+        mean = e_k[1] if count else flint.fmpq(0)
+        if mean != 0:
+            # For a shift by -mean, normalized coefficients obey a binomial
+            # transform. Only the prefix used by the recurrence is needed;
+            # shifting the entire polynomial would do unnecessary exact work.
+            powers = [(-mean) ** n for n in range(count + 1)]
+            e_k = [
+                sum(
+                    (math.comb(n, k) * e_k[k] * powers[n - k] for k in range(n + 1)),
+                    flint.fmpq(0),
+                )
+                for n in range(count + 1)
+            ]
+        else:
+            e_k = e_k[: count + 1]
         # Use controlled high-precision Arb floats to avoid rational arithmetic blowup
         old_prec = flint.ctx.prec
         flint.ctx.prec = prec
@@ -115,6 +141,8 @@ def FiniteRTransform(
                 kappa_n = cn * ((-d) ** (n - 1)) / math.factorial(n - 1)
                 cumulants.append(float(kappa_n))
 
+            if count:
+                cumulants[0] = float(flint.arb(mean))
             return cumulants
         finally:
             flint.ctx.prec = old_prec
@@ -152,6 +180,8 @@ class FiniteTTransform:
     """
 
     def __init__(self, p: RealRootedPolynomial) -> None:
+        if p.degree == 0:
+            raise ValueError("Finite T-transform requires a positive degree.")
         if not p.has_non_negative_roots:
             raise ValueError(
                 "Finite T-transform is only defined for polynomials with "
@@ -160,7 +190,7 @@ class FiniteTTransform:
 
         self.p = p
         self.d = p.degree
-        self.e_k = p._normalized_coeffs_flint()
+        self.e_k = list(p._normalized_coeffs_flint())
 
         # Multiplicity r of the root 0 of p is trailing zeros in coeffs
         self.r = 0
@@ -173,27 +203,35 @@ class FiniteTTransform:
 
     def __call__(self, t: Any) -> Any:
         """
-        Evaluates the finite T-transform at t in (0, 1).
+        Evaluate the right-continuous step function at a finite real t in (0, 1).
+        Rational values and stored binary float values select intervals exactly;
+        a float near a rational boundary may lie on either side of that boundary.
         """
-        t_val = float(t)
-        if t_val <= 0 or t_val >= 1:
-            raise ValueError("t must be in the open interval (0, 1).")
-
-        import math
-
-        if isinstance(t, (int, float, np.floating)):
-            k = int(math.floor(t_val * self.d)) + 1
-        elif isinstance(t, sp.Rational):
-            k = int((t.p * self.d) // t.q) + 1
+        message = "t must be in the open interval (0, 1) and be a finite real value."
+        try:
+            if isinstance(t, (float, np.floating)):
+                # Retain NumPy extended precision instead of narrowing to float64.
+                t_rat = sp.Rational(*t.as_integer_ratio())
+            else:
+                t_rat = sympy_to_fmpq(t)
+        except (TypeError, ValueError, OverflowError):
+            # Preserve evaluation at real symbolic constants such as sqrt(2)/2.
+            try:
+                t_sym = sp.sympify(t)
+                if not isinstance(t_sym, sp.Expr) or t_sym.is_real is not True:
+                    raise ValueError(message)
+                if not (0 < t_sym < 1):
+                    raise ValueError(message)
+                k = int(sp.floor(t_sym * self.d)) + 1
+            except (TypeError, ValueError, sp.SympifyError) as error:
+                raise ValueError(message) from error
         else:
-            t_sym = sp.sympify(t)
-            k = int(sp.floor(t_sym * self.d)) + 1
+            if not (0 < t_rat < 1):
+                raise ValueError(message)
+            k = (int(t_rat.p) * self.d) // int(t_rat.q) + 1
 
         if k <= self.r:
             return 0
-
-        if k > self.d:
-            k = self.d
 
         val_num = self.e_k[self.d - k + 1]
         val_den = self.e_k[self.d - k]
@@ -208,19 +246,37 @@ class FiniteTTransform:
 
 
 def SymmetricFiniteSTransform(
-    p: RealRootedPolynomial, exact: bool = True
+    p: RealRootedPolynomial,
+    exact: bool = True,
+    *,
+    convention: Literal["ratio", "standard"] = "ratio",
 ) -> NDArray[Any]:
+    r"""
+    Return the legacy ratio or standard symmetric finite S-transform.
+    For degree 2d and zero multiplicity 2r, the array has length d-r; index k-1
+    corresponds to -k/d and contains e_{2(k-1)} / e_{2k}.
+    The default convention="ratio" preserves the existing squared-transform
+    output and parity-only validation. convention="standard" implements the
+    positive-imaginary square root in Definition 8.1 of Arizmendi et al.,
+    arXiv:2408.09337v2. It requires positive degree and checks real-rootedness
+    using the polynomial's validation contract, including explicit assumptions.
+    Both paths require rational coefficients. exact=True returns SymPy values;
+    exact=False returns float64 ratios or finite nonzero complex128 values.
     """
-    Computes the symmetric finite S-Transform discretely on {-k/d}.
-    p must be symmetric of even degree 2d.
-    Returns an array of length d-r, where index k-1 maps to -k/d.
-    """
+    if convention not in ("ratio", "standard"):
+        raise ValueError("convention must be 'ratio' or 'standard'")
+    if not p._is_flint:
+        raise ValueError("Symmetric finite S-transform requires rational coefficients")
+    if convention == "standard" and p.degree == 0:
+        raise ValueError("Standard symmetric S-transform requires positive degree")
     if p.degree % 2 != 0:
         raise ValueError(
             "Polynomial degree must be even (2d) for symmetric S-transform."
         )
     if not p.is_symmetric():
         raise ValueError("Polynomial must be symmetric.")
+    if convention == "standard":
+        p.verify_real_rootedness()
 
     d = p.degree // 2
     e_k = p._normalized_coeffs_flint()
@@ -235,7 +291,10 @@ def SymmetricFiniteSTransform(
             zero_mult += 1
     r = zero_mult // 2
 
-    s_transform = np.zeros(d - r, dtype=object if exact else np.float64)
+    dtype = (
+        object if exact else (np.complex128 if convention == "standard" else np.float64)
+    )
+    s_transform = np.zeros(d - r, dtype=dtype)
 
     for k in range(1, d - r + 1):
         val_num = e_k[2 * (k - 1)]
@@ -245,7 +304,24 @@ def SymmetricFiniteSTransform(
             raise ValueError(f"Zero division encountered: e_tilde_{2 * k} is zero.")
 
         res = val_num / val_den
-        if exact:
+        if convention == "standard":
+            if res >= 0:
+                raise ValueError(
+                    "Standard symmetric S-transform requires real symmetric roots"
+                )
+            magnitude = sp.sqrt(-sp.Rational(int(res.p), int(res.q)))
+            if exact:
+                s_transform[k - 1] = sp.I * magnitude
+            else:
+                # Take the square root before narrowing: its square may overflow
+                # or underflow float64 while the transform remains representable.
+                value = float(magnitude)
+                if not np.isfinite(value) or value == 0:
+                    raise RuntimeError(
+                        "Standard symmetric S-transform exceeds finite complex128 range"
+                    )
+                s_transform[k - 1] = complex(0, value)
+        elif exact:
             s_transform[k - 1] = sp.Rational(int(res.p), int(res.q))
         else:
             s_transform[k - 1] = flint_to_float(res)

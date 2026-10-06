@@ -5,7 +5,12 @@ import sympy as sp
 
 
 def flint_to_float(val: Any) -> float:
-    """Safely converts a Flint fmpq/fmpz, SymPy Rational, or other numeric type to a float."""
+    r"""
+    Convert a rational/numeric value to a Python float.
+    Huge rational numerator/denominator integers use a Decimal fallback. Final
+    range and rounding still apply; infinity or underflow to zero is possible.
+    This helper does not provide certified rounding or a finiteness guarantee.
+    """
     if hasattr(val, "p") and hasattr(val, "q"):
         try:
             return float(int(val.p)) / float(int(val.q))
@@ -20,7 +25,12 @@ def flint_to_float(val: Any) -> float:
 
 
 def sympy_to_fmpq(val: Any) -> Any:
-    """Converts a SymPy rational value exactly to a Flint fmpq."""
+    r"""
+    Convert an integer/rational or finite Python/NumPy float to FLINT fmpq.
+    Floating scalars use their own as_integer_ratio(), preserving supplied binary
+    precision rather than recovering decimal intent. Other values are converted
+    through SymPy Rational and must be rational-convertible.
+    """
     import flint
 
     if isinstance(val, flint.fmpq):
@@ -32,7 +42,7 @@ def sympy_to_fmpq(val: Any) -> Any:
     if isinstance(val, sp.Rational):
         return flint.fmpq(int(val.p), int(val.q))
     if isinstance(val, (float, np.floating)):
-        num, den = float(val).as_integer_ratio()
+        num, den = val.as_integer_ratio()
         return flint.fmpq(num, den)
     val_sym = sp.Rational(sp.sympify(val))
     return flint.fmpq(int(val_sym.p), int(val_sym.q))

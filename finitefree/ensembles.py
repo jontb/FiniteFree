@@ -1,5 +1,6 @@
 import math
-from typing import Any, Callable
+import operator
+from typing import Any, Callable, SupportsIndex
 
 import numpy as np
 from numpy.typing import NDArray
@@ -46,8 +47,10 @@ def sample_gse(d: int, scale: float = 1.0) -> Any:
 
 def sample_wishart(d: int, n: int, beta: int = 2, scale: float = 1.0) -> NDArray[Any]:
     r"""
-    Generates a sample Wishart (LUE for $\beta=2$, LOE for $\beta=1$, LSE for $\beta=4$)
-    matrix $W = X X^H / n$.
+    Sample a real/complex/quaternionic Wishart representation.
+    For beta=1 or 2, return a d-by-d matrix XX^H/n. For beta=4, the complex
+    representation has shape (2d,2d), paired eigenvalues, and normalization
+    XX^H/(2n). scale multiplies the matrix. beta must be 1, 2 or 4.
     """
     if beta == 1:
         X = np.random.randn(d, n)
@@ -133,9 +136,12 @@ def gue_expected_poly(d: int) -> RealRootedPolynomial:
 
 def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial:
     r"""
-    Computes the exact expected characteristic polynomial of a $d \times d$ Wishart matrix:
-    $\mathbb{E}[\det(xI - W)] = n^{-d} d! (-1)^d L_d^{(n - d)}(n x)$
-    using the generalized Laguerre polynomial from orthogonal.py.
+    Construct the monic rational Wishart expectation polynomial.
+    For positive integer dimensions with n>=d, coefficients are those of
+    $n^{-d}d!(-1)^d L_d^{(n-d)}(nx)$. They match the d eigenvalues used by the
+    normalized sampler, including one eigenvalue per pair for beta=4.
+    The beta argument is retained but does not change this coefficient formula.
+    Known Laguerre recurrence metadata is used only in its supported domain.
     """
     import flint
 
@@ -166,53 +172,108 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
 
 class EmpiricalComparison:
     """
-    Compares analytical Expected Characteristic Polynomials against matrix simulations.
+    Compare a polynomial with characteristic coefficients from matrix samples.
+    Samples must be finite Hermitian matrices of size d, or size 2d with paired
+    eigenvalues. Coefficient agreement is a statistical diagnostic, not a proof
+    of the generator's distribution.
     """
 
     def __init__(
         self,
         analytical_poly: RealRootedPolynomial,
-        samples: int,
+        samples: SupportsIndex,
         generator: Callable[[], NDArray[Any]],
     ) -> None:
+        try:
+            sample_count = operator.index(samples)
+        except TypeError as error:
+            raise ValueError("samples must be an integer of at least 2.") from error
+        if sample_count < 2:
+            raise ValueError("samples must be an integer of at least 2.")
         self.analytical_poly = analytical_poly
-        self.samples = samples
+        self.samples = sample_count
         self.generator = generator
         self.d = analytical_poly.degree
 
         eigs_list = []
         coeffs_list = []
-        for _ in range(samples):
-            M = generator()
-            if M.shape[0] == 2 * self.d:
-                # GSE Kramers degeneracy: extract unique eigenvalues
-                eigs = np.linalg.eigvalsh(M)
-                eigs = np.sort(eigs)[::2]
-            else:
-                eigs = np.linalg.eigvalsh(M)
+        for _ in range(sample_count):
+            M = np.asarray(generator(), dtype=np.complex128)
+            if M.shape not in [(self.d, self.d), (2 * self.d, 2 * self.d)]:
+                raise ValueError("Sample matrices must have shape (d, d) or (2d, 2d).")
+            if not np.all(np.isfinite(M)):
+                raise ValueError("Sample matrices must contain finite entries.")
+            matrix_scale = np.max(np.abs(M), initial=0.0)
+            if not np.isfinite(matrix_scale) or not np.allclose(
+                M, M.conj().T, rtol=0, atol=1e-10 * matrix_scale
+            ):
+                raise ValueError("Sample matrices must be numerically Hermitian.")
+            eigs = np.linalg.eigvalsh(M)
+            if not np.all(np.isfinite(eigs)):
+                raise ValueError("Sample eigenvalues must be finite.")
+            if self.d and M.shape[0] == 2 * self.d:
+                # A doubled-size sample is usable only with Kramers pairs.
+                eigenvalue_scale = np.max(np.abs(eigs))
+                if not np.allclose(
+                    eigs[::2], eigs[1::2], rtol=0, atol=1e-10 * eigenvalue_scale
+                ):
+                    raise ValueError(
+                        "Doubled-size samples must have paired eigenvalues."
+                    )
+                eigs = eigs[::2]
+
+            with np.errstate(over="ignore", invalid="ignore"):
+                coefficients = np.atleast_1d(np.poly(eigs))
+            if not np.all(np.isfinite(coefficients)):
+                raise ValueError("Sample characteristic coefficients must be finite.")
 
             eigs_list.append(eigs)
-            coeffs_list.append(np.poly(eigs))
+            coeffs_list.append(coefficients)
 
         self.eigenvalues = np.array(eigs_list)
         self.char_poly_coeffs = np.array(coeffs_list)
 
-    def verify_coefficients(self, alpha: float = 0.05) -> bool:
+    def verify_coefficients(
+        self, alpha: float = 0.05, *, rtol: float = 1e-10, atol: float = 0.0
+    ) -> bool:
         """
-        Validates empirical coefficients against theoretical ones using
-        a strict 5-sigma statistical confidence check.
+        Check every coefficient against a Bonferroni-adjusted two-sided t band.
+        The critical value is t.isf(alpha / (2*(d+1)), samples-1). Zero sample
+        variance still requires agreement within atol + rtol*abs(target).
+        Per-coefficient scaling avoids overflow/underflow in the sample variance.
+        The bands assume independent samples and are exact for normal coefficient
+        observations; other distributions require a large-sample approximation.
         """
-        analytical_coeffs = np.array(self.analytical_poly.coeffs, dtype=float)
-        mean_coeffs = np.mean(self.char_poly_coeffs, axis=0)
-        std_coeffs = np.std(self.char_poly_coeffs, axis=0, ddof=1)
-        sem = std_coeffs / np.sqrt(self.samples)
+        from scipy.stats import t
 
-        for i in range(len(analytical_coeffs)):
-            if sem[i] > 1e-10:
-                diff = np.abs(mean_coeffs[i] - analytical_coeffs[i])
-                if diff > 5 * sem[i]:
-                    return False
-        return True
+        if not np.isfinite(alpha) or not 0 < alpha < 1:
+            raise ValueError("alpha must be finite and in the open interval (0, 1).")
+        if not np.isfinite(rtol) or not np.isfinite(atol) or rtol < 0 or atol < 0:
+            raise ValueError("rtol and atol must be finite and non-negative.")
+        try:
+            analytical_coeffs = np.array(self.analytical_poly.coeffs, dtype=float)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(
+                "Analytical coefficients must be finite in float64."
+            ) from error
+        if not np.all(np.isfinite(analytical_coeffs)):
+            raise ValueError("Analytical coefficients must be finite in float64.")
+        critical = t.isf(alpha / (2 * (self.d + 1)), self.samples - 1)
+        if not np.isfinite(critical):
+            raise ValueError("alpha is too small for a finite float64 critical value.")
+
+        scale = np.maximum(
+            np.max(np.abs(self.char_poly_coeffs), axis=0), np.abs(analytical_coeffs)
+        )
+        scale = np.where(scale == 0, 1.0, scale)
+        observations = self.char_poly_coeffs / scale
+        target = analytical_coeffs / scale
+        mean_coeffs = np.mean(observations, axis=0)
+        std_coeffs = np.std(observations, axis=0, ddof=1)
+        sem = std_coeffs / np.sqrt(self.samples)
+        with np.errstate(over="ignore"):
+            tolerance = atol / scale + rtol * np.abs(target)
+        return bool(np.all(np.abs(mean_coeffs - target) <= critical * sem + tolerance))
 
     def plot(self, show: bool = True) -> Any:
         """

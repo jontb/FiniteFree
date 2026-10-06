@@ -1,6 +1,7 @@
 import abc
+import math
 import operator
-from typing import Any, List, Sequence, Union
+from typing import Any, List, Optional, Sequence, Union
 
 import flint
 import numpy as np
@@ -60,7 +61,14 @@ class DiscreteFiniteKernel(BaseKernel):
 
 
 class OrthogonalPolynomialKernel(BaseKernel):
-    """Correlation kernel constructed from orthogonal polynomials using Christoffel-Darboux formula."""
+    """Orthogonal-polynomial kernel with exact Christoffel-Darboux evaluation.
+
+    Owns its basis and exact norms. A monic probabilists' Hermite basis with
+    norms j! and leading coefficients 1 is verified by exact coefficient
+    recurrence, then evaluated numerically by a normalized three-term sum.
+    Other families use Christoffel-Darboux, with a finite basis sum at nearby
+    distinct floats. Consistent generic polynomials and norms are assumed.
+    """
 
     def __init__(
         self,
@@ -73,8 +81,8 @@ class OrthogonalPolynomialKernel(BaseKernel):
         norms: List of norm constants, from $h_0$ to $h_{n-1}$ (length $n$)
         leading_coeffs: Optional list of leading coefficients, from $k_0$ to $k_n$ (length $n + 1$)
         """
-        self.polys = polys
-        self.norms = [sympy_to_exact(h) for h in norms]
+        self._polys = tuple(self._copy_polynomial(p) for p in polys)
+        self._norms = tuple(sympy_to_exact(h) for h in norms)
         self.n = len(norms)
 
         if len(polys) < self.n + 1:
@@ -83,18 +91,30 @@ class OrthogonalPolynomialKernel(BaseKernel):
             )
 
         if leading_coeffs is None:
-            self.leading_coeffs = []
-            for p in polys:
+            coefficients = []
+            for p in self._polys:
                 if p._is_flint:
-                    self.leading_coeffs.append(p._fmpq_poly.coeffs()[-1])
+                    coefficients.append(p._fmpq_poly.coeffs()[-1])
                 else:
-                    self.leading_coeffs.append(p.coeffs[0])
+                    coefficients.append(p.coeffs[0])
         else:
-            self.leading_coeffs = [sympy_to_exact(k) for k in leading_coeffs]
+            coefficients = [sympy_to_exact(k) for k in leading_coeffs]
+        if len(coefficients) < self.n + 1:
+            raise ValueError("leading_coeffs must contain k_0 through k_n")
+        self._leading_coeffs = tuple(coefficients)
+        self._standard_hermite = self._verify_standard_hermite_basis()
+        self._hermite_steps = (
+            tuple(
+                (1 / math.sqrt(j + 1), math.sqrt(j / (j + 1)))
+                for j in range(self.n - 1)
+            )
+            if self._standard_hermite
+            else ()
+        )
 
         # Precompute derivative objects to avoid dynamic instantiation overhead
-        self._pn = self.polys[self.n]
-        self._pn_minus = self.polys[self.n - 1]
+        self._pn = self._polys[self.n]
+        self._pn_minus = self._polys[self.n - 1]
         self._pn_deriv = (
             self._pn.derivative(monic=False) if self._pn.degree > 0 else None
         )
@@ -104,26 +124,99 @@ class OrthogonalPolynomialKernel(BaseKernel):
             else None
         )
 
-    def __call__(self, x: Any, y: Any) -> Any:
-        # Determine if they are close using raw float comparison first to bypass conversion overhead
-        is_diag = False
-        if isinstance(x, (int, float, np.floating)) and isinstance(
-            y, (int, float, np.floating)
+    @staticmethod
+    def _copy_polynomial(p: RealRootedPolynomial) -> RealRootedPolynomial:
+        return RealRootedPolynomial(
+            p._fmpq_poly if p._is_flint else p.coeffs,
+            monic=False,
+            assume_real_rooted=p._is_verified,
+        )
+
+    @property
+    def polys(self) -> List[RealRootedPolynomial]:
+        """Return caller-owned polynomial copies of the stored basis."""
+        return [self._copy_polynomial(p) for p in self._polys]
+
+    @property
+    def norms(self) -> List[Any]:
+        """Return a caller-owned list of the exact norms."""
+        return list(self._norms)
+
+    @property
+    def leading_coeffs(self) -> List[Any]:
+        """Return a caller-owned list of the leading coefficients."""
+        return list(self._leading_coeffs)
+
+    def _verify_standard_hermite_basis(self) -> bool:
+        if (
+            self.n == 0
+            or any(self._norms[j] != math.factorial(j) for j in range(self.n))
+            or any(self._leading_coeffs[j] != 1 for j in range(self.n + 1))
         ):
-            is_diag = abs(float(x) - float(y)) < 1e-9
-        elif x == y:
-            is_diag = True
+            return False
+        previous = flint.fmpq_poly([])
+        expected = flint.fmpq_poly([1])
+        x = flint.fmpq_poly([0, 1])
+        for j, p in enumerate(self._polys[: self.n + 1]):
+            if not p._is_flint or p._fmpq_poly != expected:
+                return False
+            previous, expected = expected, x * expected - j * previous
+        return True
+
+    def _hermite_sum_float64(self, x: float, y: float) -> float:
+        def terms() -> Any:
+            previous_x = previous_y = 0.0
+            current_x = current_y = 1.0
+            yield 1.0
+            for inverse_sqrt, ratio in self._hermite_steps:
+                previous_x, current_x = (
+                    current_x,
+                    x * inverse_sqrt * current_x - ratio * previous_x,
+                )
+                previous_y, current_y = (
+                    current_y,
+                    y * inverse_sqrt * current_y - ratio * previous_y,
+                )
+                yield current_x * current_y
+
+        try:
+            result = math.fsum(terms())
+        except (OverflowError, ValueError) as error:
+            raise RuntimeError("Hermite kernel exceeds finite float64 range") from error
+        if not math.isfinite(result):
+            raise RuntimeError("Hermite kernel exceeds finite float64 range")
+        return result
+
+    def __call__(self, x: Any, y: Any) -> Any:
+        if self.n == 0:
+            return 0
 
         if isinstance(x, (float, np.floating)) or isinstance(y, (float, np.floating)):
             from .utils.conversion import flint_to_float
 
             x_f = float(x)
             y_f = float(y)
-            kn_f = flint_to_float(self.leading_coeffs[self.n])
-            kn_minus_f = flint_to_float(self.leading_coeffs[self.n - 1])
-            hn_minus_f = flint_to_float(self.norms[self.n - 1])
+            if not math.isfinite(x_f) or not math.isfinite(y_f):
+                raise ValueError("Numerical kernel coordinates must be finite")
+            if self._standard_hermite:
+                return self._hermite_sum_float64(x_f, y_f)
+            separation = abs(x_f - y_f)
+            close_scale = max(1.0, abs(x_f), abs(y_f))
+            if 0 < separation <= math.sqrt(np.finfo(float).eps) * close_scale:
+                # This is K(x,y), not the confluent approximation K(x,x).
+                # Summing the basis is slower, but avoids the CD quotient's
+                # cancellation for this small subset of floating evaluations.
+                return math.fsum(
+                    flint_to_float(self._polys[j].evaluate(x_f))
+                    * flint_to_float(self._polys[j].evaluate(y_f))
+                    / flint_to_float(self._norms[j])
+                    for j in range(self.n)
+                )
+            kn_f = flint_to_float(self._leading_coeffs[self.n])
+            kn_minus_f = flint_to_float(self._leading_coeffs[self.n - 1])
+            hn_minus_f = flint_to_float(self._norms[self.n - 1])
             factor_f = kn_minus_f / (kn_f * hn_minus_f)
-            if is_diag:
+            if x_f == y_f:
                 pn_val = self._pn.evaluate(x_f)
                 pn_minus_val = self._pn_minus.evaluate(x_f)
                 pn_deriv_val = self._pn_deriv.evaluate(x_f) if self._pn_deriv else 0.0
@@ -145,13 +238,13 @@ class OrthogonalPolynomialKernel(BaseKernel):
         x = sympy_to_exact(x)
         y = sympy_to_exact(y)
 
-        kn = self.leading_coeffs[self.n]
-        kn_minus = self.leading_coeffs[self.n - 1]
-        hn_minus = self.norms[self.n - 1]
+        kn = self._leading_coeffs[self.n]
+        kn_minus = self._leading_coeffs[self.n - 1]
+        hn_minus = self._norms[self.n - 1]
 
         factor = kn_minus / (kn * hn_minus)
 
-        if is_diag:
+        if x == y:
             pn_val = self._pn.evaluate(x)
             pn_minus_val = self._pn_minus.evaluate(x)
             pn_deriv_val = self._pn_deriv.evaluate(x) if self._pn_deriv else 0
@@ -233,25 +326,17 @@ def gap_probability_continuous(
     return float(np.linalg.det(matrix))
 
 
-def sample_discrete(
+def _validated_discrete_eigensystem(
     kernel: Union[BaseKernel, NDArray[Any]], state_space: Sequence[Any]
-) -> List[Any]:
-    """Sample a real symmetric DPP correlation kernel by spectral HKPV.
-
-    Nonprojection kernels use independent Bernoulli eigenvector selection.
-    An ndarray is indexed in state_space order; a BaseKernel is evaluated
-    on those states, including subsets and permutations. The numerical matrix
-    must be finite, symmetric, and have spectrum in [0, 1], up to 1e-10
-    absolute roundoff. Invalid kernels raise ValueError before drawing samples.
-    States must be distinct and hashable. Empty state spaces return [].
-    """
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Validate a numerical correlation kernel before any random draws."""
     M = len(state_space)
     if len(set(state_space)) != M:
         raise ValueError("state_space must contain distinct states.")
     if M == 0:
         if isinstance(kernel, np.ndarray) and kernel.shape != (0, 0):
             raise ValueError("Kernel shape must match state_space.")
-        return []
+        return np.empty((0, 0)), np.empty(0), np.empty((0, 0))
 
     if isinstance(kernel, np.ndarray):
         K_mat = kernel
@@ -277,10 +362,25 @@ def sample_discrete(
     if np.any(eigenvalues < -tolerance) or np.any(eigenvalues > 1 + tolerance):
         raise ValueError("Kernel eigenvalues must lie in [0, 1].")
     eigenvalues = np.clip(eigenvalues, 0.0, 1.0)
+    return K_mat, eigenvalues, eigenvectors
+
+
+def _sample_discrete_eigensystem(
+    eigenvalues: NDArray[np.float64],
+    eigenvectors: NDArray[np.float64],
+    state_space: Sequence[Any],
+    rng: Optional[np.random.Generator],
+) -> List[Any]:
+    """Use the same Bernoulli selection and projection HKPV for both APIs."""
+    if rng is not None and not isinstance(rng, np.random.Generator):
+        raise TypeError("rng must be a numpy.random.Generator or None")
+    random_draw = np.random.rand if rng is None else rng.random
+    choice = np.random.choice if rng is None else rng.choice
+    M = len(state_space)
 
     selected_indices = []
     for idx, lam in enumerate(eigenvalues):
-        if np.random.rand() < lam:
+        if random_draw() < lam:
             selected_indices.append(idx)
 
     if not selected_indices:
@@ -300,7 +400,7 @@ def sample_discrete(
         else:
             raise RuntimeError("Projection sampling lost its orthonormal basis.")
 
-        sampled_idx = np.random.choice(M, p=probs)
+        sampled_idx = int(choice(M, p=probs))
         sampled_indices.append(sampled_idx)
 
         if i > 1:
@@ -315,7 +415,90 @@ def sample_discrete(
             V_updated = V_remaining - factors[:, None] * v_star
 
             # Orthonormalize rows using QR decomposition
-            Q, R = np.linalg.qr(V_updated.T)
+            Q, _ = np.linalg.qr(V_updated.T)
             V_mat = Q.T
 
     return [state_space[idx] for idx in sampled_indices]
+
+
+class PreparedDiscreteDPP:
+    """Owned, validated kernel state for repeated real symmetric DPP sampling.
+
+    Preparation evaluates/copies the kernel and computes its eigensystem once.
+    Stored arrays have immutable backing; public arrays are read-only copies.
+    The state container is copied to a tuple, retaining the supplied hashable
+    labels. Mutating the original matrix or state list cannot change sampling.
+    There is no cache keyed by mutable array identity. Preparation draws no
+    random numbers; sample() uses the ordinary Bernoulli and QR-based HKPV law.
+    """
+
+    __slots__ = ("_matrix", "_eigenvalues", "_eigenvectors", "_states")
+
+    def __init__(
+        self, kernel: Union[BaseKernel, NDArray[Any]], state_space: Sequence[Any]
+    ) -> None:
+        states = tuple(state_space)
+        matrix, eigenvalues, eigenvectors = _validated_discrete_eigensystem(
+            kernel, states
+        )
+
+        def freeze(array: NDArray[np.float64]) -> NDArray[np.float64]:
+            return np.frombuffer(array.tobytes(), dtype=np.float64).reshape(array.shape)
+
+        self._matrix = freeze(matrix)
+        self._eigenvalues = freeze(eigenvalues)
+        self._eigenvectors = freeze(eigenvectors)
+        self._states = states
+
+    @property
+    def state_space(self) -> tuple[Any, ...]:
+        """The owned state order; individual labels retain their original identity."""
+        return self._states
+
+    @property
+    def kernel_matrix(self) -> NDArray[np.float64]:
+        """Return a caller-owned read-only copy of the symmetrized kernel."""
+        result = self._matrix.copy()
+        result.setflags(write=False)
+        return result
+
+    @property
+    def eigenvalues(self) -> NDArray[np.float64]:
+        """Return a caller-owned read-only copy of the clipped eigenvalues."""
+        result = self._eigenvalues.copy()
+        result.setflags(write=False)
+        return result
+
+    def sample(self, *, rng: Optional[np.random.Generator] = None) -> List[Any]:
+        """Draw one sample; None preserves the legacy global NumPy RNG behavior."""
+        return _sample_discrete_eigensystem(
+            self._eigenvalues, self._eigenvectors, self._states, rng
+        )
+
+
+def sample_discrete(
+    kernel: Union[BaseKernel, NDArray[Any], PreparedDiscreteDPP],
+    state_space: Optional[Sequence[Any]] = None,
+    *,
+    rng: Optional[np.random.Generator] = None,
+) -> List[Any]:
+    """Sample a real symmetric DPP correlation kernel by spectral HKPV.
+
+    Raw kernels are validated and decomposed on every call. PreparedDiscreteDPP
+    owns a validated snapshot for repeated sampling; its state_space can be
+    omitted or must match its stored order. Nonprojection kernels use independent
+    Bernoulli eigenvector selection, followed by the same QR-based projection
+    sampler. None uses global NumPy randomness; rng accepts a Generator.
+    An ndarray is indexed in state_space order; a BaseKernel is evaluated on
+    those states. Kernels must be finite, symmetric, with spectrum in [0, 1],
+    up to 1e-10 absolute roundoff. States must be distinct and hashable.
+    """
+    if isinstance(kernel, PreparedDiscreteDPP):
+        if state_space is not None and tuple(state_space) != kernel.state_space:
+            raise ValueError("state_space must match the prepared kernel's state order")
+        return kernel.sample(rng=rng)
+    if state_space is None:
+        raise ValueError("state_space is required for an unprepared kernel")
+    states = tuple(state_space)
+    _, eigenvalues, eigenvectors = _validated_discrete_eigensystem(kernel, states)
+    return _sample_discrete_eigensystem(eigenvalues, eigenvectors, states, rng)

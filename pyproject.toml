@@ -16,15 +16,16 @@ packages = ["finitefree"]
 
 [project]
 name = "finitefree"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Python library for exact finite free probability"
+readme = "README.md"
 authors = [
-    { name = "Author" }
+    { name = "Jonathan Borenstein" }
 ]
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "python-flint>=0.6.0",
+    "python-flint>=0.9.0",
     "sympy>=1.12",
     "numpy>=1.24",
     "scipy>=1.10"
@@ -63,6 +64,8 @@ ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88
+# Retain the existing conservative syntax/lint baseline independently of
+# the runtime floor required by python-flint.
 target-version = "py39"
 exclude = ["scratch"]
 
@@ -91,4 +94,3 @@ test-command = "python {project}/scripts/test_installed_wheel.py"
 [tool.cibuildwheel.macos]
 # Disable delocate-wheel repair since we do not vendor any external dynamically linked libraries
 repair-wheel-command = ""
-

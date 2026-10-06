@@ -1,8 +1,9 @@
 import abc
 import functools
 import math
+import operator
 import warnings
-from typing import Any, List, Sequence, Union
+from typing import Any, List, Sequence, SupportsIndex, Union
 
 import flint
 import numpy as np
@@ -38,7 +39,12 @@ class RealRootedPolynomial(Polynomial):
         monic: bool = True,
     ) -> None:
         r"""
-        coeffs: array of length $d+1$ where index $k$ corresponds to $x^{d-k}$, or a flint.fmpq_poly.
+        Construct from descending coefficients or a native ascending FLINT polynomial.
+        Inputs are copied; monic=True divides out the leading coefficient, while
+        monic=False retains it. Rational values use FLINT, including the exact stored
+        ratio of Python/NumPy floats. Other symbolic coefficients use SymPy.
+        Geometry is checked lazily unless assume_real_rooted=True trusts the caller.
+        The rational zero polynomial is rejected; nonzero constants have no roots.
         """
         import flint
 
@@ -51,7 +57,7 @@ class RealRootedPolynomial(Polynomial):
 
         self._is_flint = False
         if isinstance(coeffs, flint.fmpq_poly):
-            poly = coeffs
+            poly = flint.fmpq_poly(coeffs)
             self._is_flint = True
         else:
             try:
@@ -83,10 +89,12 @@ class RealRootedPolynomial(Polynomial):
             self.degree: int = poly.degree() if poly.degree() >= 0 else 0
         else:
             self.degree = len(self.coeffs_sympy) - 1
+            self.coeffs_sympy.setflags(write=False)
 
         self._is_verified: bool = assume_real_rooted
         self._is_monic = monic
         self._normalized_coeffs_flint_cached: Union[List[Any], None] = None
+        self._normalized_coeffs_flint_prefix_cached: Union[List[Any], None] = None
         self._normalized_coeffs_sympy_cached: Union[NDArray[np.object_], None] = None
         self._roots_cached: Union[NDArray[Any], None] = None
         self._roots_cached_exact = False
@@ -107,10 +115,10 @@ class RealRootedPolynomial(Polynomial):
 
     @property
     def coeffs(self) -> NDArray[np.object_]:
-        """Returns the coefficients in descending order as a NumPy array of SymPy Rationals."""
+        """Return a caller-owned copy of the descending coefficient array."""
         if self._is_flint:
             return np.array(fmpq_poly_to_sympy_coeffs(self._fmpq_poly), dtype=object)
-        return self.coeffs_sympy
+        return self.coeffs_sympy.copy()
 
     @property
     def variables(self) -> list[sp.Symbol]:
@@ -118,7 +126,12 @@ class RealRootedPolynomial(Polynomial):
         return [sp.Symbol("x")]
 
     def evaluate(self, x: Any) -> Any:
-        """Evaluates the polynomial at the point x."""
+        r"""
+        Evaluate at x, retaining the polynomial's stored scalar.
+        Rational-backend integer/rational arguments use exact FLINT evaluation.
+        Floating arguments use float64 Horner evaluation and may overflow, underflow
+        or lose precision. Symbolic-backend evaluation uses SymPy substitution.
+        """
         if self._is_flint:
             if isinstance(x, (float, np.floating)):
                 if self._float_coeffs_cached is None:
@@ -150,10 +163,17 @@ class RealRootedPolynomial(Polynomial):
         q_coeffs = [sympy_to_fmpq(c) for c in reversed(self.coeffs_sympy)]
         return flint.fmpq_poly(q_coeffs)
 
+    def _linear_root(self) -> Any:
+        """Return the exact coefficient ratio for a degree-one polynomial."""
+        coefficients = self.coeffs
+        return sp.cancel(-sp.sympify(coefficients[1]) / sp.sympify(coefficients[0]))
+
     def verify_real_rootedness(self) -> bool:
         """
-        Lazily verify real-rootedness using exact Sturm sequences through
-        degree 30 and Arb isolation above that degree. Complex roots raise
+        Lazily verify real-rootedness using Arb isolation above degree 30 or
+        for squarefree factors of degree at least 15. Smaller factors use exact
+        Sturm sequences; degrees through 30 also retain Sturm as a fallback
+        when Arb cannot obtain a certificate. Complex roots raise
         ValueError; failure to obtain a certificate raises RuntimeError.
         An explicit assume_real_rooted=True bypasses verification.
         """
@@ -161,6 +181,14 @@ class RealRootedPolynomial(Polynomial):
             return True
 
         if self.degree <= 1:
+            if self.degree == 1 and not self._is_flint:
+                real = self._linear_root().is_real
+                if real is False:
+                    raise ValueError(
+                        "Polynomial is not real-rooted: nonreal linear root"
+                    )
+                if real is None:
+                    raise RuntimeError("Unable to certify that the linear root is real")
             self._is_verified = True
             return True
 
@@ -172,6 +200,12 @@ class RealRootedPolynomial(Polynomial):
         try:
             f_poly = self._to_fmpq_poly()
             _, factors = f_poly.factor_squarefree()
+
+            if any(factor.degree() >= 15 for factor, _ in factors):
+                try:
+                    return self._verify_real_rootedness_arb()
+                except RuntimeError:
+                    pass  # Keep exact Sturm certification if isolation is unavailable.
 
             total_real_roots = 0
             for factor, multiplicity in factors:
@@ -254,22 +288,39 @@ class RealRootedPolynomial(Polynomial):
                         "Polynomial is not real-rooted: complex root detected."
                     )
 
-            self._is_verified = True
-            # Isolation already found the roots. Reuse them instead of repeating
-            # Arb work or trying an ill-conditioned companion matrix afterward.
+        except ValueError:
+            raise
+        except Exception as inner_e:
+            raise RuntimeError("Could not certify real-rootedness.") from inner_e
+
+        self._is_verified = True
+        # A real-root certificate does not require float64 representability.
+        # Cache isolated roots only when the final numerical values are finite.
+        try:
             roots = [
                 flint_to_float(root.real)
                 for root, multiplicity in acb_roots
                 for _ in range(int(multiplicity))
             ]
-            self._roots_cached = np.sort(np.asarray(roots, dtype=np.float64))
-            self._roots_cached_exact = True
-            self._roots_cached_prec = flint.ctx.prec
+            cached = self._finite_float64_root_array(np.sort(roots))
+        except (TypeError, ValueError, OverflowError, RuntimeError):
             return True
-        except ValueError:
-            raise
-        except Exception as inner_e:
-            raise RuntimeError("Could not certify real-rootedness.") from inner_e
+        self._roots_cached = cached
+        self._roots_cached_exact = True
+        self._roots_cached_prec = flint.ctx.prec
+        return True
+
+    @staticmethod
+    def _finite_float64_root_array(roots: Any) -> NDArray[np.float64]:
+        """Validate numerical representability before storing a root result."""
+        try:
+            result = np.asarray(roots, dtype=np.float64)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise RuntimeError("Roots cannot be converted to float64") from error
+        if not np.all(np.isfinite(result)):
+            raise RuntimeError("Roots are outside the finite float64 range")
+        result.setflags(write=False)
+        return result
 
     def verify_root_interlacing(self, strict: bool = False) -> bool:
         r"""
@@ -295,7 +346,11 @@ class RealRootedPolynomial(Polynomial):
         return True
 
     def _normalized_coeffs_flint(self, d: Union[int, None] = None) -> list[Any]:
-        """Extracts the normalized elementary symmetric polynomial sequence as flint.fmpq."""
+        """Extract root-normalized elementary coefficients as flint.fmpq.
+
+        The leading coefficient is divided out, so e_0=1 even for a nonmonic
+        representation. Ambient dimensions above the degree pad roots with zero.
+        """
         if d is None:
             d = self.degree
 
@@ -312,12 +367,15 @@ class RealRootedPolynomial(Polynomial):
 
         if self._is_flint:
             e_k = []
+            leading = self._fmpq_poly[self.degree]
             curr_binom = flint.fmpz(1)
             for k in range(d + 1):
                 if k > 0:
                     curr_binom = (curr_binom * (d - k + 1)) // k
                 if k <= self.degree:
                     c_k = self._fmpq_poly[self.degree - k]
+                    if leading != 1:
+                        c_k /= leading
                     sign = (-1) ** k
                     val = c_k * flint.fmpq(flint.fmpz(sign), curr_binom)
                     e_k.append(val)
@@ -328,12 +386,59 @@ class RealRootedPolynomial(Polynomial):
 
         if d == self.degree:
             self._normalized_coeffs_flint_cached = e_k
+            self._normalized_coeffs_flint_prefix_cached = None
         return e_k
+
+    def _normalized_coeffs_flint_prefix(
+        self, count: int, d: Union[int, None] = None
+    ) -> list[Any]:
+        """Extract e_0 through e_count without normalizing unused coefficients.
+
+        A single largest requested prefix is cached only for the native dimension.
+        It is never exposed as a complete normalized sequence. Ambient dimensions
+        use uncached prefixes; a complete cache takes precedence when available.
+        """
+        if d is None:
+            d = self.degree
+        if d < self.degree:
+            raise ValueError("Ambient dimension cannot be less than polynomial degree.")
+        if count < 0:
+            raise ValueError("Prefix index must be nonnegative.")
+        count = min(count, d)
+        if not self._is_flint or count == d:
+            return self._normalized_coeffs_flint(d)[: count + 1]
+        if d == self.degree and self._normalized_coeffs_flint_cached is not None:
+            return self._normalized_coeffs_flint_cached[: count + 1]
+
+        prefix = (
+            self._normalized_coeffs_flint_prefix_cached if d == self.degree else None
+        )
+        if prefix is not None and len(prefix) > count:
+            return prefix[: count + 1]
+        values = list(prefix) if prefix is not None else []
+        binomial = (
+            flint.fmpz(math.comb(d, len(values) - 1)) if values else flint.fmpz(1)
+        )
+        leading = self._fmpq_poly[self.degree]
+        for k in range(len(values), count + 1):
+            if k:
+                binomial = binomial * (d - k + 1) // k
+            coefficient = (
+                self._fmpq_poly[self.degree - k] if k <= self.degree else flint.fmpq(0)
+            )
+            values.append(coefficient / leading * flint.fmpq((-1) ** k, binomial))
+        if d == self.degree:
+            self._normalized_coeffs_flint_prefix_cached = values
+        return values[: count + 1]
 
     def normalized_coeffs(self, d: Union[int, None] = None) -> NDArray[np.object_]:
         r"""
         Extracts the normalized elementary symmetric polynomial sequence
-        $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as SymPy Rationals.
+        $\tilde{e}_k^{(d)}(p)$ with respect to ambient dimension $d$ as an object
+        array. Rational coefficients remain exact; symbolic coefficients use SymPy.
+        Divides out the leading coefficient, preserving the polynomial's stored
+        coefficients while making the sequence depend only on its roots.
+        Returned arrays are read-only; use .copy() to obtain editable values.
         """
         if d is None:
             d = self.degree
@@ -352,11 +457,14 @@ class RealRootedPolynomial(Polynomial):
             e_k = [sp.Rational(int(val.p), int(val.q)) for val in raw]
         else:
             e_k = []
+            leading = self.coeffs_sympy[0]
             for k in range(d + 1):
                 if k <= self.degree:
                     binom = math.comb(d, k)
                     sign = (-1) ** k
                     c_k = self.coeffs_sympy[k]
+                    if leading != 1:
+                        c_k = sp.cancel(sp.sympify(c_k) / sp.sympify(leading))
                     val = sign * binom
                     if isinstance(c_k, (int, np.integer)):
                         if c_k % val == 0:
@@ -369,6 +477,7 @@ class RealRootedPolynomial(Polynomial):
                     e_k.append(0)
 
         res_array = np.array(e_k, dtype=object)
+        res_array.setflags(write=False)
         if d == self.degree:
             self._normalized_coeffs_sympy_cached = res_array
         return res_array
@@ -419,11 +528,16 @@ class RealRootedPolynomial(Polynomial):
             return inst
 
     @classmethod
-    def from_roots(cls, roots: Sequence[Any]) -> "RealRootedPolynomial":
-        """
-        Reconstructs the polynomial from its exact roots.
-        Uses a divide-and-conquer product of C-level fmpq_poly linear factors
-        to run in O(d log^2 d) exact time, avoiding slow SymPy symbolic products.
+    def from_roots(
+        cls, roots: Union[Sequence[Any], NDArray[Any]]
+    ) -> "RealRootedPolynomial":
+        r"""
+        Construct a monic polynomial from supplied real rational root values.
+        Python/NumPy floating inputs are interpreted by their own stored binary ratios.
+        A balanced product tree multiplies FLINT linear factors; cost depends on
+        multiplication and coefficient bit sizes. Empty input gives the unit constant.
+        Finite approximate roots may be cached read-only. Exact construction remains
+        available when supplied roots cannot fit float64.
         """
         from collections import deque
 
@@ -445,8 +559,11 @@ class RealRootedPolynomial(Polynomial):
 
         poly_flint = queue[0]
         inst = cls(poly_flint, assume_real_rooted=True)
-        float_roots = [flint_to_float(r) for r in roots]
-        inst._roots_cached = np.sort(np.array(float_roots, dtype=np.float64))
+        try:
+            float_roots = [flint_to_float(r) for r in roots]
+            inst._roots_cached = cls._finite_float64_root_array(np.sort(float_roots))
+        except (TypeError, ValueError, OverflowError, RuntimeError):
+            pass  # Exact construction is valid even beyond the float64 range.
         return inst
 
     def __str__(self) -> str:
@@ -460,13 +577,11 @@ class RealRootedPolynomial(Polynomial):
         return self.__str__()
 
     def to_numpy_poly1d(self) -> np.poly1d:
-        """
-        Converts the exact rational polynomial coefficients into standard float64
-        representation and returns a numpy.poly1d object.
-
-        WARNING: Directly exporting high-degree coefficients to float64 can lead to
-        severe numerical instability due to Wilkinson's phenomenon. Consider using
-        evaluate_roots_float64() instead to retrieve high-precision isolated roots.
+        r"""
+        Export stored coefficients directly to NumPy float64 and return poly1d.
+        This method warns above degree 20 but does not rescale coefficients or certify
+        finiteness/accuracy. Conversion may overflow and root finding on monomial
+        coefficients may be ill-conditioned. Prefer evaluate_roots_float64().
         """
         if self.degree > 20:
             warnings.warn(
@@ -481,9 +596,11 @@ class RealRootedPolynomial(Polynomial):
         return np.poly1d(float_coeffs)
 
     def to_scipy_dist(self) -> Any:
-        """
-        Converts the polynomial's root distribution into a SciPy continuous random variable
-        (scipy.stats.rv_continuous) by fitting a piecewise-linear CDF over the isolated roots.
+        r"""
+        Return a SciPy continuous distribution with an interpolated root CDF.
+        The CDF linearly interpolates evenly spaced values from 0 to 1 at sorted
+        numerical roots. It is an approximation, not the atomic empirical root law.
+        At least two returned root entries are required; multiplicities are retained.
         """
         import scipy.stats
 
@@ -511,6 +628,7 @@ class RealRootedPolynomial(Polynomial):
     ) -> NDArray[Any]:
         """
         Return sorted float64 roots with multiplicities after domain validation.
+        Returned arrays are read-only; use .copy() to obtain editable values.
         With exact=True (the default), first request Arb isolation; PrecisionContext
         controls the working precision. Numerical fallbacks can still be used if
         isolation fails, and returned floats are not interval error bounds.
@@ -520,6 +638,8 @@ class RealRootedPolynomial(Polynomial):
         when parallel=True, with high-precision/general numerical fallback.
         Arb validation retains isolated roots. An exact=True request bypasses
         an approximate cache or one recorded at a lower working precision.
+        Nonfinite numerical results raise RuntimeError without entering the cache;
+        exact construction and real-rootedness certification remain available.
         Nonfinite/underflowed recurrences fall back; extreme affine scales or
         shifts remain limited by float64 representability and conditioning.
         """
@@ -530,6 +650,7 @@ class RealRootedPolynomial(Polynomial):
         ):
             return self._roots_cached
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
+        res = self._finite_float64_root_array(res)
         self._roots_cached = res
         self._roots_cached_exact = exact
         self._roots_cached_prec = flint.ctx.prec if exact else 0
@@ -542,6 +663,21 @@ class RealRootedPolynomial(Polynomial):
         d = self.degree
         if d == 0:
             return np.empty(0, dtype=np.float64)
+        if d == 1:
+            root = (
+                -self._fmpq_poly[0] / self._fmpq_poly[1]
+                if self._is_flint
+                else self._linear_root()
+            )
+            try:
+                value = flint_to_float(root)
+            except (TypeError, ValueError, OverflowError) as error:
+                raise RuntimeError(
+                    "Linear root cannot be converted to float64"
+                ) from error
+            if not np.isfinite(value):
+                raise RuntimeError("Linear root is outside the finite float64 range")
+            return np.array([value], dtype=np.float64)
 
         if not exact and self._root_recurrence is not None:
             from scipy.linalg import eigvalsh_tridiagonal
@@ -604,10 +740,18 @@ class RealRootedPolynomial(Polynomial):
                     # Fall through to numerical solvers if exact solver fails
                     pass
 
+        # Companion/Aberth coefficients have leading term one. Normalize in
+        # rational arithmetic before float conversion, including extreme scalar
+        # multiples; keep the caller's stored coefficient representation intact.
+        numerical_polynomial = self._fmpq_poly
+        leading_coefficient = numerical_polynomial[d]
+        if leading_coefficient != 1:
+            numerical_polynomial = numerical_polynomial / leading_coefficient
+
         non_zero_scales = []
 
         for k in range(1, d + 1):
-            val = abs(flint_to_float(self._fmpq_poly[d - k]))
+            val = abs(flint_to_float(numerical_polynomial[d - k]))
             if val > 0:
                 non_zero_scales.append(val ** (1.0 / k))
 
@@ -625,7 +769,7 @@ class RealRootedPolynomial(Polynomial):
         scaled_coeffs = np.zeros(d + 1, dtype=np.float64)
         scaled_coeffs[0] = 1.0
         for k in range(1, d + 1):
-            scaled_coeffs[k] = flint_to_float(self._fmpq_poly[d - k]) / (S**k)
+            scaled_coeffs[k] = flint_to_float(numerical_polynomial[d - k]) / (S**k)
 
         # --- Parallel path: Vectorized Aberth-Ehrlich Candidate Seeker ---
         if parallel:
@@ -758,7 +902,7 @@ class RealRootedPolynomial(Polynomial):
                     stacklevel=2,
                 )
                 float_coeffs = [
-                    flint_to_float(c) for c in reversed(self._fmpq_poly.coeffs())
+                    flint_to_float(c) for c in reversed(numerical_polynomial.coeffs())
                 ]
                 return np.sort(np.real(np.roots(float_coeffs)))
 
@@ -819,10 +963,11 @@ class RealRootedPolynomial(Polynomial):
 
     def power(self, c: Any) -> "RealRootedPolynomial":
         r"""
-        Computes the polynomial $p^{(c)}$ whose roots are $\lambda_i(p)^c$.
-        Positive integer powers are computed exactly over Q. Squaring uses
-        p(x)p(-x); other integer powers use the companion matrix's charpoly.
-        Noninteger powers use numerical root isolation and reconstruction.
+        Construct a polynomial with roots $\lambda_i^c$.
+        Requires non-negative roots and c>0. Positive integer powers use exact rational
+        operations: squaring uses p(x)p(-x), and other powers use a companion-matrix
+        power and characteristic polynomial. Noninteger powers use float64 roots and
+        reconstruction from their numerical powers, inheriting range/rounding limits.
         """
         if not self.has_non_negative_roots:
             raise ValueError(
@@ -891,9 +1036,11 @@ class RealRootedPolynomial(Polynomial):
 
     def phi_d(self) -> "RealRootedPolynomial":
         r"""
-        Computes the limiting polynomial $\Phi_d(p)$ from Fujie and Ueda [FU23].
-        For $p \in P_d(\mathbb{R}_{\ge 0})$ with multiplicity $r$ at root 0, the roots are
-        $\lambda_k = \tilde{e}_k / \tilde{e}_{k-1}$ for $1 \le k \le d - r$, and 0 otherwise.
+        Construct the multiplicative limit polynomial $\Phi_d(p)$.
+        For non-negative roots and zero multiplicity r, its nonzero roots are
+        $\tilde e_k/\tilde e_{k-1}$ for 1<=k<=d-r, with r additional zero roots.
+        See equation (2.12) in Arizmendi et al., arXiv:2408.09337v2.
+        Construction from rational coefficient ratios is exact.
         """
         # Verify that all roots are non-negative
         if not self.has_non_negative_roots:
@@ -969,24 +1116,66 @@ class RealRootedPolynomial(Polynomial):
             res_poly, assume_real_rooted=self._is_verified, monic=monic
         )
 
-    def projection(self, j: int) -> "RealRootedPolynomial":
+    def projection(self, j: SupportsIndex) -> "RealRootedPolynomial":
         r"""
         Computes the projection $\partial^{j|d} p(x)$ which is the derivative
-        of order $d-j$, monic-normalized.
+        of order $d-j$, monic-normalized. Proper projections update only the
+        leading j+1 coefficients, without constructing intermediate derivatives.
+        Projection to the original degree returns self. Known Hermite provenance
+        preserves its variance, center and numerical root recurrence.
         """
-        if j < 0 or j > self.degree:
-            raise ValueError("Projection dimension j must be between 0 and degree.")
+        try:
+            dimension = operator.index(j)
+        except TypeError as error:
+            raise ValueError(
+                "Projection dimension j must be an integer between 0 and degree."
+            ) from error
+        if dimension < 0 or dimension > self.degree:
+            raise ValueError(
+                "Projection dimension j must be an integer between 0 and degree."
+            )
+        if dimension == self.degree:
+            return self
 
-        current = self
-        for _ in range(self.degree - j):
-            current = current.derivative()
-        return current
+        # For coefficient a_k of x^(d-k), monic differentiation multiplies
+        # a_k/a_0 by (j)_k/(d)_k. Accumulate that ratio exactly in O(j) updates.
+        multiplier = 1 / self._fmpq_poly[self.degree]
+        descending = []
+        for k in range(dimension + 1):
+            descending.append(self._fmpq_poly[self.degree - k] * multiplier)
+            if k < dimension:
+                multiplier *= flint.fmpq(dimension - k, self.degree - k)
+
+        result = RealRootedPolynomial(
+            flint.fmpq_poly(list(reversed(descending))),
+            assume_real_rooted=self._is_verified,
+        )
+        if self._hermite_variance is not None:
+            result._hermite_variance = self._hermite_variance
+            result._hermite_center = self._hermite_center
+            if self._root_recurrence is not None and dimension >= 2:
+                # Hermite derivatives use the leading principal Jacobi matrix.
+                # Keep the existing affine factors: variance itself may underflow
+                # in float64 while its square root and the roots remain usable.
+                diagonal, off_diagonal = self._root_recurrence
+                result._root_recurrence = (
+                    diagonal[:dimension].copy(),
+                    off_diagonal[: dimension - 1].copy(),
+                )
+                result._root_scale = self._root_scale
+                result._root_dilation = self._root_dilation
+                result._root_shift = self._root_shift
+                result._root_recurrence_driver = self._root_recurrence_driver
+                result._root_recurrence_positive = self._root_recurrence_positive
+        return result
 
     def additive_power(self, t: Any) -> "RealRootedPolynomial":
         r"""
-        Computes the fractional finite free additive convolution power
-        $p^{\boxplus_d t}$ defined via scaling the finite free cumulants:
-        $\kappa_n^{(d)}(p^{\boxplus_d t}) = t \cdot \kappa_n^{(d)}(p)$.
+        Scale finite cumulants by a positive rational t and reconstruct.
+        Uses $\kappa_n^{(d)}(p^{\boxplus_d t})=t\kappa_n^{(d)}(p)$ with the matching
+        coefficient inverse. Integer t agrees with repeated symmetric convolution.
+        Formal positive fractional powers need not be real-rooted; the result validates
+        geometry lazily when root/domain properties are requested.
         """
         if t <= 0:
             raise ValueError(
@@ -1064,6 +1253,16 @@ class RealRootedPolynomial(Polynomial):
         if self._has_non_negative_roots_cached is None:
             if not self.verify_real_rootedness():
                 return False
+            if self.degree <= 1 and not self._is_flint:
+                answer = (
+                    True if self.degree == 0 else self._linear_root().is_nonnegative
+                )
+                if answer is None:
+                    raise RuntimeError(
+                        "Unable to certify that the linear root is nonnegative"
+                    )
+                self._has_non_negative_roots_cached = bool(answer)
+                return self._has_non_negative_roots_cached
             signs = []
             for j in range(self.degree + 1):
                 c = self._fmpq_poly[self.degree - j]
@@ -1082,6 +1281,14 @@ class RealRootedPolynomial(Polynomial):
         if self._has_strictly_positive_roots_cached is None:
             if not self.verify_real_rootedness():
                 return False
+            if self.degree <= 1 and not self._is_flint:
+                answer = True if self.degree == 0 else self._linear_root().is_positive
+                if answer is None:
+                    raise RuntimeError(
+                        "Unable to certify that the linear root is positive"
+                    )
+                self._has_strictly_positive_roots_cached = bool(answer)
+                return self._has_strictly_positive_roots_cached
             ans = True
             for k in range(self.degree + 1):
                 if self._fmpq_poly[k] == 0:
@@ -1099,9 +1306,11 @@ class RealRootedPolynomial(Polynomial):
 
 
 class UnitaryPolynomial(RealRootedPolynomial):
-    """
-    Represents a polynomial whose roots lie strictly on the unit circle T.
-    Bypasses Sturm sequence real-rootedness verification and supports complex roots.
+    r"""
+    Represent a polynomial intended to have roots on the unit circle.
+    Construction trusts that domain and bypasses real-rootedness checks; no
+    unit-circle certification is performed. Numerical extraction returns complex
+    roots rather than the real-root API's sorted real values.
     """
 
     def __init__(
@@ -1117,12 +1326,13 @@ class UnitaryPolynomial(RealRootedPolynomial):
     def evaluate_roots_float64(
         self, parallel: bool = False, gpu: bool = False
     ) -> NDArray[Any]:
-        """
-        Computes the complex roots of the unitary polynomial.
-        Evaluates transcendental coefficients numerically using SymPy N(c)
-        to avoid int() / float() casting errors of transcendental terms,
-        and uses companion matrix eigensolver to compute complex roots on T.
-        Supports GPU acceleration via CuPy if gpu=True is specified.
+        r"""
+        Return read-only complex128 roots ordered by angle in [-pi, pi].
+        Coefficients are numerically evaluated using SymPy and passed to a companion
+        eigensolver. gpu=True attempts CuPy and falls back to NumPy on failure.
+        parallel is retained in the signature but does not change this implementation.
+        No Arb working-precision path, modulus certification or final-finiteness check
+        is provided here. Results retain complex128 conditioning and range limits.
         """
         if self._roots_cached is not None:
             return self._roots_cached
@@ -1154,5 +1364,6 @@ class UnitaryPolynomial(RealRootedPolynomial):
         angles = np.angle(raw_roots)
         sorted_idx = np.argsort(angles)
         res = raw_roots[sorted_idx]
+        res.setflags(write=False)
         self._roots_cached = res
         return res

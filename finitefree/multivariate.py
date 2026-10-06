@@ -1,12 +1,130 @@
 import functools
 import math
-from typing import Any, Dict, Sequence, Tuple, Union
+import operator
+from typing import Any, Dict, Mapping, Optional, Sequence, SupportsIndex, Tuple, Union
 
+import numpy as np
 import sympy as sp
+from numpy.typing import NDArray
 
 from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from .utils.modular import _as_modular_array, crt, prime_generator
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
+
+
+def _determinant_coefficient_bound(
+    matrices: Sequence[Sequence[Sequence[int]]],
+) -> int:
+    """Bound every coefficient of det(sum_j x_j A_j) for integer matrices.
+
+    Each determinant permutation contributes a product of linear forms.
+    The coefficient l1 norm of that product is at most the product of their
+    coefficient l1 norms. Summing over n! permutations gives the rowwise bound
+    n! * product_r max_c sum_j abs(A_j[r,c]).
+    """
+    n = len(matrices[0])
+    return math.factorial(n) * math.prod(
+        max(
+            (sum(abs(matrix[r][c]) for matrix in matrices) for c in range(n)),
+            default=0,
+        )
+        for r in range(n)
+    )
+
+
+def _determinant_encoding_parameters(
+    n: int, m: int, coefficient_bound: int, max_bits: int
+) -> tuple[int, tuple[int, ...]]:
+    """Bound the exact Kronecker encoding before allocating large powers.
+
+    Dehomogenize x_m=1 and encode exponent tuples in radix n+1. At integer
+    base b=2B+1, the determinant has balanced digits in [-B, B]. Its largest
+    exponent is E=n*(n+1)**(m-2), so (E+1)*b.bit_length() bounds its bit size
+    and every evaluated matrix entry. This is not a runtime or memory quota.
+    """
+    base = 2 * coefficient_bound + 1
+    weights = [1]
+    for i in range(m - 1):
+        if i:
+            weights.append(weights[-1] * (n + 1))
+        if (n * weights[-1] + 1) * base.bit_length() > max_bits:
+            raise ValueError(
+                "Deterministic sparse verification exceeds "
+                f"max_verification_bits={max_bits}; increase the limit explicitly "
+                "or use another determinant constructor"
+            )
+    return base, tuple(weights)
+
+
+def _decode_determinant_encoding(
+    value: int, n: int, m: int, base: int
+) -> dict[tuple[int, ...], int]:
+    """Recover all coefficients from the exact balanced-base determinant."""
+    coefficients = {}
+    encoded_exponent = 0
+    bound = (base - 1) // 2
+    while value:
+        value, coefficient = divmod(value, base)
+        if coefficient > bound:
+            coefficient -= base
+            value += 1
+        if coefficient:
+            remaining = encoded_exponent
+            exps = []
+            for _ in range(m - 1):
+                remaining, power = divmod(remaining, n + 1)
+                exps.append(power)
+            if remaining or sum(exps) > n:
+                raise RuntimeError("Invalid homogeneous determinant encoding")
+            coefficients[tuple(exps)] = coefficient
+        encoded_exponent += 1
+    return coefficients
+
+
+def _certify_sparse_determinant_coefficients(
+    matrices: Sequence[Sequence[Sequence[int]]],
+    coefficients: Mapping[tuple[int, ...], int],
+    coefficient_bound: int,
+    base: int,
+    weights: Sequence[int],
+) -> dict[tuple[int, ...], int]:
+    """Verify a sparse candidate exactly, decoding the determinant on failure.
+
+    Radix n+1 gives each dehomogenized monomial a distinct exponent. Candidate
+    and determinant coefficients must both lie in [-B, B]. Their difference
+    has digits at most 2B=b-1: its highest nonzero term strictly dominates the
+    sum of all lower terms at b. Equal integer values therefore prove equality
+    of all coefficients, including absent candidate monomials.
+    """
+    import flint
+
+    n = len(matrices[0])
+    point = [pow(base, weight) for weight in weights] + [1]
+    evaluated = flint.fmpz_mat(
+        [
+            [
+                sum(x * matrix[r][c] for x, matrix in zip(point, matrices))
+                for c in range(n)
+            ]
+            for r in range(n)
+        ]
+    )
+    determinant = int(evaluated.det())
+    candidate_is_bounded = all(
+        len(exps) == len(weights)
+        and all(0 <= power <= n for power in exps)
+        and sum(exps) <= n
+        and abs(coefficient) <= coefficient_bound
+        for exps, coefficient in coefficients.items()
+    )
+    if candidate_is_bounded:
+        candidate_value = sum(
+            coefficient * pow(base, sum(e * w for e, w in zip(exps, weights)))
+            for exps, coefficient in coefficients.items()
+        )
+        if candidate_value == determinant:
+            return {exps: c for exps, c in coefficients.items() if c}
+    return _decode_determinant_encoding(determinant, n, len(matrices), base)
 
 
 @functools.lru_cache(maxsize=None)
@@ -49,45 +167,198 @@ def get_grid_points(
     return pts
 
 
-from .core import Polynomial
+from .core import Polynomial, RealRootedPolynomial
 
 
 class MultivariatePolynomial(Polynomial):
-    """
-    Represents a homogeneous multivariate polynomial exactly using Flint's fmpq_mpoly
-    as the primary computational backend.
+    r"""
+    Store a rational multivariate polynomial in FLINT's sparse fmpq_mpoly.
+    Homogeneous geometry operations are available, but construction does not
+    require homogeneity; use is_homogeneous() when that assumption is needed.
+    Inputs must be convertible to rational coefficients.
+    Variable order is explicit. Coefficients and exported native objects are owned
+    copies. Algebra does not certify stability, hyperbolicity or real-rootedness.
     """
 
+    _mpoly: Any
+    _float_terms_cached: Optional[Tuple[Tuple[Tuple[int, ...], float], ...]]
+
     def evaluate(self, x: Sequence[Any]) -> Any:
-        r"""Evaluates the multivariate polynomial at a point $x = (x_1, \dots, x_m)$."""
+        r"""
+        Evaluate at a rational point $x = (x_1, \dots, x_m)$.
+        Floating coordinates retain their stored binary ratios. The result is an
+        exact FLINT rational; use evaluate_float64 for approximate batch evaluation.
+        """
         from .utils.conversion import sympy_to_fmpq
 
         if len(x) != len(self.variables):
             raise ValueError(f"Expected {len(self.variables)} values, got {len(x)}")
         x_fmpq = [sympy_to_fmpq(xi) for xi in x]
-        return self._mpoly.evaluate(x_fmpq)  # type: ignore[attr-defined, unused-ignore]
+        return self._mpoly(*x_fmpq)
+
+    def evaluate_float64(self, points: Any) -> Union[float, NDArray[np.float64]]:
+        """Evaluate real points shaped (..., variable_count) with NumPy.
+
+        A single point returns a float; batches retain their leading dimensions.
+        Coefficients are converted once, and terms are evaluated across each batch.
+        Nonfinite inputs, coefficients or results raise errors. Finite cancellation,
+        underflow and rounding remain possible; outputs have no certified error bound.
+        """
+        if np.iscomplexobj(points):
+            raise ValueError("Numerical coordinates must be real.")
+        try:
+            coordinates = np.asarray(points, dtype=np.float64)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(
+                "Numerical coordinates must be finite real values."
+            ) from error
+        if coordinates.ndim == 0 or coordinates.shape[-1] != len(self._variables):
+            raise ValueError(
+                f"Expected final coordinate dimension {len(self._variables)}."
+            )
+        if not np.all(np.isfinite(coordinates)):
+            raise ValueError("Numerical coordinates must be finite.")
+        if self._float_terms_cached is None:
+            from .utils.conversion import flint_to_float
+
+            terms = tuple(
+                (tuple(int(k) for k in alpha), flint_to_float(c))
+                for alpha, c in self._mpoly.to_dict().items()
+            )
+            if not all(math.isfinite(c) for _, c in terms):
+                raise RuntimeError("Polynomial coefficients exceed the float64 range.")
+            self._float_terms_cached = terms
+        result = np.zeros(coordinates.shape[:-1], dtype=np.float64)
+        try:
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                for alpha, coefficient in self._float_terms_cached:
+                    term = np.full(result.shape, coefficient, dtype=np.float64)
+                    for i, exponent in enumerate(alpha):
+                        if exponent:
+                            term *= coordinates[..., i] ** exponent
+                    result += term
+        except FloatingPointError as error:
+            raise RuntimeError(
+                "Numerical polynomial evaluation is nonfinite."
+            ) from error
+        if not np.all(np.isfinite(result)):
+            raise RuntimeError("Numerical polynomial evaluation is nonfinite.")
+        return float(result) if result.ndim == 0 else result
 
     @property
     def variables(self) -> list[sp.Symbol]:
-        return self._variables
+        """Return a caller-owned list in the stored coordinate order."""
+        return list(self._variables)
 
     def __init__(self, expr: Any, variables: Sequence[sp.Symbol]) -> None:
         import flint
 
         from .utils.conversion import sympy_to_fmpq
 
-        self._variables = list(variables)
+        self._variables = tuple(variables)
+        if not self._variables or not all(
+            isinstance(x, sp.Symbol) for x in self._variables
+        ):
+            raise ValueError("Variables must be a nonempty sequence of SymPy symbols.")
         names = tuple(x.name for x in self._variables)
+        if len(set(names)) != len(names):
+            raise ValueError("Variable names must be distinct.")
         self._ctx = flint.fmpq_mpoly_ctx.get(names=names)
+        self._float_terms_cached = None
 
         if isinstance(expr, flint.fmpq_mpoly):
-            self._mpoly = expr
+            if expr.context().names() != names:
+                raise ValueError("Native polynomial context must match variable order.")
+            self._mpoly = (
+                expr + 0
+                if expr.context() == self._ctx
+                else self._ctx.from_dict(expr.to_dict())
+            )
         else:
             poly_sym = sp.Poly(sp.expand(sp.sympify(expr)), self._variables)
             flint_dict = {}
             for exp, c in poly_sym.as_dict().items():
                 flint_dict[exp] = sympy_to_fmpq(c)
             self._mpoly = self._ctx.from_dict(flint_dict)
+
+    @classmethod
+    def from_coefficients(
+        cls, coefficients: Mapping[Tuple[int, ...], Any], variables: Sequence[sp.Symbol]
+    ) -> "MultivariatePolynomial":
+        """Construct from sparse nonnegative exponent tuples and rational values."""
+        from .utils.conversion import sympy_to_fmpq
+
+        result = cls(0, variables)
+        terms = {
+            result._nonnegative_indices(alpha, "Exponent"): sympy_to_fmpq(c)
+            for alpha, c in coefficients.items()
+        }
+        result._mpoly = result._ctx.from_dict(terms)
+        return result
+
+    def coefficients(self) -> Dict[Tuple[int, ...], sp.Rational]:
+        """Return an owned sparse mapping of exponent tuples to exact coefficients."""
+        return {
+            tuple(int(k) for k in alpha): sp.Rational(int(c.p), int(c.q))
+            for alpha, c in self._mpoly.to_dict().items()
+        }
+
+    def _nonnegative_indices(
+        self, values: Sequence[SupportsIndex], label: str
+    ) -> Tuple[int, ...]:
+        if len(values) != len(self._variables):
+            raise ValueError(f"{label} count must match variable count.")
+        indices = []
+        for value in values:
+            if isinstance(value, (bool, np.bool_)):
+                raise TypeError(f"{label} values must be integers, not booleans.")
+            try:
+                index = operator.index(value)
+            except TypeError as error:
+                raise TypeError(f"{label} values must be integers.") from error
+            if index < 0:
+                raise ValueError(f"{label} values must be nonnegative.")
+            indices.append(index)
+        return tuple(indices)
+
+    def _coerce_operand(self, other: Any) -> Any:
+        if isinstance(other, MultivariatePolynomial):
+            if other._variables != self._variables:
+                raise ValueError("Polynomial variable sequences must match exactly.")
+            return other._mpoly
+        from .utils.conversion import sympy_to_fmpq
+
+        return sympy_to_fmpq(other)
+
+    def __add__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly + self._coerce_operand(other), self._variables)
+
+    def __radd__(self, other: Any) -> "MultivariatePolynomial":
+        return self.__add__(other)
+
+    def __sub__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly - self._coerce_operand(other), self._variables)
+
+    def __rsub__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._coerce_operand(other) - self._mpoly, self._variables)
+
+    def __mul__(self, other: Any) -> "MultivariatePolynomial":
+        return type(self)(self._mpoly * self._coerce_operand(other), self._variables)
+
+    def __rmul__(self, other: Any) -> "MultivariatePolynomial":
+        return self.__mul__(other)
+
+    def __neg__(self) -> "MultivariatePolynomial":
+        return type(self)(-self._mpoly, self._variables)
+
+    def __pow__(self, exponent: SupportsIndex) -> "MultivariatePolynomial":
+        """Raise to a nonnegative integer power within the rational polynomial ring."""
+        if isinstance(exponent, (bool, np.bool_)):
+            raise TypeError("Exponent must be an integer, not a boolean.")
+        power = operator.index(exponent)
+        if power < 0:
+            raise ValueError("Exponent must be nonnegative.")
+        return type(self)(self._mpoly**power, self._variables)
 
     @property
     def expr(self) -> sp.Expr:
@@ -98,7 +369,9 @@ class MultivariatePolynomial(Polynomial):
             term = sp.Rational(int(c.p), int(c.q))
             for x_i, power in zip(self.variables, exp):
                 if power > 0:
-                    term *= x_i**power
+                    # SymPy 1.12 sympifies FLINT integers through float();
+                    # preserve the exact exponent at this backend boundary.
+                    term *= x_i ** int(power)
             res_expr += term
         return res_expr
 
@@ -143,24 +416,77 @@ class MultivariatePolynomial(Polynomial):
         return MultivariatePolynomial(deriv_poly, self.variables)
 
     def mixed_partial_derivative(
-        self, orders: Sequence[int]
+        self, orders: Sequence[SupportsIndex]
     ) -> "MultivariatePolynomial":
         """
         Computes mixed partial derivatives exactly and efficiently by
         performing C-level differentiation.
         """
-        if len(orders) != len(self.variables):
-            raise ValueError(
-                f"Orders length ({len(orders)}) must match "
-                f"variable count ({len(self.variables)})."
-            )
+        indices = self._nonnegative_indices(orders, "Derivative order")
+        if sum(indices) > self.degree():
+            return MultivariatePolynomial(0, self.variables)
 
         res = self._mpoly
-        for i, ord_val in enumerate(orders):
+        for i, ord_val in enumerate(indices):
             for _ in range(ord_val):
                 res = res.derivative(i)
 
         return MultivariatePolynomial(res, self.variables)
+
+    def partial_derivative(
+        self, variable: sp.Symbol, order: SupportsIndex = 1
+    ) -> "MultivariatePolynomial":
+        """Differentiate in a stored variable with a nonnegative integer order."""
+        if variable not in self._variables:
+            raise ValueError("Derivative variable must be in the stored variables.")
+        if isinstance(order, (bool, np.bool_)):
+            raise TypeError("Derivative order must be an integer, not a boolean.")
+        orders = [0] * len(self._variables)
+        orders[self._variables.index(variable)] = operator.index(order)
+        return self.mixed_partial_derivative(orders)
+
+    def gradient(self) -> list["MultivariatePolynomial"]:
+        """Return exact polynomial derivatives in stored variable order."""
+        return [self.partial_derivative(x) for x in self._variables]
+
+    def hessian(self) -> list[list["MultivariatePolynomial"]]:
+        """Return exact second polynomial derivatives, including at singular points."""
+        return [
+            [p.partial_derivative(y) for y in self._variables] for p in self.gradient()
+        ]
+
+    def restrict_line(
+        self, base_point: Sequence[Any], direction: Sequence[Any]
+    ) -> "RealRootedPolynomial":
+        """Form P(base_point + t*direction) exactly, retaining its leading scalar.
+
+        The returned univariate object certifies real-rootedness lazily. A generic
+        restriction can have complex roots; no hyperbolicity assumption is inferred.
+        Identically zero restrictions raise ValueError because the univariate class
+        cannot represent the zero polynomial.
+        """
+        import flint
+
+        from .utils.conversion import sympy_to_fmpq
+
+        if len(base_point) != len(self._variables) or len(direction) != len(
+            self._variables
+        ):
+            raise ValueError("Line coordinates must match variable count.")
+        factors = [
+            flint.fmpq_poly([sympy_to_fmpq(a), sympy_to_fmpq(b)])
+            for a, b in zip(base_point, direction)
+        ]
+        result = flint.fmpq_poly([])
+        for alpha, coefficient in self._mpoly.to_dict().items():
+            term = flint.fmpq_poly([coefficient])
+            for factor, exponent in zip(factors, alpha):
+                if exponent:
+                    term *= factor**exponent
+            result += term
+        if result.degree() < 0:
+            raise ValueError("Line restriction is identically zero.")
+        return RealRootedPolynomial(result, monic=False)
 
     def normalized_coefficients(self) -> Dict[Tuple[int, ...], Any]:
         r"""
@@ -170,6 +496,10 @@ class MultivariatePolynomial(Polynomial):
         """
         import flint
 
+        if not self.is_homogeneous():
+            raise ValueError(
+                "Normalized coefficients require a homogeneous polynomial."
+            )
         d = self.degree()
 
         def multinomial_coeff(total: int, alpha: Tuple[int, ...]) -> int:
@@ -183,15 +513,19 @@ class MultivariatePolynomial(Polynomial):
         for alpha, c in self._mpoly.to_dict().items():
             weight = multinomial_coeff(d, alpha)
             val = c / flint.fmpq(weight, 1)
-            normalized[alpha] = sp.Rational(int(val.p), int(val.q))
+            normalized[tuple(int(k) for k in alpha)] = sp.Rational(
+                int(val.p), int(val.q)
+            )
 
         return normalized
 
     def to_fmpq_mpoly(self) -> Any:
+        r"""
+        Return a caller-owned copy of the FLINT sparse polynomial.
+        Evaluation/substitution costs depend on monomials, degrees and coefficient
+        sizes; exposing the object does not make those operations constant-time.
         """
-        Returns the compiled C-level fmpq_mpoly sparse polynomial.
-        """
-        return self._mpoly
+        return self._mpoly + 0
 
     @classmethod
     def from_symmetric_matrix_pencil_interpolated(
@@ -257,6 +591,8 @@ class MultivariatePolynomial(Polynomial):
             integer_matrices.append(int_A)
 
         primes_gen = prime_generator(1000000007)
+        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
+        modulus = 1
         reconstructed = None
         primes_used = []
         coeffs_by_prime = []
@@ -282,20 +618,17 @@ class MultivariatePolynomial(Polynomial):
                     if c_p is not None:
                         coeffs_by_prime.append(c_p)
                         primes_used.append(p_res)
+                        modulus *= p_res
 
-                if len(primes_used) >= 2:
+                if primes_used:
                     current_reconstruction = []
                     for i in range(N):
                         vals = [coeffs_by_prime[k][i] for k in range(len(primes_used))]
                         current_reconstruction.append(crt(vals, primes_used))
 
-                    if (
-                        reconstructed is not None
-                        and current_reconstruction == reconstructed
-                    ):
-                        reconstructed = current_reconstruction
-                        break
                     reconstructed = current_reconstruction
+                    if modulus > 2 * coefficient_bound:
+                        break
 
         names = tuple(x.name for x in variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)
@@ -312,23 +645,41 @@ class MultivariatePolynomial(Polynomial):
 
     @classmethod
     def from_symmetric_matrix_pencil_sparse(
-        cls, pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil]
+        cls,
+        pencil: Union[SymmetricMatrixPencil, MultiplicativeMatrixPencil],
+        *,
+        max_verification_bits: SupportsIndex = 1_000_000,
     ) -> "MultivariatePolynomial":
         r"""
         Constructs the multivariate polynomial $\det(x_1 A_1 + \dots + x_m A_m)$
         by evaluating the determinants modulo prime numbers exactly using fast
         C-level modular matrix mathematics and reconstructing exact coefficients
-        over $\mathbb{Q}$ using Zippel's sparse interpolation algorithm.
+        over $\mathbb{Q}$ using randomized Zippel discovery followed by exact
+        deterministic coefficient/support verification. A failed candidate or
+        eight failed prime fields triggers balanced-base exact reconstruction.
+
+        ``max_verification_bits`` caps the conservative bit-size bound for the
+        exact Kronecker verification before discovery starts. Exceeding it
+        raises ValueError rather than returning an uncertified polynomial.
+        Increasing the limit is explicit; it is not a runtime or memory quota.
         """
         import math
         import random
 
         import flint
 
+        if isinstance(max_verification_bits, (bool, np.bool_)):
+            raise TypeError("max_verification_bits must be a positive integer")
+        verification_limit = operator.index(max_verification_bits)
+        if verification_limit <= 0:
+            raise ValueError("max_verification_bits must be a positive integer")
+
         n = pencil.n
         m = pencil.m
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
+        if n == 0:
+            return cls(sp.Integer(1), variables)
         if m == 1:
             exact_A = pencil._get_matrices_sympy()[0]
             det_val = sp.Matrix(exact_A).det()
@@ -361,6 +712,13 @@ class MultivariatePolynomial(Polynomial):
                     row.append(int(val))
                 int_A.append(row)
             integer_matrices.append(int_A)
+
+        coefficient_bound = _determinant_coefficient_bound(integer_matrices)
+        if coefficient_bound == 0:
+            return cls(sp.Integer(0), variables)
+        verification_base, verification_weights = _determinant_encoding_parameters(
+            n, m, coefficient_bound, verification_limit
+        )
 
         def eval_point_mod_p(pt: tuple[int, ...], p: int) -> int:
             M_pt = flint.nmod_mat(n, n, p)
@@ -472,16 +830,21 @@ class MultivariatePolynomial(Polynomial):
             return S
 
         primes_gen = prime_generator(1000000007)
-        reconstructed = None
+        modulus = 1
+        reconstructed: dict[tuple[int, ...], int] = {}
         primes_used = []
         coeffs_by_prime = []
         exps = []
+        failed_primes = 0
 
         while True:
             p = next(primes_gen)
             try:
                 S_p = zippel_mod_p(p)
             except ValueError:
+                failed_primes += 1
+                if failed_primes >= 8:
+                    break
                 continue
 
             for exp in S_p:
@@ -490,8 +853,9 @@ class MultivariatePolynomial(Polynomial):
 
             coeffs_by_prime.append(S_p)
             primes_used.append(p)
+            modulus *= p
 
-            if len(primes_used) >= 2:
+            if primes_used:
                 current_reconstruction = {}
                 for exp in exps:
                     vals = []
@@ -499,13 +863,17 @@ class MultivariatePolynomial(Polynomial):
                         vals.append(coeffs_by_prime[k].get(exp, 0))
                     current_reconstruction[exp] = crt(vals, primes_used)
 
-                if (
-                    reconstructed is not None
-                    and current_reconstruction == reconstructed
-                ):
-                    reconstructed = current_reconstruction
-                    break
                 reconstructed = current_reconstruction
+                if modulus > 2 * coefficient_bound:
+                    break
+
+        reconstructed = _certify_sparse_determinant_coefficients(
+            integer_matrices,
+            reconstructed,
+            coefficient_bound,
+            verification_base,
+            verification_weights,
+        )
 
         names = tuple(x.name for x in variables)
         ctx = flint.fmpq_mpoly_ctx.get(names=names)

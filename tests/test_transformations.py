@@ -34,12 +34,12 @@ def test_dilation() -> None:
 
     # Dilate by 2: [Dil_2 p](x) = 2^2 p(x/2) = x^2 - 6x + 8
     p_dil = p.dilation(2)
-    assert np.allclose(list(p_dil.coeffs), [1, -6, 8])
+    assert list(p_dil.coeffs) == [1, -6, 8]
     assert p_dil._is_verified
 
     # Dilate by -1: [Dil_-1 p](x) = (-1)^2 p(-x) = x^2 + 3x + 2
     p_dil_neg = p.dilation(-1)
-    assert np.allclose(list(p_dil_neg.coeffs), [1, 3, 2])
+    assert list(p_dil_neg.coeffs) == [1, 3, 2]
     assert p_dil_neg._is_verified
 
     # Error on zero dilation factor
@@ -54,12 +54,12 @@ def test_shift() -> None:
 
     # Shift by 1: [Shi_1 p](x) = p(x-1) = (x-2)(x-3) = x^2 - 5x + 6
     p_shift = p.shift(1)
-    assert np.allclose(list(p_shift.coeffs), [1, -5, 6])
+    assert list(p_shift.coeffs) == [1, -5, 6]
     assert p_shift._is_verified
 
     # Shift by -2: [Shi_-2 p](x) = p(x+2) = (x+1)x = x^2 + x
     p_shift_neg = p.shift(-2)
-    assert np.allclose(list(p_shift_neg.coeffs), [1, 1, 0])
+    assert list(p_shift_neg.coeffs) == [1, 1, 0]
     assert p_shift_neg._is_verified
 
 
@@ -69,7 +69,7 @@ def test_power() -> None:
 
     # Power by 2: roots become 1^2 = 1, 2^2 = 4 => (x - 1)(x - 4) = x^2 - 5x + 4
     p_pow = p.power(2)
-    assert np.allclose(list(p_pow.coeffs), [1, -5, 4])
+    assert list(p_pow.coeffs) == [1, -5, 4]
 
     # Power by 0.5: roots become 1^0.5 = 1, 2^0.5 = sqrt(2)
     p_pow_half = p.power(0.5)
@@ -97,7 +97,7 @@ def test_reversed_polynomial() -> None:
 
     # Reversed roots: 1, 0.5 => (x - 1)(x - 0.5) = x^2 - 1.5x + 0.5
     p_rev = p.reversed_polynomial()
-    assert np.allclose(list(p_rev.coeffs), [1, -1.5, 0.5])
+    assert list(p_rev.coeffs) == [1, sp.Rational(-3, 2), sp.Rational(1, 2)]
 
     # Try reversing a polynomial with a root at zero
     # p(x) = x(x - 1) = x^2 - x

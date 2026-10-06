@@ -182,4 +182,4 @@ def test_asymmetric_additive_weights() -> None:
     # Asymmetric convolution of these two should result in x^2 + 0.25
     res = asymmetric_additive(p, q, d=2, weights=[0.5, 0.5])
     assert res.degree == 2
-    assert np.allclose(list(res.coeffs), [1, 0, 0.25])
+    assert list(res.coeffs) == [1, 0, sp.Rational(1, 4)]

@@ -39,3 +39,12 @@ extra_javascript:
 nav:
   - Home: index.md
   - API Reference: api.md
+  - Tutorial: tutorial.md
+  - Multivariate Workflows: multivariate.md
+  - Development: development.md
+  - Release Review: release.md
+validation:
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn

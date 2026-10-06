@@ -7,9 +7,12 @@ from ..utils.conversion import flint_to_float, sympy_to_fmpq
 
 
 class StraightLineProgram:
-    """
-    Efficient representation for computing gradients and Hessians of hyperbolic
-    polynomials without explicit monomial enumeration.
+    r"""
+    Evaluate a scalar operation sequence or a determinant matrix pencil.
+    Generic scalar gradients use reverse-mode differentiation. The determinant
+    shortcut uses matrix determinant/inverse trace identities for derivatives.
+    Exact=True uses rational FLINT operations; numerical methods use float64.
+    Exact determinant derivatives reject singular evaluated matrices.
     """
 
     def __init__(self, operations: Sequence[Any], pencil: Any = None) -> None:
@@ -61,8 +64,11 @@ class StraightLineProgram:
         return self.pencil._evaluate_exact(x)
 
     def gradient(self, x: NDArray[np.float64], exact: bool = False) -> NDArray[Any]:
-        """
-        Computes the gradient of the polynomial at point x.
+        r"""
+        Compute a generic reverse-mode gradient or a determinant-pencil gradient.
+        Exact determinant gradients require a nonsingular evaluated matrix and raise
+        ValueError at singular points. Numerical determinant gradients use an inverse
+        or pseudoinverse; they are not reliable singular-point derivative formulas.
         """
         if self.operations == ["det"]:
             if self.pencil is None:
@@ -163,8 +169,12 @@ class StraightLineProgram:
         return np.array([flint_to_float(val) for val in adj[:m]], dtype=np.float64)
 
     def hessian(self, x: NDArray[np.float64], exact: bool = False) -> NDArray[Any]:
-        """
-        Computes the Hessian matrix at point x using Jacobi's formula derivative.
+        r"""
+        Compute determinant-pencil Hessians using Jacobi's trace identities.
+        A pencil is required; generic scalar-operation Hessians are not implemented.
+        Exact=True raises ValueError at singular matrices. Numerical inverse or
+        pseudoinverse evaluation remains conditioning-dependent, including near
+        singular points.
         """
         if self.pencil is None:
             raise NotImplementedError("Pencil not provided to SLP")
