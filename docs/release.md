@@ -23,4 +23,6 @@ Before publishing:
 
 The shared cibuildwheel policy installs FLINT/GMP/MPFR development packages in musllinux containers because python-flint 0.9 has no musllinux binary wheel. Testing those FiniteFree wheels therefore includes a source installation of that dependency. This also means musl users may need the dependency's source-build prerequisites even when FiniteFree itself has a wheel.
 
+Linux build and test environments select compatible NumPy/SciPy binary wheels. This preserves the manylinux2014 glibc floor instead of attempting unsupported source builds of newer dependency releases. These container tests cover the resolved compatible versions; ordinary source CI separately tests current dependencies on current runners.
+
 The `publish.yml` workflow builds platform wheels with cibuildwheel and uploads through PyPI trusted publishing. A matching `v*.*.*` tag or manual workflow dispatch starts that upload. Creating `v0.2.0` is therefore a publication action, not a harmless preparation step. Do not create the tag or dispatch publishing before the release review is complete. Its manual input defaults to TestPyPI; choosing `false` selects production. Tag routing only checks for `rc` or `dev`: other matching prerelease names can reach production. The tag does not change the static package version in `pyproject.toml`.
