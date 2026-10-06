@@ -95,15 +95,14 @@ test-command = "python {project}/scripts/test_installed_wheel.py"
 # binaries compatible with each container instead of compiling newer releases
 # whose wheels require a newer glibc. python-flint may still build on musl.
 environment = {PIP_ONLY_BINARY = "numpy,scipy"}
-# The action's 2024 Alpine image predates packaged FLINT development headers.
 # Pin a verified current builder while retaining musllinux 1.2 wheel tags.
 musllinux-x86_64-image = "quay.io/pypa/musllinux_1_2_x86_64@sha256:ff786af69d772d7ac3e318c00a2b682428a352cc822d6175f6a0d4b431c0d44d"
 
 [[tool.cibuildwheel.overrides]]
 select = "*-musllinux*"
-# python-flint 0.9 provides no musllinux wheel; its test-environment source
-# installation needs FLINT 3, GMP and MPFR headers in the Alpine container.
-before-all = "apk add --no-cache flint-dev gmp-dev mpfr-dev"
+# python-flint has no musllinux wheel. The supported PyPA Alpine image lacks
+# a FLINT package, so build a pinned, checksum-verified native dependency.
+before-all = "sh {project}/scripts/build_flint_musllinux.sh"
 
 
 [tool.cibuildwheel.macos]

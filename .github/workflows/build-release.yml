@@ -10,6 +10,7 @@ on:
       - "finitefree/**"
       - "tests/**"
       - "scripts/test_installed_wheel.py"
+      - "scripts/build_flint_musllinux.sh"
   push:
     # A branch pointing to reviewed main runs the matrix on that exact commit.
     # Branch pushes never match publish.yml's release-tag trigger.
