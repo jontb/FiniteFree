@@ -149,8 +149,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 <summary><b>Multivariate Hyperbolic Geometry & Matrix Pencils</b></summary>
 <br>
 
-- **`MultivariatePolynomial`**: Sparse rational polynomials with exact evaluation, rational algebra, partial/directional derivatives, gradient/Hessian polynomials and exact line restriction. Homogeneous multinomial normalization requires a homogeneous input; construction and algebra do not certify stability or hyperbolicity. See [multivariate workflows](docs/multivariate.md).
-- **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64` evaluates real batches with explicit rounding/range limits. Native inputs and `to_fmpq_mpoly()` exports are copied, with ordered variable contexts checked. Costs depend on monomial count, degree, batch size and coefficient sizes.
+- **`MultivariatePolynomial`**: Sparse rational polynomials with exact evaluation, rational algebra, explicit variable reordering, simultaneous scalar/polynomial substitution, exact gradient/Hessian polynomials and line restriction. Target symbols and their order are explicit; operations do not certify stability or hyperbolicity. Homogeneous multinomial normalization requires a homogeneous input. See [multivariate workflows](docs/multivariate.md).
+- **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64`, `gradient_float64` and `hessian_float64` evaluate real batches with explicit float64 rounding/range limits. Numerical derivatives work at zero coordinates and singular determinant points. Native inputs, context changes and exports own their data. Costs depend on monomial count, degree, variable count, batch size and coefficient sizes.
 - **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
 - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
 - **Zippel Sparse Interpolation**: Uses randomized finite-field discovery followed by deterministic coefficient/support verification for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`). An exact balanced-base fallback repairs incomplete discovery. A configurable integer-size limit bounds verification feasibility. See [the construction limits](docs/multivariate.md#homogeneous-normalization-and-matrix-pencils).
@@ -365,7 +365,21 @@ print(expected_poly.coeffs)
 <summary><b>5. Multivariate Matrix Pencils</b></summary>
 <br>
 
-Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation.
+Evaluate homogeneous determinants $\det(x_1 A_1 + \dots + x_m A_m)$ exactly via modular matrix interpolation. General rational polynomials also support explicit context changes and batched numerical derivatives:
+
+```python
+import numpy as np
+import sympy as sp
+from finitefree.multivariate import MultivariatePolynomial
+
+x, y, u, v = sp.symbols("x y u v")
+p = MultivariatePolynomial(x**2 + 3*x*y + y**2, [x, y])
+assert p.reorder_variables([y, x]).evaluate([2, 1]) == p.evaluate([1, 2])
+q = p.substitute({x: u+v, y: u-v}, variables=[u, v])
+assert q.expr == 5*u**2 - v**2
+np.testing.assert_array_equal(q.gradient_float64([[2, 1], [0, 0]]), [[20, -2], [0, 0]])
+np.testing.assert_array_equal(q.hessian_float64([0, 0]), [[10, 0], [0, -2]])
+```
 
 Matrix-pencil constructors copy integer/rational entries before preparing a separate `float64` numerical view. Characteristic polynomials, rational SLP derivatives and multivariate determinants use the copied values, including integers above $2^{53}$. Float inputs preserve their supplied binary values; precision lost before construction cannot be recovered. Matrices must be square, share one shape, contain finite real rational values that fit the finite numerical view, and be symmetric on the supplied values for `SymmetricMatrixPencil`. Construct a new pencil to change its entries.
 
