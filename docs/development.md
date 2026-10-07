@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions apply to the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0). Install the matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`, or use a source checkout for development. A local build alone does not establish production publication. Record the Git commit when reproducing results.
+These instructions describe the current `develop` source checkout, including unreleased development examples. For the published package, use the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0) and install its matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`. A local build alone does not establish production publication. Record the Git commit when reproducing results.
 
 ## Branch workflow
 
