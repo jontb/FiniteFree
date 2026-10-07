@@ -501,7 +501,13 @@ class MultivariatePolynomial(Polynomial):
             raise ValueError(
                 "Reordered variables must be a permutation of stored symbols."
             )
-        result._mpoly = self._mpoly.project_to_context(result._ctx)
+        # Same-context projection returns the original mutable native object.
+        # Identity reordering still promises an owned snapshot.
+        result._mpoly = (
+            self._mpoly + 0
+            if result._ctx == self._ctx
+            else self._mpoly.project_to_context(result._ctx)
+        )
         return result
 
     def substitute(

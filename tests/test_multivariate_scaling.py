@@ -152,6 +152,10 @@ def test_native_reordering_retains_large_exact_exponents_and_assumptions() -> No
         (0, 0): -5,
     }
     p = MultivariatePolynomial.from_coefficients(terms, [x, y])
+    identity = p.reorder_variables([x, y])
+    assert identity._mpoly is not p._mpoly
+    identity._mpoly[(0, 0)] = 999
+    assert p.coefficients() == terms
     q = p.reorder_variables([y, x])
     assert q.coefficients() == {(b, a): c for (a, b), c in terms.items()}
     assert q.reorder_variables([x, y]).coefficients() == terms
