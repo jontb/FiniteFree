@@ -156,3 +156,35 @@ def test_native_reordering_retains_large_exact_exponents_and_assumptions() -> No
     assert q.coefficients() == {(b, a): c for (a, b), c in terms.items()}
     assert q.reorder_variables([x, y]).coefficients() == terms
     assert q.variables == [y, x] and p.coefficients() == terms
+
+
+@pytest.mark.parametrize("family", ["constant", "linear", "quadratic"])
+@pytest.mark.parametrize("operation", ["evaluate", "gradient", "hessian"])
+def test_constant_results_keep_large_owned_shapes_and_validate_coordinates(
+    family: str, operation: str
+) -> None:
+    x, y, z = variables = sp.symbols("x y z")
+    expr = {
+        "constant": sp.Rational(7, 3),
+        "linear": x / 3 - 2 * y + z,
+        "quadratic": x**2 / 3 - y * z + 2 * z**2,
+    }[family]
+    p = MultivariatePolynomial(expr, variables)
+    points = np.asfortranarray(np.ones((5, 2117, 3)))
+    symbolic = {
+        "evaluate": expr,
+        "gradient": [sp.diff(expr, v) for v in variables],
+        "hessian": sp.hessian(expr, variables),
+    }[operation]
+    expected = np.asarray(sp.lambdify(variables, symbolic)(1, 1, 1), dtype=float)
+    method = getattr(p, operation + "_float64")
+    actual = method(points)
+    np.testing.assert_array_equal(actual, np.broadcast_to(expected, actual.shape))
+    assert actual.flags.owndata and not np.shares_memory(actual, points)
+    actual.fill(999)
+    np.testing.assert_array_equal(
+        method(points), np.broadcast_to(expected, actual.shape)
+    )
+    points[-1, -1, -1] = np.inf
+    with pytest.raises(ValueError, match="finite"):
+        method(points)

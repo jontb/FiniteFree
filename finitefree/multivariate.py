@@ -225,6 +225,13 @@ class MultivariatePolynomial(Polynomial):
         if self._float_terms_cached is None:
             self._float_terms_cached = self._float64_terms(self._mpoly)
         result = np.empty(coordinates.shape[:-1], dtype=np.float64)
+        if self._constant_float64_terms(self._float_terms_cached):
+            result.fill(
+                self._float_terms_cached[0][1] + 0.0
+                if self._float_terms_cached
+                else 0.0
+            )
+            return float(result) if result.ndim == 0 else result
         flat_result = result.reshape(-1)
         for start, stop, block in self._float64_blocks(coordinates):
             self._evaluate_float64_terms(
@@ -296,6 +303,10 @@ class MultivariatePolynomial(Polynomial):
             yield start, stop, np.ascontiguousarray(block.T).T
 
     @staticmethod
+    def _constant_float64_terms(terms: _FloatTerms) -> bool:
+        return not terms or (len(terms) == 1 and not terms[0][0])
+
+    @staticmethod
     def _evaluate_float64_terms(
         coordinates: NDArray[np.float64],
         terms: _FloatTerms,
@@ -303,6 +314,9 @@ class MultivariatePolynomial(Polynomial):
         result: NDArray[np.float64],
         term: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
+        if MultivariatePolynomial._constant_float64_terms(terms):
+            result.fill(terms[0][1] + 0.0 if terms else 0.0)
+            return result
         result.fill(0)
         if term is None:
             term = np.empty(result.shape, dtype=np.float64)
@@ -353,6 +367,12 @@ class MultivariatePolynomial(Polynomial):
                 self._float64_terms(self._mpoly.derivative(i)) for i in range(m)
             )
         result = np.empty((*coordinates.shape[:-1], m), dtype=np.float64)
+        if all(
+            self._constant_float64_terms(t) for t in self._gradient_float_terms_cached
+        ):
+            for i, terms in enumerate(self._gradient_float_terms_cached):
+                result[..., i].fill(terms[0][1] + 0.0 if terms else 0.0)
+            return result
         flat_result = result.reshape(-1, m)
         for start, stop, block in self._float64_blocks(coordinates):
             powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
@@ -382,6 +402,16 @@ class MultivariatePolynomial(Polynomial):
                 for j in range(i, m)
             )
         result = np.empty((*coordinates.shape[:-1], m, m), dtype=np.float64)
+        if all(
+            self._constant_float64_terms(t)
+            for _, _, t in self._hessian_float_terms_cached
+        ):
+            for i, j, terms in self._hessian_float_terms_cached:
+                value = terms[0][1] + 0.0 if terms else 0.0
+                result[..., i, j].fill(value)
+                if i != j:
+                    result[..., j, i].fill(value)
+            return result
         flat_result = result.reshape(-1, m, m)
         for start, stop, block in self._float64_blocks(coordinates):
             powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
