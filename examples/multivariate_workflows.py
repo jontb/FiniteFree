@@ -34,6 +34,18 @@ def main() -> None:
     assert composed.hessian_float64(np.empty((0, 2))).shape == (0, 2, 2)
     projected = p.substitute({x: sp.Rational(1, 2)}, variables=[y])
     assert projected.expr == y**2 + sp.Rational(3, 2) * y + sp.Rational(1, 4)
+    # Large strided batches keep their point order and return independent arrays.
+    large_points = np.column_stack((np.linspace(-1, 1, 20001), np.ones(20001)))[::-1]
+    snapshot = large_points.copy()
+    large_gradient = composed.gradient_float64(large_points)
+    np.testing.assert_array_equal(
+        large_gradient,
+        np.column_stack((10 * large_points[:, 0], -2 * large_points[:, 1])),
+    )
+    np.testing.assert_array_equal(large_points, snapshot)
+    assert large_gradient.flags.owndata and not np.shares_memory(
+        large_gradient, large_points
+    )
     print(
         f"Multivariate composition passed; gradient {gradient.shape}, Hessian {hessian.shape}."
     )

@@ -1,7 +1,17 @@
 import functools
 import math
 import operator
-from typing import Any, Dict, Mapping, Optional, Sequence, SupportsIndex, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    SupportsIndex,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 import sympy as sp
@@ -11,8 +21,9 @@ from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from .utils.modular import _as_modular_array, crt, prime_generator
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
 
-_FloatTerms = Tuple[Tuple[Tuple[int, ...], float], ...]
+_FloatTerms = Tuple[Tuple[Tuple[Tuple[int, int], ...], float], ...]
 _MAX_FLOAT64_POWER_CACHE = 64
+_MAX_FLOAT64_BATCH = 8192
 
 
 def _determinant_coefficient_bound(
@@ -206,15 +217,26 @@ class MultivariatePolynomial(Polynomial):
 
         A single point returns a float; batches retain their leading dimensions.
         Coefficients are converted once, and terms are evaluated across each batch.
+        Bounded point blocks reuse monomial buffers; output storage is still full.
         Nonfinite inputs, coefficients or results raise errors. Finite cancellation,
         underflow and rounding remain possible; outputs have no certified error bound.
         """
         coordinates = self._float64_coordinates(points)
         if self._float_terms_cached is None:
             self._float_terms_cached = self._float64_terms(self._mpoly)
-        result = self._evaluate_float64_terms(
-            coordinates, self._float_terms_cached, None
-        )
+        result = np.empty(coordinates.shape[:-1], dtype=np.float64)
+        if self._constant_float64_terms(self._float_terms_cached):
+            result.fill(
+                self._float_terms_cached[0][1] + 0.0
+                if self._float_terms_cached
+                else 0.0
+            )
+            return float(result) if result.ndim == 0 else result
+        flat_result = result.reshape(-1)
+        for start, stop, block in self._float64_blocks(coordinates):
+            self._evaluate_float64_terms(
+                block, self._float_terms_cached, None, flat_result[start:stop]
+            )
         return float(result) if result.ndim == 0 else result
 
     def _float64_coordinates(self, points: Any) -> NDArray[np.float64]:
@@ -245,7 +267,10 @@ class MultivariatePolynomial(Polynomial):
         from .utils.conversion import flint_to_float
 
         terms = tuple(
-            (tuple(int(k) for k in alpha), flint_to_float(c))
+            (
+                tuple((i, int(k)) for i, k in enumerate(alpha) if k),
+                flint_to_float(c),
+            )
             for alpha, c in polynomial.to_dict().items()
         )
         if not all(math.isfinite(c) for _, c in terms):
@@ -253,18 +278,57 @@ class MultivariatePolynomial(Polynomial):
         return terms
 
     @staticmethod
+    def _float64_blocks(
+        coordinates: NDArray[np.float64],
+    ) -> Iterator[Tuple[int, int, NDArray[np.float64]]]:
+        """Yield bounded point blocks without copying a whole strided input."""
+        m = coordinates.shape[-1]
+        count = math.prod(coordinates.shape[:-1])
+        flat = (
+            coordinates.reshape(-1, m)
+            if coordinates.flags.c_contiguous or count <= _MAX_FLOAT64_BATCH
+            else None
+        )
+        for start in range(0, count, _MAX_FLOAT64_BATCH):
+            stop = min(start + _MAX_FLOAT64_BATCH, count)
+            if flat is not None:
+                block = flat[start:stop]
+            else:
+                indices = np.unravel_index(
+                    np.arange(start, stop), coordinates.shape[:-1]
+                )
+                block = coordinates[indices]
+            # Contiguous coordinate columns keep x**1 a cheap view without
+            # repeatedly multiplying by strided coordinates in dense supports.
+            yield start, stop, np.ascontiguousarray(block.T).T
+
+    @staticmethod
+    def _constant_float64_terms(terms: _FloatTerms) -> bool:
+        return not terms or (len(terms) == 1 and not terms[0][0])
+
+    @staticmethod
     def _evaluate_float64_terms(
         coordinates: NDArray[np.float64],
         terms: _FloatTerms,
         powers: Optional[Dict[Tuple[int, int], NDArray[np.float64]]],
+        result: NDArray[np.float64],
+        term: Optional[NDArray[np.float64]] = None,
     ) -> NDArray[np.float64]:
-        result = np.zeros(coordinates.shape[:-1], dtype=np.float64)
+        if MultivariatePolynomial._constant_float64_terms(terms):
+            result.fill(terms[0][1] + 0.0 if terms else 0.0)
+            return result
+        result.fill(0)
+        if term is None:
+            term = np.empty(result.shape, dtype=np.float64)
         try:
             with np.errstate(over="raise", invalid="raise", divide="raise"):
                 for alpha, coefficient in terms:
-                    term = np.full(result.shape, coefficient, dtype=np.float64)
-                    for i, exponent in enumerate(alpha):
-                        if exponent:
+                    term.fill(coefficient)
+                    for i, exponent in alpha:
+                        if exponent == 1:
+                            # A view avoids retaining a full array for x**1.
+                            power = coordinates[..., i]
+                        else:
                             key = (i, exponent)
                             if powers is not None and key in powers:
                                 power = powers[key]
@@ -277,7 +341,7 @@ class MultivariatePolynomial(Polynomial):
                                     and len(powers) < _MAX_FLOAT64_POWER_CACHE
                                 ):
                                     powers[key] = power
-                            term *= power
+                        term *= power
                     result += term
         except FloatingPointError as error:
             raise RuntimeError(
@@ -291,7 +355,8 @@ class MultivariatePolynomial(Polynomial):
         """Evaluate the gradient at real points shaped (..., m), returning (..., m).
 
         Differentiate rational coefficients before float64 conversion. Sparse
-        derivative terms are cached; coordinate powers are reused within a call.
+        derivative terms are cached; coordinate powers are reused within bounded
+        point blocks. The returned gradient is still fully allocated.
         Inputs/results have the same finite/range and rounding limits as
         evaluate_float64. Zero coordinates and empty batches are valid.
         """
@@ -302,9 +367,20 @@ class MultivariatePolynomial(Polynomial):
                 self._float64_terms(self._mpoly.derivative(i)) for i in range(m)
             )
         result = np.empty((*coordinates.shape[:-1], m), dtype=np.float64)
-        powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
-        for i, terms in enumerate(self._gradient_float_terms_cached):
-            result[..., i] = self._evaluate_float64_terms(coordinates, terms, powers)
+        if all(
+            self._constant_float64_terms(t) for t in self._gradient_float_terms_cached
+        ):
+            for i, terms in enumerate(self._gradient_float_terms_cached):
+                result[..., i].fill(terms[0][1] + 0.0 if terms else 0.0)
+            return result
+        flat_result = result.reshape(-1, m)
+        for start, stop, block in self._float64_blocks(coordinates):
+            powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
+            component = np.empty(stop - start, dtype=np.float64)
+            term = np.empty_like(component)
+            for i, terms in enumerate(self._gradient_float_terms_cached):
+                self._evaluate_float64_terms(block, terms, powers, component, term)
+                flat_result[start:stop, i] = component
         return result
 
     def hessian_float64(self, points: Any) -> NDArray[np.float64]:
@@ -326,12 +402,26 @@ class MultivariatePolynomial(Polynomial):
                 for j in range(i, m)
             )
         result = np.empty((*coordinates.shape[:-1], m, m), dtype=np.float64)
-        powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
-        for i, j, terms in self._hessian_float_terms_cached:
-            component = self._evaluate_float64_terms(coordinates, terms, powers)
-            result[..., i, j] = component
-            if i != j:
-                result[..., j, i] = component
+        if all(
+            self._constant_float64_terms(t)
+            for _, _, t in self._hessian_float_terms_cached
+        ):
+            for i, j, terms in self._hessian_float_terms_cached:
+                value = terms[0][1] + 0.0 if terms else 0.0
+                result[..., i, j].fill(value)
+                if i != j:
+                    result[..., j, i].fill(value)
+            return result
+        flat_result = result.reshape(-1, m, m)
+        for start, stop, block in self._float64_blocks(coordinates):
+            powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
+            component = np.empty(stop - start, dtype=np.float64)
+            term = np.empty_like(component)
+            for i, j, terms in self._hessian_float_terms_cached:
+                self._evaluate_float64_terms(block, terms, powers, component, term)
+                flat_result[start:stop, i, j] = component
+                if i != j:
+                    flat_result[start:stop, j, i] = component
         return result
 
     @property
@@ -365,6 +455,12 @@ class MultivariatePolynomial(Polynomial):
                 if expr.context() == self._ctx
                 else self._ctx.from_dict(expr.to_dict())
             )
+        elif type(expr) is int and expr == 0:
+            # Internal empty results need no symbolic polynomial reconstruction.
+            # Preserve Poly's generator-domain check even for a zero expression.
+            if any(not symbol.is_commutative for symbol in self._variables):
+                raise sp.GeneratorsError("non-commutative generators are not supported")
+            self._mpoly = self._ctx.constant(0)
         else:
             poly_sym = sp.Poly(sp.expand(sp.sympify(expr)), self._variables)
             flint_dict = {}
@@ -408,12 +504,12 @@ class MultivariatePolynomial(Polynomial):
             raise ValueError(
                 "Reordered variables must be a permutation of stored symbols."
             )
-        order = tuple(self._variables.index(x) for x in result._variables)
-        result._mpoly = result._ctx.from_dict(
-            {
-                tuple(alpha[i] for i in order): c
-                for alpha, c in self._mpoly.to_dict().items()
-            }
+        # Same-context projection returns the original mutable native object.
+        # Identity reordering still promises an owned snapshot.
+        result._mpoly = (
+            self._mpoly + 0
+            if result._ctx == self._ctx
+            else self._mpoly.project_to_context(result._ctx)
         )
         return result
 
@@ -443,8 +539,10 @@ class MultivariatePolynomial(Polynomial):
             raise ValueError("Substitution keys must be stored SymPy symbols.")
         result = type(self)(0, self._variables if variables is None else variables)
         target_symbols = set(result._variables)
+        target_indices = {symbol: i for i, symbol in enumerate(result._variables)}
         images = []
-        for symbol in self._variables:
+        generator_mapping = {}
+        for i, symbol in enumerate(self._variables):
             value = substitutions.get(symbol, symbol)
             if isinstance(value, MultivariatePolynomial):
                 if value._variables != result._variables:
@@ -453,6 +551,14 @@ class MultivariatePolynomial(Polynomial):
                         "exactly; reorder_variables explicitly when needed."
                     )
                 images.append(value._mpoly)
+            elif isinstance(value, sp.Symbol):
+                if value not in target_symbols:
+                    raise ValueError(
+                        "Replacement and unreplaced symbols must belong to target variables."
+                    )
+                j = target_indices[value]
+                images.append(result._ctx.gen(j))
+                generator_mapping[i] = j
             elif isinstance(value, sp.Expr) and value.free_symbols:
                 if not value.free_symbols <= target_symbols:
                     raise ValueError(
@@ -478,7 +584,14 @@ class MultivariatePolynomial(Polynomial):
                     raise ValueError(
                         "Replacements must be finite rational scalars or polynomials."
                     ) from error
-        result._mpoly = self._mpoly.compose(*images, ctx=result._ctx)
+        # FLINT 0.9 short-circuits same-context projection, ignoring a supplied
+        # generator map. Such substitutions must use composition even for swaps.
+        if len(generator_mapping) == len(self._variables) and result._ctx != self._ctx:
+            result._mpoly = self._mpoly.project_to_context(
+                result._ctx, mapping=generator_mapping
+            )
+        else:
+            result._mpoly = self._mpoly.compose(*images, ctx=result._ctx)
         return result
 
     def _nonnegative_indices(

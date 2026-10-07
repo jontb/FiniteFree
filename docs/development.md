@@ -82,6 +82,8 @@ Larger defaults are optional and can be expensive. Root tools use independent Ar
 
 For scaling studies, record the Git commit, script digest, dependency versions, input families and coefficient bit sizes. Run bounded serial subprocess repetitions with BLAS thread settings established before imports, and preserve individual timings and failures. Distinguish a first public call (including any lazy imports), a fresh-object call after warming the process, and a cached same-object call. Keep construction, reference generation and validation timing explicit; generic public root calls can include certification. Record native process peak RSS with its import/setup contribution, and verify independent accuracy references outside timing. Plot observed ranges and describe empirical slopes only for the measured inputs; they do not prove asymptotic complexity.
 
+The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison) compares all numerical and context APIs with an explicit local Git baseline. Its smoke suite verifies the workflow quickly; the standard suite records degree/support/bit-size and batch scaling, interleaved timing samples, traced allocations, profiles and representative fresh-process RSS. Set thread limits before imports and distinguish output storage from scratch space.
+
 `visuals/*.py` regenerate pre-rendered illustrations and require Matplotlib/Pillow. They may write many frames and use high-degree solvers or approximate grid sampling; their output is illustrative rather than part of the regression suite.
 
 ## Preparing 0.2
