@@ -388,6 +388,8 @@ assert pencil.characteristic_polynomial([1])[0] == -large
 assert pencil.evaluate([1])[0, 0] == float(large)
 ```
 
+Numerical evaluation processes bounded point blocks and reuses monomial buffers. Derivative coordinate powers are cached only within each block. Strided and broadcast inputs retain their logical point order without copying the entire input to flatten it. The returned array is still fully allocated: Hessians require `8 * batch_size * m**2` bytes for their float64 output alone. Input conversion/validation, lazy exact derivative caches and native arithmetic have additional costs; bounded power storage is not a total memory limit. Context permutations use native sparse projection after validating symbol identity, while general substitutions retain exact native composition.
+
 ## Core Operations
 
 ::: finitefree.core

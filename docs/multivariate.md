@@ -104,7 +104,25 @@ np.testing.assert_array_equal(p.hessian_float64([0, 0]), [[10, 0], [0, -2]])
 assert p.hessian_float64(np.empty((0, 2))).shape == (0, 2, 2)
 ```
 
-Derivatives are formed exactly before converting their coefficients to float64, then evaluated as sparse polynomials. There is no division by coordinates or matrix inverse, so zero coordinates and singular determinant points are valid. A huge constant can prevent numerical value evaluation while its gradient and Hessian remain representable. Conversely, differentiation can make coefficients exceed float64 range. Coefficient conversion is cached separately for each requested operation; coordinate powers are reused within a derivative call, with a bounded temporary cache. Hessian output storage still grows as batch size times `m**2`.
+Derivatives are formed exactly before converting their coefficients to float64, then evaluated as sparse polynomials. There is no division by coordinates or matrix inverse, so zero coordinates and singular determinant points are valid. A huge constant can prevent numerical value evaluation while its gradient and Hessian remain representable. Conversely, differentiation can make coefficients exceed float64 range. Coefficient conversion and nonzero exponent coordinates are cached separately for each requested operation.
+
+Numerical work uses blocks of at most 8192 points with contiguous coordinate columns and reused monomial/component buffers. Derivatives retain at most 64 power arrays per block (at most 4 MiB of cached float64 power data); first powers use coordinate views. The power cache is discarded between blocks and calls. Noncontiguous inputs are gathered a block at a time, preserving logical order without flattening a full input copy. Packing columns can use more temporary storage on small batches. Coefficient/derivative caches, input float64 conversion and finite validation also use memory. This bounds the power cache, not total memory or runtime.
+
+Outputs are fully allocated. In particular, a Hessian needs `8 * batch_size * m**2` bytes for its float64 output alone; a gradient needs `8 * batch_size * m`. When the output itself is too large, call the API on user-selected slices and consume each result before moving to the next slice.
+
+```python
+import numpy as np
+import sympy as sp
+from finitefree.multivariate import MultivariatePolynomial
+
+x, y = sp.symbols("x y")
+p = MultivariatePolynomial(x**3 + x*y, [x, y])
+points = np.column_stack((np.linspace(-1, 1, 20001), np.ones(20001)))[::-1]
+gradient = p.gradient_float64(points)
+np.testing.assert_allclose(gradient[:, 0], 3*points[:, 0]**2 + points[:, 1])
+np.testing.assert_allclose(gradient[:, 1], points[:, 0])
+assert gradient.flags.owndata and not np.shares_memory(gradient, points)
+```
 
 All numerical APIs narrow supplied coordinates to float64, including NumPy extended precision. Nonfinite/complex coordinates and invalid final dimensions raise `ValueError`; unrepresentable requested coefficients or nonfinite intermediate arithmetic/results raise `RuntimeError`. Empty batches still validate the requested coefficients. Finite cancellation, underflow and rounding remain possible, and intermediate overflow can occur even when the mathematical result is finite. This is monomial float64 arithmetic, not certified ball arithmetic or a conditioning-aware solver. Large sparse exponents, term counts and coefficient sizes can still be expensive.
 
@@ -113,6 +131,19 @@ All numerical APIs narrow supplied coordinates to float64, including NumPy exten
 From a source checkout, run `PYTHONPATH=. python scripts/benchmark_multivariate.py --pin-cpu --output results.json` on Linux, or omit `--pin-cpu` on platforms without CPU affinity. The defaults compare 3, 8 and 16 variables, 96 sparse terms and batches of 1, 256 and 4096 points. For numerical derivatives the baseline evaluates preconstructed exact gradient/Hessian polynomials component by component; construction and first coefficient conversion are excluded from interleaved warm-call medians. Separate setup times are reported. Reordering and simultaneous substitution are compared with explicit SymPy reconstruction workflows, and independent SymPy derivatives/composition validate the outputs.
 
 The record includes all timing samples, runtime versions, source hash and CPU affinity. Peak traced memory covers Python/NumPy allocations and outputs rather than total native memory or process RSS. Performance depends on support, dimensions, degrees and batch size; the script establishes measured cases, not a universal speed guarantee.
+
+For direct comparisons with the merged extension baseline, use the expanded study:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. python scripts/benchmark_multivariate_scaling.py --baseline-ref 45b8400d3331759047cc9ee19904732073b3fad7 --suite smoke --repeats 3 --output smoke.json
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. python scripts/benchmark_multivariate_scaling.py --baseline-ref 45b8400d3331759047cc9ee19904732073b3fad7 --pin-cpu --output scaling.json
+```
+
+The baseline commit must exist locally; the tool resolves its full SHA and loads that commit's multivariate implementation alongside the current one. The standard suite includes constant/linear, sparse and dense supports; 3, 8 and 16 variables; degree limits 0–12; 96/384-term sparse cases; 256-bit rational coefficients; empty, single, 256-, 4096- and selected 65536-point batches; and strided/broadcast layouts. Sparse degree limits apply per active variable (up to three active variables per term), while dense limits apply to total degree. It tests reordering, identity/permutation/scalar substitution and expanding compositions, recording exact output term counts and coefficient bit sizes.
+
+Numerical outputs are checked against directly differentiated rational monomials at selected points, with full-batch baseline comparisons. Context outputs are checked against independently expanded SymPy expressions. First-object conversion/differentiation, references, tracing and profiling are reported separately from warm-call medians. All interleaved samples, source/script hashes and runtime/thread/affinity settings are preserved. Linux/macOS also run representative large cases in fresh serial subprocesses and report process peak RSS including import/setup contributions. RSS is a high water rather than an isolated temporary allocation measurement; Python tracing omits some native FLINT allocations. `--large-batch 0` omits the large cases and RSS subprocesses. Omit `--pin-cpu` where affinity is unavailable.
+
+An optimization can trade fewer allocations for extra copying or block-loop work. Constant/small batches may receive little benefit, and bounded blocks can lose to whole-batch evaluation for some dense supports. Increasing batch size still scales output storage, increasing sparse degree can increase power cost, and exact expanding composition can multiply support and coefficient bit sizes. These remaining costs are distinct from removed Python reconstruction and per-monomial allocation overhead. Use the raw measurements for the intended workload; no case establishes a universal speed or accuracy bound.
 
 ## Exact restriction to a line
 
