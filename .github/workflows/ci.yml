@@ -160,7 +160,8 @@ jobs:
 
   interactive:
     name: Interactive geometry / Chromium
-    runs-on: ubuntu-latest
+    # Keep Chromium's namespace sandbox enabled on a compatible hosted image.
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5

@@ -59,7 +59,8 @@ def test_moving_slices_against_symbolic_determinants_and_matrix_spectrum(
     assert list(line.coeffs) == expected.all_coeffs()
     derivative = line.derivative(monic=False)
     assert list(derivative.coeffs) == expected.diff().all_coeffs()
-    assert line.evaluate(0) == expected.eval(0)
+    value = line.evaluate(0)
+    assert sp.Rational(int(value.p), int(value.q)) == expected.eval(0)
     roots = -np.linalg.eigvalsh(np.array(y * diagonal + z * adjacency, dtype=float))[
         ::-1
     ]
