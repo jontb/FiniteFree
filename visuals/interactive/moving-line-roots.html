@@ -17,13 +17,35 @@
       <div class="eyebrow">Crossings, coupling & interlacing</div>
       <h1>Move a line. Watch its roots respond.</h1>
       <p class="lead">
-        Slide the line L(s) = (s, y, z) through a symmetric matrix pencil. Turn
-        coupling off to see crossings, then restore it to open gaps. Derivative
-        roots sit between consecutive roots.
+        The sliders choose a symmetric 4 × 4 matrix
+        <strong>A = yD + zB</strong>. A separate number s varies in sI + A. Its
+        determinant is a polynomial: the four roots are the values of s that
+        make this matrix singular.
       </p>
       <div class="formula">
-        P(x,y,z) = det(xI + yD + zB) · D = diag(−3,−1,1,3) · B = path adjacency
+        p(s) = P(s,y,z) = det(sI + yD + zB) · D = diag(−3,−1,1,3)
       </div>
+      <section class="explainer" id="overview" aria-labelledby="overview-title">
+        <h2 id="overview-title">What is moving, and what is a root?</h2>
+        <div class="explainer-grid">
+          <p>
+            <strong>Sliders choose the line; s runs along it.</strong> A matrix
+            pencil is a family built from fixed matrices. Here I is the
+            identity, y scales the diagonal D, and z couples neighboring rows
+            through B (ones next to its diagonal, zeros elsewhere). On the line
+            L(s) = (s,y,z), only the polynomial variable x = s changes; y and z
+            stay fixed for that selected polynomial.
+          </p>
+          <p>
+            <strong>Roots are negatives of eigenvalues.</strong> If A scales a
+            direction by λ (an eigenvalue), then sI + A scales it by s + λ. It
+            becomes singular at s = −λ. Since A is symmetric, all four
+            eigenvalues and all four roots are real, counting multiplicity. The
+            left panel shows how those root positions change across y; the right
+            panel shows the polynomial at the selected y and z.
+          </p>
+        </div>
+      </section>
       <div class="layout">
         <section>
           <div class="plots">
@@ -32,7 +54,8 @@
                 <div>
                   <h2>Root tracks across y</h2>
                   <p class="caption">
-                    Click or drag to move the line ·
+                    Horizontal: y · vertical: root position s · circles select
+                    one line · click or drag to move it ·
                     <span id="track-mode"></span>
                   </p>
                 </div>
@@ -57,6 +80,10 @@
                 <div>
                   <h2>The selected univariate slice</h2>
                   <p class="caption" id="line-label"></p>
+                  <p class="caption">
+                    Horizontal: s · vertical: polynomial value · roots lie on
+                    the zero line
+                  </p>
                 </div>
               </div>
               <div class="chart">
@@ -69,8 +96,8 @@
               <div class="legend">
                 <span><i class="key teal"></i>P(s,y,z)</span
                 ><span
-                  ><i class="key" style="background:#65798a"></i>Dashed: ∂P/∂s ÷
-                  4</span
+                  ><i class="key" style="background: #65798a"></i>Dashed: ∂P/∂s
+                  ÷ 4</span
                 ><span>● roots · ◇ derivative roots</span>
               </div>
             </article>
@@ -86,17 +113,21 @@
             <div class="metric">
               <div class="metric-label">Smallest adjacent gap</div>
               <div class="metric-value" id="gap"></div>
-              <div class="metric-sub">Among the four sorted slice roots.</div>
+              <div class="metric-sub">
+                Zero means overlapping roots; positive means four distinct
+                roots.
+              </div>
             </div>
             <div class="metric">
               <div class="metric-label">Derivative interlacing</div>
               <div
                 class="metric-value"
                 id="interlacing"
-                style="font-size:16px"
+                style="font-size: 16px"
               ></div>
               <div class="metric-sub">
-                Weak equality is allowed at repeated roots.
+                Each derivative root lies between two consecutive polynomial
+                roots. Equality occurs at repeated roots.
               </div>
             </div>
           </div>
@@ -142,9 +173,10 @@
             ><button id="play">Sweep y</button>
           </div>
           <p class="hint">
-            At z = 0 the four diagonal branches meet at y = 0. Any nonzero
-            displayed coupling makes this path pencil irreducible, so its slice
-            eigenvalues are simple.
+            Colored circles are polynomial roots; diamonds are derivative roots.
+            The dashed curve is p′(s) divided by 4, which changes its scale but
+            keeps its zeros. In the left panel, dashed tracks follow those
+            derivative roots as y changes.
           </p>
           <div class="readout">
             <h3>Selected line diagnostics</h3>
@@ -163,12 +195,56 @@
           </div>
         </aside>
       </div>
+      <section
+        class="panel guided-tour"
+        id="guided-tour"
+        aria-labelledby="tour-title"
+      >
+        <h2 id="tour-title">Try this in one minute</h2>
+        <p class="caption">
+          This links multivariate determinant geometry to real-rooted
+          polynomials: watch how coupling changes root spacing and how the
+          derivative organizes the gaps.
+        </p>
+        <ol>
+          <li>
+            <strong>Reset, then Sweep y.</strong> The vertical line selects y.
+            Its four colored circles match the roots in the right-hand plot; the
+            three diamonds sit between them.
+          </li>
+          <li>
+            <strong>At the crossing.</strong> This sets y = z = 0, giving p(s) =
+            s⁴. All four roots overlap at zero; p′(s) = 4s³ has three zeros
+            there, counting multiplicity.
+          </li>
+          <li>
+            <strong>Raise Coupling z.</strong> The roots separate and avoid
+            crossing as y moves. Try Zero coupling and Sweep y to see the
+            crossing return. Reset stops the sweep.
+          </li>
+        </ol>
+      </section>
       <details class="notes">
         <summary>
-          Exact slice coefficients · why crossings open into gaps
+          Why coupling opens gaps · interlacing & exact FiniteFree data
         </summary>
         <p id="exact-line"></p>
         <pre id="coefficients"></pre>
+        <p>
+          B connects rows 1–2, 2–3 and 3–4. At z = 0 these links disappear:
+          roots are −y times −3, −1, 1 and 3, so the four diagonal branches
+          cross at y = 0. Their colors follow diagonal identities. At z &gt; 0
+          every link is nonzero; this symmetric tridiagonal matrix has distinct
+          eigenvalues, so roots cannot meet. These are avoided crossings; colors
+          now follow ascending root ranks.
+        </p>
+        <p>
+          Differentiation gives three roots d₁, d₂, d₃ between the four sorted
+          roots r₁, r₂, r₃, r₄. Rolle's theorem gives r₁ ≤ d₁ ≤ r₂ ≤ d₂ ≤ r₃ ≤
+          d₃ ≤ r₄. With distinct polynomial roots, the inequalities are strict.
+          A root repeated m times remains repeated m − 1 times in the
+          derivative, explaining equality at the zero-coupling crossing.
+        </p>
         <p>
           FiniteFree constructs the exact multivariate determinant, renames its
           context with <code>substitute</code>, and calls
@@ -181,11 +257,6 @@
           divided by 4 for scale.
         </p>
         <p>
-          At z = 0, roots are −y times the four diagonal entries, so the colored
-          tracks show those diagonal identities and cross. At z &gt; 0, the real
-          symmetric tridiagonal pencil is irreducible, giving simple
-          eigenvalues; colors then follow ascending root ranks. Rolle's theorem
-          gives weak derivative interlacing, with equality at repeated roots.
           These facts concern this identity-direction pencil; the plots do not
           certify general hyperbolicity or stability. Regenerate with
           <code>PYTHONPATH=. python examples/interactive_geometry.py</code>.

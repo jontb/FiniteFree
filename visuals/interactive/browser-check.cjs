@@ -62,6 +62,43 @@ async function run() {
   for (const name of ["hyperbolicity-cone", "moving-line-roots"]) {
     await page.goto(pathToFileURL(path.join(directory, name + ".html")).href);
     await page.waitForFunction(() => window.explorerState);
+    const beforeExplanation = await state();
+    assert.ok(await page.locator("#overview").isVisible());
+    assert.equal(await page.locator("#guided-tour li").count(), 3);
+    const explanation = (await page.locator("#overview").innerText()).replace(
+      /\s+/g,
+      " ",
+    );
+    if (name === "hyperbolicity-cone") {
+      assert.match(explanation, /A point is a matrix/);
+      assert.match(
+        explanation,
+        /counts of positive and negative eigenvalues stay constant/,
+      );
+      assert.match(explanation, /boundary pieces.*not chambers themselves/);
+    } else {
+      assert.match(explanation, /only the polynomial variable x = s changes/);
+      assert.match(explanation, /Roots are negatives of eigenvalues/);
+      assert.match(explanation, /counting multiplicity/);
+    }
+    await page.locator("details.notes summary").focus();
+    await page.keyboard.press("Enter");
+    assert.ok(await page.locator("details.notes").evaluate((el) => el.open));
+    const deeper = await page.locator("details.notes").innerText();
+    assert.match(
+      deeper,
+      name === "hyperbolicity-cone"
+        ? /four-dimensional cone/
+        : /Rolle's theorem/,
+    );
+    assert.match(deeper, /FiniteFree/);
+    await page.keyboard.press("Enter");
+    assert.equal(
+      await page.locator("details.notes").evaluate((el) => el.open),
+      false,
+    );
+    assert.deepEqual(await state(), beforeExplanation);
+    await page.locator("details.notes summary").evaluate((el) => el.blur());
     if (name === "hyperbolicity-cone") {
       let s = await state();
       assert.equal(s.psd, true);
@@ -111,6 +148,8 @@ async function run() {
       reports.push({
         example: name,
         checks: [
+          "visible matrix/PSD/chamber explanation and three-step guide",
+          "keyboard deeper-math toggle preserves probe state",
           "default PSD/eigenvalue trace",
           "positive determinant with two negative eigenvalues",
           "PSD boundary and near-boundary sides",
@@ -172,6 +211,8 @@ async function run() {
       reports.push({
         example: name,
         checks: [
+          "visible variable/eigenvalue explanation and three-step guide",
+          "keyboard deeper-math toggle preserves line state",
           "exact default coefficients",
           "four real roots and residual",
           "zero coupling repeated root/weak interlacing",
@@ -186,6 +227,18 @@ async function run() {
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(80);
+    for (const id of ["overview", "guided-tour"]) {
+      const box = await page.locator("#" + id).boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= 391);
+    }
+    await page.locator("details.notes summary").click();
+    assert.ok(await page.locator("details.notes").evaluate((el) => el.open));
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    );
+    await page.locator("details.notes summary").click();
     assert.ok(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
