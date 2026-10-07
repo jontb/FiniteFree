@@ -98,20 +98,20 @@ def generate(output: Path) -> list[Path]:
         "hyperbolicity-cone": {"terms": sparse_terms(section)},
         "moving-line-roots": moving_data(),
     }
-    common = (ASSETS / "common.js").read_text()
-    style = (ASSETS / "theme.css").read_text()
+    common = (ASSETS / "common.js").read_text(encoding="utf-8")
+    style = (ASSETS / "theme.css").read_text(encoding="utf-8")
     paths = []
     for name, model in models.items():
-        template = (ASSETS / f"{name}.html").read_text()
+        template = (ASSETS / f"{name}.html").read_text(encoding="utf-8")
         encoded = json.dumps(model, separators=(",", ":")).replace("</", "<\\/")
         html = (
             template.replace("<!--STYLE-->", style)
             .replace("<!--DATA-->", encoded)
             .replace("<!--COMMON-->", common)
-            .replace("<!--APP-->", (ASSETS / f"{name}.js").read_text())
+            .replace("<!--APP-->", (ASSETS / f"{name}.js").read_text(encoding="utf-8"))
         )
         path = output / f"{name}.html"
-        path.write_text(html)
+        path.write_text(html, encoding="utf-8")
         paths.append(path)
     return paths
 

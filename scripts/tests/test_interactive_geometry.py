@@ -85,7 +85,7 @@ def test_export_is_portable_and_every_control_point_matches_exact_backend(
     assert len(pages) == 2
     models = {}
     for page in pages:
-        html = page.read_text()
+        html = page.read_text(encoding="utf-8")
         assert '<html lang="en">' in html and '<meta name="viewport"' in html
         assert "<!--DATA-->" not in html and "<!--APP-->" not in html
         assert "<script src=" not in html and "<link " not in html
