@@ -7,6 +7,8 @@
 
 This README and the API reference describe **FiniteFree 0.2.0**, distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release process](docs/release.md) for compatibility changes and validation.
 
+`main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](docs/development.md#branch-workflow) for development and release promotion.
+
 FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
 
 To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.

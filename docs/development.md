@@ -2,6 +2,16 @@
 
 These instructions apply to the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0). Install the matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`, or use a source checkout for development. A local build alone does not establish production publication. Record the Git commit when reproducing results.
 
+## Branch workflow
+
+`main` contains the functional API of the latest published PyPI release. Its README and the public MkDocs site describe that release. Documentation and workflow maintenance may reach `main` between releases when it preserves that functional API and accurately describes the published package.
+
+Start feature and maintenance branches from `develop`, and open their pull requests against `develop`. CI runs on these pull requests and on pushes to `develop`. Keep API changes, their tests and documentation together there; unreleased features must not enter `main` or its published documentation.
+
+GitHub Pages deploys only from `main`. Pushes to `develop` do not deploy it, and a manual documentation run from any other branch is skipped. CI still checks examples and builds documentation for development changes.
+
+For a release, validate the exact candidate on `develop`, publish its approved version tag, then verify the production package before promoting that released source through a `develop` → `main` pull request. Follow the [release process](release.md#release-promotion). Bring any merge commit or stable maintenance from `main` back into `develop` before starting the next release.
+
 ## Installation
 
 Use the [README setup instructions](index.md#installation) to create a virtual environment with Python 3.10 or later. CI covers CPython 3.10–3.13 on Linux, macOS and Windows, plus the exact runtime floors in `requirements/minimum-runtime.txt` on Python 3.10. Verify the matrix on the intended release commit. The former Python 3.9 / FLINT 0.6 declaration failed an actual rational multivariate construction; see [release compatibility](release.md#compatibility).
