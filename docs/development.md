@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions apply to the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0). Install the matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`, or use a source checkout for development. A local build alone does not establish production publication. Record the Git commit when reproducing results.
+These instructions describe the current `develop` source checkout, including unreleased development examples. For the published package, use the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0) and install its matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`. A local build alone does not establish production publication. Record the Git commit when reproducing results.
 
 ## Branch workflow
 
@@ -75,6 +75,35 @@ The synchronizer accepts single-level `<details>` blocks with separate-line open
 The strict build treats missing documentation targets and invalid anchors as warnings that fail the build. README's relative image paths also point to repository assets; generated-site assets live under `docs/visuals/assets`. External reference accessibility is a separate check and can be limited by publisher access restrictions.
 
 Check that regeneration produces the expected index, then commit both README and the index. User-facing README/API text explains current behavior; dated measurements and migration history belong in changelog or review notes.
+
+## Interactive geometry examples on develop
+
+Two standalone explorers are available in the development branch. They are development examples; the stable API and public site remain tied to the latest published release.
+
+```bash
+PYTHONPATH=. python examples/interactive_geometry.py
+```
+
+Open `visuals/generated/hyperbolicity-cone.html` and `visuals/generated/moving-line-roots.html` directly in a modern browser. Each file embeds its own styling, scripts and exact rational model data; opening it requires no server, network access or JavaScript runtime dependency. Use `--output PATH` to choose another output directory. Generated files are ignored by Git; editable templates live in `visuals/interactive/`.
+
+The cone explorer constructs the symmetric 3 × 3 determinant through `from_symmetric_matrix_pencil`, substitutes `t = 1`, and exports exact sparse coefficients. Its rotating surface and linked slice separate the PSD section from other determinant-sign chambers. Sliders and boundary/chamber presets expose eigenvalues and principal minors, including the degenerate `|z| = 1` slice. The browser classifies numerical membership with a tolerance; determinant sign alone does not establish PSD.
+
+The line explorer uses `det(xI + yD + zB)` with `D = diag(-3,-1,1,3)` and path adjacency `B`. It generates 3,321 exact rational control-grid restrictions in the identity direction, together with univariate derivatives checked against restricted multivariate partial derivatives. Root tracks, the selected polynomial, derivative interlacing and exact coefficient readouts update together. Zero coupling permits crossings and repeated roots; nonzero coupling opens gaps. Colors follow diagonal identities at zero coupling and ascending root ranks otherwise. Numerical rendering uses Float64, not a general hyperbolicity or stability certificate.
+
+The Python example/data checks run with the source-only tooling suite:
+
+```bash
+PYTHONPATH=. python -m pytest --import-mode=importlib scripts/tests/test_interactive_geometry.py
+```
+
+Optional browser checks use a development-only Playwright driver and an installed Chromium/Chrome. They exercise sliders, reset, linked clicks, keyboard controls, animation, near-boundary and zero-coupling cases, and responsive layouts, saving labeled screenshots and a validation receipt:
+
+```bash
+npm install --prefix /tmp/finitefree-browser playwright-core@1.63.0
+NODE_PATH=/tmp/finitefree-browser/node_modules node visuals/interactive/browser-check.cjs visuals/generated visuals/generated/screenshots
+```
+
+Set `FINITEFREE_BROWSER` to the browser executable if it is not on PATH. CI runs this check on Ubuntu. Neither Playwright nor Node is needed to open the generated HTML. Existing batch visual scripts and their optional Matplotlib/Pillow dependencies are unaffected.
 
 ## Benchmarks
 

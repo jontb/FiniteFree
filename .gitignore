@@ -70,6 +70,8 @@ venv.bak/
 # Local visual output directory (whitelist key showcase assets and scripts)
 visuals/*
 !visuals/*.py
+!visuals/interactive/
+!visuals/interactive/**
 !visuals/assets/
 !visuals/assets/*
 

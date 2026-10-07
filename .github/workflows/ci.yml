@@ -157,3 +157,30 @@ jobs:
         name: finitefree-release-candidate
         path: dist/*
         if-no-files-found: error
+
+  interactive:
+    name: Interactive geometry / Chromium
+    # Keep Chromium's namespace sandbox enabled on a compatible hosted image.
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Install package and development browser driver
+      run: |
+        python -m pip install .
+        npm install --prefix "$RUNNER_TEMP/finitefree-browser" playwright-core@1.63.0 --no-audit --no-fund
+    - name: Generate exact-data standalone explorers
+      run: PYTHONPATH=. python examples/interactive_geometry.py
+    - name: Test browser interactions and capture screenshots
+      run: |
+        NODE_PATH="$RUNNER_TEMP/finitefree-browser/node_modules" node visuals/interactive/browser-check.cjs visuals/generated visuals/generated/screenshots
+    - uses: actions/upload-artifact@v4
+      with:
+        name: finitefree-interactive-geometry
+        path: visuals/generated/
+        if-no-files-found: error
