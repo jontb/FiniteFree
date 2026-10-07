@@ -457,6 +457,9 @@ class MultivariatePolynomial(Polynomial):
             )
         elif type(expr) is int and expr == 0:
             # Internal empty results need no symbolic polynomial reconstruction.
+            # Preserve Poly's generator-domain check even for a zero expression.
+            if any(not symbol.is_commutative for symbol in self._variables):
+                raise sp.GeneratorsError("non-commutative generators are not supported")
             self._mpoly = self._ctx.constant(0)
         else:
             poly_sym = sp.Poly(sp.expand(sp.sympify(expr)), self._variables)

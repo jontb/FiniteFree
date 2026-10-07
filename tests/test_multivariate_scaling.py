@@ -192,3 +192,15 @@ def test_constant_results_keep_large_owned_shapes_and_validate_coordinates(
     points[-1, -1, -1] = np.inf
     with pytest.raises(ValueError, match="finite"):
         method(points)
+
+
+@pytest.mark.parametrize("constructor", ["expression", "coefficients"])
+def test_zero_construction_preserves_symbolic_generator_domain(
+    constructor: str,
+) -> None:
+    x, y = sp.symbols("x y", commutative=False)
+    with pytest.raises(sp.GeneratorsError, match="non-commutative generators"):
+        if constructor == "expression":
+            MultivariatePolynomial(0, [x, y])
+        else:
+            MultivariatePolynomial.from_coefficients({(1, 1): 2}, [x, y])
