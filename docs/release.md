@@ -1,6 +1,6 @@
-# 0.2.0 release review
+# Release process
 
-The source metadata and migration notes are prepared for 0.2.0. A built candidate is not a published release. PyPI 0.1.0 and tag `v0.1.0` remain the published baseline until the release action is approved and completed.
+FiniteFree 0.2.0 is distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). This checklist distinguishes a locally built candidate from a verified production upload and records the validation required before a release tag is created.
 
 ## Compatibility
 

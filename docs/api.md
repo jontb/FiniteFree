@@ -1,6 +1,6 @@
 # API Reference
 
-This page describes the **unreleased development implementation**, with executable examples and reference sections generated from its docstrings. The published [0.1.0 package](https://pypi.org/project/finitefree/0.1.0/) corresponds to [tag v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0), not all contracts below. See the [development guide](development.md) and [0.2 preparation and migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md).
+This page describes **FiniteFree 0.2.0**, with executable examples and reference sections generated from its docstrings. Install [the PyPI package](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`; its source is [tagged v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [development guide](development.md) and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md).
 
 ## Root evaluation and conditioning
 
