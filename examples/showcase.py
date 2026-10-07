@@ -8,6 +8,7 @@ certificates. Every example uses explicit public factories and conventions.
 import numpy as np
 import sympy as sp
 
+from examples.multivariate_workflows import main as showcase_multivariate
 from finitefree import (
     FiniteCauchyTransform,
     FiniteRTransform,
@@ -98,3 +99,4 @@ if __name__ == "__main__":
     showcase_basics()
     showcase_asymptotics()
     showcase_semicircle_mp()
+    showcase_multivariate()

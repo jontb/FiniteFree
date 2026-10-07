@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add `MultivariatePolynomial.reorder_variables` for explicit expression-preserving context permutations and `substitute` for simultaneous rational scalar/polynomial composition into an explicit target context. Symbol identity, ordering, exact scalar precision and owned results are preserved; no stability or hyperbolicity certificate is inferred.
+- Add `gradient_float64` and `hessian_float64` with the existing `(..., variable_count)` batch input contract. Exact differentiation precedes coefficient conversion; powers are reused within each call, Hessians evaluate only the upper triangle, and zero coordinates/singular determinant points are supported. Output arrays are independent float64 snapshots, with explicit input, overflow, underflow and rounding boundaries.
+- Reject NumPy complex scalars hidden in object arrays in all multivariate numerical batch APIs instead of allowing a lossy real cast.
+
 ## 0.2.0 — prepared for release
 
 These changes and the `0.2.0` version metadata are prepared for release; 0.2.0 is not published or tagged yet. PyPI's released baseline is [0.1.0, 2026-06-19](https://pypi.org/project/finitefree/0.1.0/), from [v0.1.0 / e1acff6](https://github.com/jontb/FiniteFree/tree/v0.1.0). See the [release review checklist](docs/release.md).

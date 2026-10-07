@@ -11,6 +11,9 @@ from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from .utils.modular import _as_modular_array, crt, prime_generator
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
 
+_FloatTerms = Tuple[Tuple[Tuple[int, ...], float], ...]
+_MAX_FLOAT64_POWER_CACHE = 64
+
 
 def _determinant_coefficient_bound(
     matrices: Sequence[Sequence[Sequence[int]]],
@@ -181,7 +184,9 @@ class MultivariatePolynomial(Polynomial):
     """
 
     _mpoly: Any
-    _float_terms_cached: Optional[Tuple[Tuple[Tuple[int, ...], float], ...]]
+    _float_terms_cached: Optional[_FloatTerms]
+    _gradient_float_terms_cached: Optional[Tuple[_FloatTerms, ...]]
+    _hessian_float_terms_cached: Optional[Tuple[Tuple[int, int, _FloatTerms], ...]]
 
     def evaluate(self, x: Sequence[Any]) -> Any:
         r"""
@@ -204,10 +209,25 @@ class MultivariatePolynomial(Polynomial):
         Nonfinite inputs, coefficients or results raise errors. Finite cancellation,
         underflow and rounding remain possible; outputs have no certified error bound.
         """
+        coordinates = self._float64_coordinates(points)
+        if self._float_terms_cached is None:
+            self._float_terms_cached = self._float64_terms(self._mpoly)
+        result = self._evaluate_float64_terms(
+            coordinates, self._float_terms_cached, None
+        )
+        return float(result) if result.ndim == 0 else result
+
+    def _float64_coordinates(self, points: Any) -> NDArray[np.float64]:
         if np.iscomplexobj(points):
             raise ValueError("Numerical coordinates must be real.")
         try:
-            coordinates = np.asarray(points, dtype=np.float64)
+            supplied = np.asarray(points)
+            if supplied.dtype == object and any(
+                np.iscomplexobj(value) for value in supplied.flat
+            ):
+                raise ValueError("Numerical coordinates must be real.")
+            with np.errstate(over="ignore", invalid="ignore"):
+                coordinates = np.asarray(supplied, dtype=np.float64)
         except (TypeError, ValueError, OverflowError) as error:
             raise ValueError(
                 "Numerical coordinates must be finite real values."
@@ -218,24 +238,46 @@ class MultivariatePolynomial(Polynomial):
             )
         if not np.all(np.isfinite(coordinates)):
             raise ValueError("Numerical coordinates must be finite.")
-        if self._float_terms_cached is None:
-            from .utils.conversion import flint_to_float
+        return coordinates
 
-            terms = tuple(
-                (tuple(int(k) for k in alpha), flint_to_float(c))
-                for alpha, c in self._mpoly.to_dict().items()
-            )
-            if not all(math.isfinite(c) for _, c in terms):
-                raise RuntimeError("Polynomial coefficients exceed the float64 range.")
-            self._float_terms_cached = terms
+    @staticmethod
+    def _float64_terms(polynomial: Any) -> _FloatTerms:
+        from .utils.conversion import flint_to_float
+
+        terms = tuple(
+            (tuple(int(k) for k in alpha), flint_to_float(c))
+            for alpha, c in polynomial.to_dict().items()
+        )
+        if not all(math.isfinite(c) for _, c in terms):
+            raise RuntimeError("Polynomial coefficients exceed the float64 range.")
+        return terms
+
+    @staticmethod
+    def _evaluate_float64_terms(
+        coordinates: NDArray[np.float64],
+        terms: _FloatTerms,
+        powers: Optional[Dict[Tuple[int, int], NDArray[np.float64]]],
+    ) -> NDArray[np.float64]:
         result = np.zeros(coordinates.shape[:-1], dtype=np.float64)
         try:
             with np.errstate(over="raise", invalid="raise", divide="raise"):
-                for alpha, coefficient in self._float_terms_cached:
+                for alpha, coefficient in terms:
                     term = np.full(result.shape, coefficient, dtype=np.float64)
                     for i, exponent in enumerate(alpha):
                         if exponent:
-                            term *= coordinates[..., i] ** exponent
+                            key = (i, exponent)
+                            if powers is not None and key in powers:
+                                power = powers[key]
+                            else:
+                                power = np.asarray(
+                                    coordinates[..., i] ** exponent, dtype=np.float64
+                                )
+                                if (
+                                    powers is not None
+                                    and len(powers) < _MAX_FLOAT64_POWER_CACHE
+                                ):
+                                    powers[key] = power
+                            term *= power
                     result += term
         except FloatingPointError as error:
             raise RuntimeError(
@@ -243,7 +285,54 @@ class MultivariatePolynomial(Polynomial):
             ) from error
         if not np.all(np.isfinite(result)):
             raise RuntimeError("Numerical polynomial evaluation is nonfinite.")
-        return float(result) if result.ndim == 0 else result
+        return result
+
+    def gradient_float64(self, points: Any) -> NDArray[np.float64]:
+        """Evaluate the gradient at real points shaped (..., m), returning (..., m).
+
+        Differentiate rational coefficients before float64 conversion. Sparse
+        derivative terms are cached; coordinate powers are reused within a call.
+        Inputs/results have the same finite/range and rounding limits as
+        evaluate_float64. Zero coordinates and empty batches are valid.
+        """
+        coordinates = self._float64_coordinates(points)
+        m = len(self._variables)
+        if self._gradient_float_terms_cached is None:
+            self._gradient_float_terms_cached = tuple(
+                self._float64_terms(self._mpoly.derivative(i)) for i in range(m)
+            )
+        result = np.empty((*coordinates.shape[:-1], m), dtype=np.float64)
+        powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
+        for i, terms in enumerate(self._gradient_float_terms_cached):
+            result[..., i] = self._evaluate_float64_terms(coordinates, terms, powers)
+        return result
+
+    def hessian_float64(self, points: Any) -> NDArray[np.float64]:
+        """Evaluate exact polynomial second derivatives as float64 (..., m, m).
+
+        Only the upper triangle is evaluated and mirrored. Coordinates shaped
+        (..., m) retain their leading batch dimensions; one point returns (m, m).
+        No inverses or division by coordinates are used, including at singular
+        determinant points. Outputs are owned arrays with finite/range checks;
+        cancellation, underflow and float64 rounding are not certified.
+        """
+        coordinates = self._float64_coordinates(points)
+        m = len(self._variables)
+        if self._hessian_float_terms_cached is None:
+            gradient = [self._mpoly.derivative(i) for i in range(m)]
+            self._hessian_float_terms_cached = tuple(
+                (i, j, self._float64_terms(gradient[i].derivative(j)))
+                for i in range(m)
+                for j in range(i, m)
+            )
+        result = np.empty((*coordinates.shape[:-1], m, m), dtype=np.float64)
+        powers: Dict[Tuple[int, int], NDArray[np.float64]] = {}
+        for i, j, terms in self._hessian_float_terms_cached:
+            component = self._evaluate_float64_terms(coordinates, terms, powers)
+            result[..., i, j] = component
+            if i != j:
+                result[..., j, i] = component
+        return result
 
     @property
     def variables(self) -> list[sp.Symbol]:
@@ -265,6 +354,8 @@ class MultivariatePolynomial(Polynomial):
             raise ValueError("Variable names must be distinct.")
         self._ctx = flint.fmpq_mpoly_ctx.get(names=names)
         self._float_terms_cached = None
+        self._gradient_float_terms_cached = None
+        self._hessian_float_terms_cached = None
 
         if isinstance(expr, flint.fmpq_mpoly):
             if expr.context().names() != names:
@@ -302,6 +393,93 @@ class MultivariatePolynomial(Polynomial):
             tuple(int(k) for k in alpha): sp.Rational(int(c.p), int(c.q))
             for alpha, c in self._mpoly.to_dict().items()
         }
+
+    def reorder_variables(
+        self, variables: Sequence[sp.Symbol]
+    ) -> "MultivariatePolynomial":
+        """Copy into an explicit permutation of the same ordered SymPy symbols.
+
+        Permute exponent coordinates, preserving the polynomial expression and
+        symbol assumptions. Renaming, missing or additional symbols are rejected.
+        Use substitute with an explicit target context for polynomial changes.
+        """
+        result = type(self)(0, variables)
+        if set(result._variables) != set(self._variables):
+            raise ValueError(
+                "Reordered variables must be a permutation of stored symbols."
+            )
+        order = tuple(self._variables.index(x) for x in result._variables)
+        result._mpoly = result._ctx.from_dict(
+            {
+                tuple(alpha[i] for i in order): c
+                for alpha, c in self._mpoly.to_dict().items()
+            }
+        )
+        return result
+
+    def substitute(
+        self,
+        substitutions: Mapping[sp.Symbol, Any],
+        *,
+        variables: Optional[Sequence[sp.Symbol]] = None,
+    ) -> "MultivariatePolynomial":
+        """Simultaneously replace stored symbols with rational scalars/polynomials.
+
+        The target context defaults to the stored ordered symbols. An explicit
+        nonempty variables sequence allows renaming, dimension changes or unused
+        variables. Unreplaced symbols must occur unchanged in that context.
+        MultivariatePolynomial replacements must match the target order exactly;
+        rational SymPy polynomial expressions may use only target symbols.
+        Scalars follow the exact stored-value rational conversion, including finite
+        floats. Booleans, strings, arrays, rational functions and irrational/complex
+        coefficients are rejected. Even full scalar substitution returns an owned
+        constant polynomial in the target context, with no inferred geometry.
+        """
+        from .utils.conversion import sympy_to_fmpq
+
+        if not isinstance(substitutions, Mapping):
+            raise TypeError("Substitutions must be a mapping from stored symbols.")
+        if any(x not in self._variables for x in substitutions):
+            raise ValueError("Substitution keys must be stored SymPy symbols.")
+        result = type(self)(0, self._variables if variables is None else variables)
+        target_symbols = set(result._variables)
+        images = []
+        for symbol in self._variables:
+            value = substitutions.get(symbol, symbol)
+            if isinstance(value, MultivariatePolynomial):
+                if value._variables != result._variables:
+                    raise ValueError(
+                        "Replacement polynomial variable sequences must match the target "
+                        "exactly; reorder_variables explicitly when needed."
+                    )
+                images.append(value._mpoly)
+            elif isinstance(value, sp.Expr) and value.free_symbols:
+                if not value.free_symbols <= target_symbols:
+                    raise ValueError(
+                        "Replacement and unreplaced symbols must belong to target variables."
+                    )
+                try:
+                    images.append(type(self)(value, result._variables)._mpoly)
+                except (TypeError, ValueError, sp.PolynomialError) as error:
+                    raise ValueError(
+                        "Replacements must be rational polynomial expressions."
+                    ) from error
+            else:
+                if isinstance(
+                    value,
+                    (bool, np.bool_, str, np.ndarray, complex, np.complexfloating),
+                ):
+                    raise ValueError(
+                        "Replacements must be rational scalars or polynomials."
+                    )
+                try:
+                    images.append(result._ctx.constant(sympy_to_fmpq(value)))
+                except (TypeError, ValueError, OverflowError) as error:
+                    raise ValueError(
+                        "Replacements must be finite rational scalars or polynomials."
+                    ) from error
+        result._mpoly = self._mpoly.compose(*images, ctx=result._ctx)
+        return result
 
     def _nonnegative_indices(
         self, values: Sequence[SupportsIndex], label: str
