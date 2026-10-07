@@ -5,7 +5,7 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe the **0.2.0 source prepared for release**. The published package is [FiniteFree 0.1.0](https://pypi.org/project/finitefree/0.1.0/); its source is tagged [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). Install the development checkout to use the contracts described here. See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release review](docs/release.md); 0.2.0 is not published or tagged yet.
+This README and the API reference describe **FiniteFree 0.2.0**, distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release process](docs/release.md) for compatibility changes and validation.
 
 FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
 
@@ -191,12 +191,12 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 ## Installation
 
-To install the published release, run `python -m pip install finitefree==0.1.0`. That release has its own tagged implementation and does not include all contracts described in this development README.
+Install this release with `python -m pip install finitefree==0.2.0`. The package and the API contracts described here require Python 3.10 or later.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 
 ### Requirements
-- **Python**: `>=3.10`; CI targets CPython `3.10`–`3.13` on Linux, macOS and Windows, with a separate Python 3.10 minimum-dependency job. Verify checks on the intended release commit.
+- **Python**: `>=3.10`; CI targets CPython `3.10`–`3.13` on Linux, macOS and Windows, with a separate Python 3.10 minimum-dependency job. Release checks cover the tagged commit.
 - **Source builds**: a working C compiler (`gcc`, `clang`, or the matching Windows MSVC toolchain). `python-flint` source builds additionally need FLINT/GMP/MPFR and their headers; prefer its compatible wheels when available.
 - **Runtime dependencies**: `numpy>=1.24`, `sympy>=1.12`, `python-flint>=0.9.0`, `scipy>=1.10`. FLINT 0.9 supplies the rational multivariate API; the former Python 3.9 / FLINT 0.6 minimum lacks that API. See the [compatibility change](docs/release.md#compatibility).
 

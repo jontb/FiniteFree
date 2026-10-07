@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions target the source prepared for 0.2.0, whose metadata now reads `0.2.0`. [PyPI 0.1.0](https://pypi.org/project/finitefree/0.1.0/) corresponds to tag [v0.1.0](https://github.com/jontb/FiniteFree/tree/v0.1.0). A locally built 0.2.0 wheel is a release candidate until publication. Record the Git commit when reproducing results.
+These instructions apply to the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0). Install the matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`, or use a source checkout for development. A local build alone does not establish production publication. Record the Git commit when reproducing results.
 
 ## Installation
 
@@ -86,6 +86,6 @@ The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison
 
 `visuals/*.py` regenerate pre-rendered illustrations and require Matplotlib/Pillow. They may write many frames and use high-degree solvers or approximate grid sampling; their output is illustrative rather than part of the regression suite.
 
-## Preparing 0.2
+## Release validation
 
-The version metadata, compatible symmetric S convention and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) are prepared. Follow the [release review checklist](release.md) to inspect artifacts and checks on the final commit. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+The 0.2.0 release includes the compatible symmetric S convention and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md). Follow the [release review checklist](release.md) to inspect artifacts and checks on the final commit. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+No changes yet.
+
+## 0.2.0 — 2026-10-07
+
+Release source: [v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). Distribution: [PyPI 0.2.0](https://pypi.org/project/finitefree/0.2.0/). See the [release process](docs/release.md) for validation and publishing.
+
+### Multivariate numerical and context workflows
+
 - Reduce multivariate numerical work with cached nonzero exponent coordinates, reused monomial/component buffers and bounded 8192-point blocks with contiguous coordinate columns. Derivative power storage no longer grows with the full batch; output storage, coordinate conversion/validation and lazy exact caches retain their own costs. Small/simple cases can incur extra block overhead or temporary storage.
 - Fill constant numerical results directly after coordinate/coefficient validation, including gradients of linear polynomials and Hessians of quadratics. This avoids unnecessary coordinate packing and power/buffer setup while preserving owned shapes and finite-input checks.
 - Use native sparse context projection for validated reordering and cross-context symbol substitutions; construct zero results and target generators without SymPy reconstruction. Same-context substitutions use composition because python-flint 0.9 projection ignores explicit maps when the context is unchanged. Independent regressions cover swaps, merged variables, large exact exponents and strided batches.
@@ -9,10 +17,6 @@
 - Add `MultivariatePolynomial.reorder_variables` for explicit expression-preserving context permutations and `substitute` for simultaneous rational scalar/polynomial composition into an explicit target context. Symbol identity, ordering, exact scalar precision and owned results are preserved; no stability or hyperbolicity certificate is inferred.
 - Add `gradient_float64` and `hessian_float64` with the existing `(..., variable_count)` batch input contract. Exact differentiation precedes coefficient conversion; powers are reused within each call, Hessians evaluate only the upper triangle, and zero coordinates/singular determinant points are supported. Output arrays are independent float64 snapshots, with explicit input, overflow, underflow and rounding boundaries.
 - Reject NumPy complex scalars hidden in object arrays in all multivariate numerical batch APIs instead of allowing a lossy real cast.
-
-## 0.2.0 — prepared for release
-
-These changes and the `0.2.0` version metadata are prepared for release; 0.2.0 is not published or tagged yet. PyPI's released baseline is [0.1.0, 2026-06-19](https://pypi.org/project/finitefree/0.1.0/), from [v0.1.0 / e1acff6](https://github.com/jontb/FiniteFree/tree/v0.1.0). See the [release review checklist](docs/release.md).
 
 ### Migration from 0.1.0
 
@@ -37,10 +41,10 @@ These changes and the `0.2.0` version metadata are prepared for release; 0.2.0 i
 - Modular determinant reconstruction now uses a proved coefficient-size bound to determine the necessary CRT modulus. Consecutive agreement previously allowed large nonzero coefficients divisible by the early primes to be reconstructed as zero.
 - Sparse determinant construction independently verifies randomized discovery with an exact bounded Kronecker encoding. Balanced-base recovery repairs omitted or incorrect terms and provides a fallback after eight failed prime fields. The new keyword-only `max_verification_bits=1_000_000` raises `ValueError` before discovery when verification exceeds its conservative integer-size bound; callers needing larger encodings must opt in explicitly or choose another constructor.
 
-### Documentation and release preparation
+### Documentation and release validation
 
-- README/API now distinguish unreleased source from published 0.1.0. Installation, development checks, tutorial, precision/evaluation boundaries, determinant derivative limits and implementation-dependent complexity are documented consistently.
-- README is included as the package long description. The version is set to 0.2.0, with wheel/sdist builds and a release checklist; publication remains a separate action.
+- README/API describe the 0.2.0 release and its matching PyPI installation. Installation, development checks, tutorial, precision/evaluation boundaries, determinant derivative limits and implementation-dependent complexity are documented consistently.
+- README is included as the package long description. Static version 0.2.0, wheel/sdist builds and the release checklist are aligned with the tagged release.
 - The 12-job supported-platform CI matrix is supplemented by actual pinned minimum-runtime tests on Python 3.10 and release-candidate artifact builds.
 
 ### Implemented changes
