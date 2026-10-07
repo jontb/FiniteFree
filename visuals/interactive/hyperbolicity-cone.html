@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FiniteFree · Spectrahedron explorer</title>
+    <style>
+      <!--STYLE-->
+    </style>
+  </head>
+  <body>
+    <nav>
+      <strong>FINITEFREE <span>/ Geometry lab</span></strong
+      ><span>01 · Hyperbolicity cone</span>
+    </nav>
+    <main class="wrap">
+      <div class="eyebrow">A determinant is only part of the story</div>
+      <h1>Find the PSD region inside the surface.</h1>
+      <p class="lead">
+        Explore the <strong>t = 1</strong> section of a symmetric determinant
+        pencil. The teal body is positive semidefinite; the purple
+        determinant-zero wings belong to other chambers.
+      </p>
+      <div class="formula">
+        P(t,x,y,z) = t³ + 2xyz − t(x² + y² + z²) = det [[t,x,y],[x,t,z],[y,z,t]]
+      </div>
+      <div class="layout">
+        <section>
+          <div class="plots">
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2>The determinant-zero surface</h2>
+                  <p class="caption">
+                    Drag to rotate · arrow keys also rotate · window [−1.4,
+                    1.4]³
+                  </p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="surface"
+                  tabindex="0"
+                  role="img"
+                  aria-label="Rotatable determinant-zero surface, with teal PSD boundary and purple non-PSD wings"
+                ></canvas>
+              </div>
+              <div class="legend">
+                <span><i class="key teal"></i>PSD boundary</span
+                ><span><i class="key purple"></i>Non-PSD surface</span
+                ><span><i class="key gold"></i>Probe & slice</span>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2>Linked horizontal slice</h2>
+                  <p class="caption">
+                    Click or drag to move the probe · slice z =
+                    <span id="slice-value">0.3</span>
+                  </p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="slice"
+                  tabindex="0"
+                  role="img"
+                  aria-label="Linked x y slice with PSD region and determinant-sign chambers; use x and y sliders for keyboard access"
+                ></canvas>
+              </div>
+              <div class="legend">
+                <span><i class="key teal"></i>PSD</span
+                ><span><i class="key purple"></i>det &gt; 0, indefinite</span
+                ><span
+                  ><i class="key" style="background:#e4e9ed"></i>det &lt;
+                  0</span
+                >
+              </div>
+            </article>
+          </div>
+          <div class="panel metrics" aria-live="polite">
+            <div class="metric">
+              <div class="metric-label">Membership at the probe</div>
+              <div class="metric-value">
+                <span id="status" class="status">Positive definite</span>
+              </div>
+              <div id="membership-note" class="metric-sub"></div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Smallest eigenvalue</div>
+              <div id="lambda-min" class="metric-value"></div>
+              <div class="metric-sub">PSD needs every eigenvalue ≥ 0.</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Determinant</div>
+              <div id="det" class="metric-value"></div>
+              <div class="metric-sub">Positive alone does not imply PSD.</div>
+            </div>
+          </div>
+        </section>
+        <aside class="panel controls">
+          <h3>Move the slice & probe</h3>
+          <div class="control">
+            <label for="z">Slice z <output id="z-value"></output></label
+            ><input
+              id="z"
+              type="range"
+              min="-1.4"
+              max="1.4"
+              step=".01"
+              value=".3"
+            />
+            <div class="limits"><span>−1.4</span><span>1.4</span></div>
+          </div>
+          <div class="control">
+            <label for="x">Probe x <output id="x-value"></output></label
+            ><input
+              id="x"
+              type="range"
+              min="-1.4"
+              max="1.4"
+              step=".01"
+              value=".2"
+            />
+          </div>
+          <div class="control">
+            <label for="y">Probe y <output id="y-value"></output></label
+            ><input
+              id="y"
+              type="range"
+              min="-1.4"
+              max="1.4"
+              step=".01"
+              value=".4"
+            />
+          </div>
+          <div class="actions">
+            <button id="reset" class="primary">Reset</button
+            ><button id="boundary">PSD boundary</button
+            ><button id="chamber">Positive det, not PSD</button>
+          </div>
+          <p class="hint">
+            Try the purple chamber preset: its determinant is positive, but two
+            eigenvalues are negative.
+          </p>
+          <div class="readout">
+            <h3>Matrix diagnostics</h3>
+            <pre id="matrix"></pre>
+            <dl>
+              <dt>Eigenvalues, ascending</dt>
+              <dd id="eigenvalues"></dd>
+              <dt>1 − x²</dt>
+              <dd id="minor-x"></dd>
+              <dt>1 − y²</dt>
+              <dd id="minor-y"></dd>
+              <dt>1 − z²</dt>
+              <dd id="minor-z"></dd>
+            </dl>
+            <p class="hint">
+              Near zero means within a scaled Float64 tolerance. It is not an
+              exact certificate.
+            </p>
+          </div>
+        </aside>
+      </div>
+      <details class="notes">
+        <summary>
+          Why this is a spectrahedron · exact data & numerical limits
+        </summary>
+        <p>
+          The pencil at e = (1,0,0,0) is the identity. Its closed hyperbolicity
+          cone is the PSD component; t = 1 cuts out the 3 × 3 correlation-matrix
+          spectrahedron. Here PSD is equivalent to all three displayed 2 × 2
+          principal minors and the determinant being nonnegative (the 1 × 1
+          minors equal 1). On the slice, the boundary satisfies x² + y² − 2zxy =
+          1 − z². At |z| = 1 the slice collapses to a line segment; at |z| &gt;
+          1 it contains no PSD point.
+        </p>
+        <p>
+          FiniteFree constructs the exact determinant and substitutes t = 1
+          before exporting rational sparse coefficients. Surface meshing,
+          polynomial evaluation, eigenvalues and membership labels in this
+          offline browser use Float64, with finite resolution and tolerances.
+          This display does not certify general hyperbolicity or stability.
+          Regenerate with
+          <code>PYTHONPATH=. python examples/interactive_geometry.py</code>.
+        </p>
+      </details>
+      <footer>
+        <span
+          >Exact rational model: FiniteFree · Numerical rendering: Float64</span
+        ><span>Portable HTML · no network or external assets</span>
+      </footer>
+    </main>
+    <script id="model" type="application/json">
+      <!--DATA-->
+    </script>
+    <script>
+      <!--COMMON-->
+      <!--APP-->
+    </script>
+  </body>
+</html>

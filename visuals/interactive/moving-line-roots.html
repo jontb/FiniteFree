@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FiniteFree · Moving line slices & roots</title>
+    <style>
+      <!--STYLE-->
+    </style>
+  </head>
+  <body>
+    <nav>
+      <strong>FINITEFREE <span>/ Geometry lab</span></strong
+      ><span>02 · Moving line slices</span>
+    </nav>
+    <main class="wrap">
+      <div class="eyebrow">Crossings, coupling & interlacing</div>
+      <h1>Move a line. Watch its roots respond.</h1>
+      <p class="lead">
+        Slide the line L(s) = (s, y, z) through a symmetric matrix pencil. Turn
+        coupling off to see crossings, then restore it to open gaps. Derivative
+        roots sit between consecutive roots.
+      </p>
+      <div class="formula">
+        P(x,y,z) = det(xI + yD + zB) · D = diag(−3,−1,1,3) · B = path adjacency
+      </div>
+      <div class="layout">
+        <section>
+          <div class="plots">
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2>Root tracks across y</h2>
+                  <p class="caption">
+                    Click or drag to move the line ·
+                    <span id="track-mode"></span>
+                  </p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="tracks"
+                  role="img"
+                  aria-label="Four numerical root tracks across y with selected-line markers and optional derivative root tracks"
+                ></canvas>
+              </div>
+              <div class="legend">
+                <span
+                  ><i class="key teal"></i><i class="key blue"></i
+                  ><i class="key gold"></i><i class="key purple"></i>Polynomial
+                  roots</span
+                ><span>◇ Derivative roots</span>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2>The selected univariate slice</h2>
+                  <p class="caption" id="line-label"></p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="polynomial"
+                  role="img"
+                  aria-label="Univariate polynomial and normalized derivative curves with roots marked on the zero line"
+                ></canvas>
+              </div>
+              <div class="legend">
+                <span><i class="key teal"></i>P(s,y,z)</span
+                ><span
+                  ><i class="key" style="background:#65798a"></i>Dashed: ∂P/∂s ÷
+                  4</span
+                ><span>● roots · ◇ derivative roots</span>
+              </div>
+            </article>
+          </div>
+          <div class="panel metrics" aria-live="polite">
+            <div class="metric">
+              <div class="metric-label">Root geometry</div>
+              <div class="metric-value">
+                <span id="geometry" class="status"></span>
+              </div>
+              <div class="metric-sub" id="geometry-note"></div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Smallest adjacent gap</div>
+              <div class="metric-value" id="gap"></div>
+              <div class="metric-sub">Among the four sorted slice roots.</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Derivative interlacing</div>
+              <div
+                class="metric-value"
+                id="interlacing"
+                style="font-size:16px"
+              ></div>
+              <div class="metric-sub">
+                Weak equality is allowed at repeated roots.
+              </div>
+            </div>
+          </div>
+        </section>
+        <aside class="panel controls">
+          <h3>Move the line</h3>
+          <div class="control">
+            <label for="parameter"
+              >Line position y <output id="parameter-value"></output></label
+            ><input
+              id="parameter"
+              type="range"
+              min="0"
+              max="80"
+              step="1"
+              value="45"
+            />
+            <div class="limits"><span>−2</span><span>2 · step 0.05</span></div>
+          </div>
+          <div class="control">
+            <label for="coupling"
+              >Coupling z <output id="coupling-value"></output></label
+            ><input
+              id="coupling"
+              type="range"
+              min="0"
+              max="40"
+              step="1"
+              value="20"
+            />
+            <div class="limits">
+              <span>0 · uncoupled</span><span>1 · step 0.025</span>
+            </div>
+          </div>
+          <label class="checkrow"
+            ><input id="derivative" type="checkbox" checked /> Show derivative
+            roots & curve</label
+          >
+          <div class="actions">
+            <button id="reset" class="primary">Reset</button
+            ><button id="uncoupled">Zero coupling</button
+            ><button id="crossing">At the crossing</button
+            ><button id="play">Sweep y</button>
+          </div>
+          <p class="hint">
+            At z = 0 the four diagonal branches meet at y = 0. Any nonzero
+            displayed coupling makes this path pencil irreducible, so its slice
+            eigenvalues are simple.
+          </p>
+          <div class="readout">
+            <h3>Selected line diagnostics</h3>
+            <dl>
+              <dt>Sorted roots</dt>
+              <dd id="root-values"></dd>
+              <dt>Derivative roots</dt>
+              <dd id="derivative-values"></dd>
+              <dt>Normalized root residual</dt>
+              <dd id="residual"></dd>
+            </dl>
+            <p class="hint">
+              All root positions use Float64. The residual is a consistency
+              diagnostic, not an error bound.
+            </p>
+          </div>
+        </aside>
+      </div>
+      <details class="notes">
+        <summary>
+          Exact slice coefficients · why crossings open into gaps
+        </summary>
+        <p id="exact-line"></p>
+        <pre id="coefficients"></pre>
+        <p>
+          FiniteFree constructs the exact multivariate determinant, renames its
+          context with <code>substitute</code>, and calls
+          <code>restrict_line([0,y,z],[1,0,0])</code> at every rational
+          control-grid point. The univariate
+          <code>derivative(monic=False)</code> is checked against the restricted
+          exact multivariate partial derivative. Embedded strings preserve exact
+          coefficients. Browser curves, Jacobi eigenvalues and bracketed
+          derivative roots use Float64; the displayed derivative curve is
+          divided by 4 for scale.
+        </p>
+        <p>
+          At z = 0, roots are −y times the four diagonal entries, so the colored
+          tracks show those diagonal identities and cross. At z &gt; 0, the real
+          symmetric tridiagonal pencil is irreducible, giving simple
+          eigenvalues; colors then follow ascending root ranks. Rolle's theorem
+          gives weak derivative interlacing, with equality at repeated roots.
+          These facts concern this identity-direction pencil; the plots do not
+          certify general hyperbolicity or stability. Regenerate with
+          <code>PYTHONPATH=. python examples/interactive_geometry.py</code>.
+        </p>
+      </details>
+      <footer>
+        <span>Exact rational grid: FiniteFree · Roots & rendering: Float64</span
+        ><span>Portable HTML · no network or external assets</span>
+      </footer>
+    </main>
+    <script id="model" type="application/json">
+      <!--DATA-->
+    </script>
+    <script>
+      <!--COMMON-->
+      <!--APP-->
+    </script>
+  </body>
+</html>
