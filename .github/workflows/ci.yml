@@ -2,9 +2,9 @@ name: FiniteFree CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "develop" ]
   pull_request:
-    branches: [ "main", "master", "maintenance/**" ]
+    branches: [ "main", "master", "develop", "maintenance/**" ]
 
 jobs:
   test:
