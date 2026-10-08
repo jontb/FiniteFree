@@ -153,7 +153,9 @@ def test_current_readme_reproduces_the_committed_index() -> None:
         "moving-line-roots",
     ],
 )
-def test_dashboard_links_open_generated_html_outside_code_fences(dashboard: str) -> None:
+def test_dashboard_links_open_generated_html_outside_code_fences(
+    dashboard: str,
+) -> None:
     link = f"[Open dashboard](docs/development.md#{dashboard})"
     source = f"{link}\n\n```text\n{link}\n```\n"
     expected = (
