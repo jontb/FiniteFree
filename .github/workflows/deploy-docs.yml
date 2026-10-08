@@ -49,6 +49,8 @@ jobs:
 
       - name: Construct static documentation assets
         run: |
+          PYTHONPATH=. python examples/interactive_geometry.py --output docs/visuals/interactive
+          OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python examples/spectral_dashboards.py --output docs/visuals/interactive
           python scripts/sync_docs.py
           git diff --exit-code -- docs/index.md
           python scripts/check_readme_examples.py

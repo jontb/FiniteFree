@@ -17,6 +17,8 @@ To prevent numerical floating-point drift and avoid the computational complexity
 
 The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
 
+On `develop`, interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](docs/development.md#documentation). They are development examples, not additions to the published 0.2.0 API.
+
 <details>
 <summary><b>1. Limiting Distributions of Free Convolutions</b></summary>
 <br>
@@ -31,9 +33,13 @@ Animates the convergence of root distributions of expectation polynomials toward
 | :---: | :---: |
 | ![Wigner Semicircle Convergence](visuals/assets/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/assets/marchenko_pastur_convergence.gif) |
 
+Interactive companion: [Open ensemble convergence](docs/development.md#ensemble-convergence) to compare sampled spectra and Hermite/Laguerre/Legendre root measures with their limiting laws.
+
 | Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 300$) |
 | :---: | :---: |
 | ![Free Jacobi Arcsine Convergence](visuals/assets/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/assets/free_lognormal_convergence.gif) |
+
+Interactive companion: [Open ensemble convergence](docs/development.md#ensemble-convergence) and select Legendre roots for the arcsine comparison. The free log-normal animation remains a separate batch illustration.
 
 </details>
 
@@ -50,6 +56,8 @@ Showcases GUE spectral universality and eigenvalue spacing statistics:
 | CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
 | :---: | :---: |
 | ![Asymptotic Bulk Scaling](visuals/assets/asymptotic_kernel_bulk.gif) | ![Asymptotic Edge Scaling](visuals/assets/asymptotic_kernel_edge.gif) |
+
+Interactive companion: [Open Hermite kernels](docs/development.md#hermite-kernels) to switch between bulk/sine and soft-edge/Airy sections and vary the projection rank.
 
 | Tracy-Widom Edge Convergence ($d=100$) | Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
 | :---: | :---: |
@@ -70,9 +78,13 @@ Illustrates exact algebraic properties, root interlacing constraints, and geomet
 | :---: | :---: | :---: |
 | ![Original Roots](visuals/assets/root_interlacing_original.png) | ![Additive Interlacing](visuals/assets/root_interlacing_additive.png) | ![Multiplicative Interlacing](visuals/assets/root_interlacing_multiplicative.png) |
 
+Interactive companions: [Open convolution interlacing](docs/development.md#convolution-interlacing) for additive/multiplicative examples, or [Open moving line roots](docs/development.md#moving-line-roots) for matrix-pencil restrictions and derivative interlacing.
+
 | Hyperbolic Matrix Pencil Eigencones & Topography | Unitary Hermite Eigenvalue Repulsion Trajectories |
 | :---: | :---: |
 | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) | ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+
+Interactive companions: [Open the hyperbolicity cone explorer](docs/development.md#hyperbolicity-cone) for linked cone sections, or [Open unitary root flow](docs/development.md#unitary-root-flow) to vary degree and time.
 
 </details>
 
@@ -89,6 +101,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 | Fujie-Ueda T-Transform Convergence | Asymptotic Decay of Cumulants |
 | :---: | :---: |
 | ![T-Transform Convergence](visuals/assets/t_transform_convergence.gif) | ![Cumulant Decay](visuals/assets/cumulant_decay.gif) |
+
+Interactive companion: [Open finite transforms](docs/development.md#finite-transforms) for the Wishart T-transform and additive-CLT cumulants. The S-transform and Cauchy-domain animations remain separate batch illustrations.
 
 | S-Transform Convergence | Cauchy Transform Convergence |
 | :---: | :---: |
