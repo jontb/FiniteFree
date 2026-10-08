@@ -175,10 +175,13 @@ jobs:
         python -m pip install .
         npm install --prefix "$RUNNER_TEMP/finitefree-browser" playwright-core@1.63.0 --no-audit --no-fund
     - name: Generate exact-data standalone explorers
-      run: PYTHONPATH=. python examples/interactive_geometry.py
+      run: |
+        PYTHONPATH=. python examples/interactive_geometry.py
+        OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python examples/spectral_dashboards.py
     - name: Test browser interactions and capture screenshots
       run: |
         NODE_PATH="$RUNNER_TEMP/finitefree-browser/node_modules" node visuals/interactive/browser-check.cjs visuals/generated visuals/generated/screenshots
+        NODE_PATH="$RUNNER_TEMP/finitefree-browser/node_modules" node visuals/interactive/dashboard-check.cjs visuals/generated visuals/generated/dashboard-screenshots
     - uses: actions/upload-artifact@v4
       with:
         name: finitefree-interactive-geometry
