@@ -15,35 +15,29 @@
     </nav>
     <main class="wrap">
       <div class="eyebrow">A determinant is only part of the story</div>
-      <h1>See which matrices are positive semidefinite.</h1>
+      <h1>PSD section and determinant chambers.</h1>
       <p class="lead">
-        Each point <strong>(x, y, z)</strong> chooses the three off-diagonal
-        entries of the symmetric matrix below. Its diagonal is fixed at
-        <strong>t = 1</strong>. Move the probe to see whether that matrix lies
-        inside the teal region, on its boundary, or outside.
+        The t = 1 section of the symmetric pencil below. Coordinates (x,y,z)
+        parameterize its off-diagonal entries; the probe reports PSD membership
+        and spectrum within this section of the homogeneous hyperbolicity cone.
       </p>
       <div class="formula">
         M(x,y,z) = [[1,x,y],[x,1,z],[y,z,1]] · det M = 1 + 2xyz − x² − y² − z²
       </div>
       <section class="explainer" id="overview" aria-labelledby="overview-title">
-        <h2 id="overview-title">What are these shapes?</h2>
+        <h2 id="overview-title">Section, chambers & probe</h2>
         <div class="explainer-grid">
           <p>
-            <strong>A point is a matrix.</strong> The axes are its entries, not
-            its eigenvalues. A symmetric matrix scales three perpendicular
-            directions by real numbers called <strong>eigenvalues</strong>.
-            Positive definite (PD) means all three are positive; positive
-            semidefinite (PSD) allows zero. The teal boundary encloses the PD
-            matrices and is itself PSD.
+            <strong>Surface.</strong> Teal marks the PSD portion of det M = 0;
+            purple marks the other singular sheets. Chambers are the connected
+            components of det M ≠ 0, with constant inertia. The purple wings are
+            boundary pieces outside the PSD region.
           </p>
           <p>
-            <strong>The surface separates regions.</strong> The determinant is
-            the product of the eigenvalues, so its zero surface marks singular
-            matrices with at least one zero eigenvalue. A
-            <strong>chamber</strong>
-            is a connected region away from that surface: the counts of positive
-            and negative eigenvalues stay constant there. The purple wings are
-            boundary pieces with a negative eigenvalue, not chambers themselves.
+            <strong>Slice.</strong> The fixed-z plane is colored by PSD
+            membership and determinant sign. Orange marks the selected (x,y,z).
+            The readouts give its eigenvalues, determinant and principal minors;
+            positive determinant also occurs with two negative eigenvalues.
           </p>
         </div>
       </section>
@@ -114,12 +108,14 @@
             <div class="metric">
               <div class="metric-label">Smallest eigenvalue</div>
               <div id="lambda-min" class="metric-value"></div>
-              <div class="metric-sub">PSD needs every eigenvalue ≥ 0.</div>
+              <div class="metric-sub">Spectrum at the selected probe.</div>
             </div>
             <div class="metric">
               <div class="metric-label">Determinant</div>
               <div id="det" class="metric-value"></div>
-              <div class="metric-sub">Positive alone does not imply PSD.</div>
+              <div class="metric-sub">
+                Determinant sign does not determine inertia.
+              </div>
             </div>
           </div>
         </section>
@@ -165,8 +161,9 @@
             ><button id="chamber">Positive det, not PSD</button>
           </div>
           <p class="hint">
-            The orange dot is the matrix being tested. The orange plane fixes z;
-            the linked x–y view colors the matrices on that plane.
+            Sliders select the probe and fixed-z plane. Presets select a PSD
+            boundary point or a positive-determinant point with two negative
+            eigenvalues.
           </p>
           <div class="readout">
             <h3>Matrix diagnostics</h3>
@@ -182,79 +179,32 @@
               <dd id="minor-z"></dd>
             </dl>
             <p class="hint">
-              The three expressions are 2 × 2 principal minors: determinants of
-              diagonal submatrices. A negative one rules out PSD.
+              The three 2 × 2 principal minors, together with det M, test PSD in
+              this unit-diagonal section.
             </p>
             <p class="hint">
-              Near zero means within a scaled Float64 tolerance. It is not an
-              exact certificate.
+              Numerical membership uses scaled Float64 tolerances.
             </p>
           </div>
         </aside>
       </div>
-      <section
-        class="panel guided-tour"
-        id="guided-tour"
-        aria-labelledby="tour-title"
-      >
-        <h2 id="tour-title">Try this in one minute</h2>
-        <p class="caption">
-          Seeing matrix positivity as a region helps explain correlation-matrix
-          constraints and convex optimization. Determinant sign alone misses it.
-        </p>
-        <ol>
-          <li>
-            <strong>Reset.</strong> Read the three positive eigenvalues. Move x
-            or y, or click the slice, and watch the probe and matrix change
-            together.
-          </li>
-          <li>
-            <strong>PSD boundary.</strong> One eigenvalue reaches zero and so
-            does the determinant. This is an edge of the teal PSD region.
-          </li>
-          <li>
-            <strong>Positive det, not PSD.</strong> Two eigenvalues are
-            negative. Their product is positive, but this matrix is outside the
-            PSD region.
-          </li>
-        </ol>
-      </section>
       <details class="notes">
-        <summary>Chambers, the full cone & what FiniteFree computes</summary>
+        <summary>Homogeneous cone & exact model</summary>
         <p>
-          Restore the common diagonal t to get M(t,x,y,z) and the homogeneous
-          polynomial P(t,x,y,z) = t³ + 2xyz − t(x² + y² + z²). The full closed
-          cone consists of the points where this matrix is PSD. Scaling all four
-          coordinates by a positive factor stays in that cone. This plot fixes t
-          = 1: it is a three-dimensional cross-section of the four-dimensional
-          cone, not the whole cone. This section is a spectrahedron, meaning an
-          affine matrix-PSD constraint; here it is the set of 3 × 3 correlation
-          matrices.
+          For M(t,x,y,z) = tI + M(x,y,z) − I, the determinant is P(t,x,y,z) = t³
+          + 2xyz − t(x² + y² + z²). Its closed hyperbolicity cone about e =
+          (1,0,0,0) is {M(t,x,y,z) ⪰ 0}; t = 1 cuts this four-dimensional cone
+          in the correlation-matrix spectrahedron shown here. The fixed-z
+          boundary satisfies x² + y² − 2zxy = 1 − z². Its PSD portion
+          degenerates to a segment at |z| = 1 and is empty for |z| &gt; 1. In
+          the slice, purple det &gt; 0 regions have two negative eigenvalues;
+          gray det &lt; 0 regions have one.
         </p>
         <p>
-          The identity matrix at e = (1,0,0,0) lies in the positive-definite
-          chamber. Moving along that direction adds sI, so determinant roots are
-          negatives of real eigenvalues. This explains hyperbolicity in this
-          direction for this particular pencil. Other nonsingular chambers can
-          have different eigenvalue signs: the purple filled region in the slice
-          has two negative eigenvalues and positive determinant; the gray region
-          has one negative eigenvalue and negative determinant. The zero surface
-          separates them.
-        </p>
-        <p>
-          In the t = 1 section, PSD is equivalent to all three displayed 2 × 2
-          principal minors and the determinant being nonnegative (the 1 × 1
-          minors equal 1). On the slice, the boundary satisfies x² + y² − 2zxy =
-          1 − z². At |z| = 1 the PSD region in the slice collapses to a line
-          segment; at |z| &gt; 1 there is no PSD point on that plane.
-        </p>
-        <p>
-          FiniteFree constructs the exact determinant and substitutes t = 1
-          before exporting rational sparse coefficients. Surface meshing,
-          polynomial evaluation, eigenvalues and membership labels in this
-          offline browser use Float64, with finite resolution and tolerances.
-          This display does not certify general hyperbolicity or stability.
-          Regenerate with
+          FiniteFree exports exact rational determinant coefficients after
+          substituting t = 1. Browser meshing, eigenvalues and membership use
+          Float64 and scaled tolerances; the display supplies no general
+          hyperbolicity or stability certificate. Regenerate with
           <code>PYTHONPATH=. python examples/interactive_geometry.py</code>.
         </p>
       </details>

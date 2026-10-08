@@ -15,34 +15,29 @@
     </nav>
     <main class="wrap">
       <div class="eyebrow">Crossings, coupling & interlacing</div>
-      <h1>Move a line. Watch its roots respond.</h1>
+      <h1>Identity-direction slices and root tracks.</h1>
       <p class="lead">
-        The sliders choose a symmetric 4 × 4 matrix
-        <strong>A = yD + zB</strong>. A separate number s varies in sI + A. Its
-        determinant is a polynomial: the four roots are the values of s that
-        make this matrix singular.
+        Root geometry of det(xI + yD + zB) along L(s) = (s,y,z). The sliders set
+        y and z; s is the univariate coordinate and B is the adjacency matrix of
+        the four-vertex path.
       </p>
       <div class="formula">
         p(s) = P(s,y,z) = det(sI + yD + zB) · D = diag(−3,−1,1,3)
       </div>
       <section class="explainer" id="overview" aria-labelledby="overview-title">
-        <h2 id="overview-title">What is moving, and what is a root?</h2>
+        <h2 id="overview-title">Root tracks & selected slice</h2>
         <div class="explainer-grid">
           <p>
-            <strong>Sliders choose the line; s runs along it.</strong> A matrix
-            pencil is a family built from fixed matrices. Here I is the
-            identity, y scales the diagonal D, and z couples neighboring rows
-            through B (ones next to its diagonal, zeros elsewhere). On the line
-            L(s) = (s,y,z), only the polynomial variable x = s changes; y and z
-            stay fixed for that selected polynomial.
+            <strong>Tracks.</strong> At fixed z, the left panel follows the
+            negative eigenvalues of A(y,z) = yD + zB as y varies. The vertical
+            marker selects y. Colors follow ordered root ranks for z &gt; 0 and
+            diagonal branches at z = 0.
           </p>
           <p>
-            <strong>Roots are negatives of eigenvalues.</strong> If A scales a
-            direction by λ (an eigenvalue), then sI + A scales it by s + λ. It
-            becomes singular at s = −λ. Since A is symmetric, all four
-            eigenvalues and all four roots are real, counting multiplicity. The
-            left panel shows how those root positions change across y; the right
-            panel shows the polynomial at the selected y and z.
+            <strong>Polynomial.</strong> The right panel shows p(s) at the
+            selected y and z: circles mark its roots, diamonds those of p′, and
+            the dashed curve is p′/4. Increasing z couples the diagonal
+            branches, replacing their crossings with avoided crossings.
           </p>
         </div>
       </section>
@@ -114,8 +109,7 @@
               <div class="metric-label">Smallest adjacent gap</div>
               <div class="metric-value" id="gap"></div>
               <div class="metric-sub">
-                Zero means overlapping roots; positive means four distinct
-                roots.
+                Minimum gap between consecutive sorted slice roots.
               </div>
             </div>
             <div class="metric">
@@ -126,8 +120,7 @@
                 style="font-size: 16px"
               ></div>
               <div class="metric-sub">
-                Each derivative root lies between two consecutive polynomial
-                roots. Equality occurs at repeated roots.
+                Weak interlacing, with multiplicities included.
               </div>
             </div>
           </div>
@@ -173,10 +166,9 @@
             ><button id="play">Sweep y</button>
           </div>
           <p class="hint">
-            Colored circles are polynomial roots; diamonds are derivative roots.
-            The dashed curve is p′(s) divided by 4, which changes its scale but
-            keeps its zeros. In the left panel, dashed tracks follow those
-            derivative roots as y changes.
+            y moves the selected line; z controls coupling. Dashed tracks follow
+            derivative roots. The crossing preset sets y = z = 0; Reset stops
+            the sweep.
           </p>
           <div class="readout">
             <h3>Selected line diagnostics</h3>
@@ -195,70 +187,24 @@
           </div>
         </aside>
       </div>
-      <section
-        class="panel guided-tour"
-        id="guided-tour"
-        aria-labelledby="tour-title"
-      >
-        <h2 id="tour-title">Try this in one minute</h2>
-        <p class="caption">
-          This links multivariate determinant geometry to real-rooted
-          polynomials: watch how coupling changes root spacing and how the
-          derivative organizes the gaps.
-        </p>
-        <ol>
-          <li>
-            <strong>Reset, then Sweep y.</strong> The vertical line selects y.
-            Its four colored circles match the roots in the right-hand plot; the
-            three diamonds sit between them.
-          </li>
-          <li>
-            <strong>At the crossing.</strong> This sets y = z = 0, giving p(s) =
-            s⁴. All four roots overlap at zero; p′(s) = 4s³ has three zeros
-            there, counting multiplicity.
-          </li>
-          <li>
-            <strong>Raise Coupling z.</strong> The roots separate and avoid
-            crossing as y moves. Try Zero coupling and Sweep y to see the
-            crossing return. Reset stops the sweep.
-          </li>
-        </ol>
-      </section>
       <details class="notes">
-        <summary>
-          Why coupling opens gaps · interlacing & exact FiniteFree data
-        </summary>
+        <summary>Coupling, interlacing & exact coefficients</summary>
         <p id="exact-line"></p>
         <pre id="coefficients"></pre>
         <p>
-          B connects rows 1–2, 2–3 and 3–4. At z = 0 these links disappear:
-          roots are −y times −3, −1, 1 and 3, so the four diagonal branches
-          cross at y = 0. Their colors follow diagonal identities. At z &gt; 0
-          every link is nonzero; this symmetric tridiagonal matrix has distinct
-          eigenvalues, so roots cannot meet. These are avoided crossings; colors
-          now follow ascending root ranks.
+          At z = 0, p(s) = (s² − y²)(s² − 9y²). At y = z = 0 this becomes s⁴,
+          with derivative 4s³. For z &gt; 0 the symmetric tridiagonal pencil is
+          irreducible and has simple spectrum. Rolle's theorem gives r₁ ≤ d₁ ≤
+          r₂ ≤ d₂ ≤ r₃ ≤ d₃ ≤ r₄ for the sorted polynomial and derivative roots;
+          the inequalities are strict for distinct roots.
         </p>
         <p>
-          Differentiation gives three roots d₁, d₂, d₃ between the four sorted
-          roots r₁, r₂, r₃, r₄. Rolle's theorem gives r₁ ≤ d₁ ≤ r₂ ≤ d₂ ≤ r₃ ≤
-          d₃ ≤ r₄. With distinct polynomial roots, the inequalities are strict.
-          A root repeated m times remains repeated m − 1 times in the
-          derivative, explaining equality at the zero-coupling crossing.
-        </p>
-        <p>
-          FiniteFree constructs the exact multivariate determinant, renames its
-          context with <code>substitute</code>, and calls
-          <code>restrict_line([0,y,z],[1,0,0])</code> at every rational
-          control-grid point. The univariate
-          <code>derivative(monic=False)</code> is checked against the restricted
-          exact multivariate partial derivative. Embedded strings preserve exact
-          coefficients. Browser curves, Jacobi eigenvalues and bracketed
-          derivative roots use Float64; the displayed derivative curve is
-          divided by 4 for scale.
-        </p>
-        <p>
-          These facts concern this identity-direction pencil; the plots do not
-          certify general hyperbolicity or stability. Regenerate with
+          FiniteFree constructs the exact pencil determinant and calls
+          <code>restrict_line([0,y,z],[1,0,0])</code> on the rational control
+          grid. Univariate derivatives are checked against restricted
+          multivariate partials. Embedded coefficients are exact; browser
+          eigenvalues, root positions and residuals use Float64 and supply no
+          general hyperbolicity or stability certificate. Regenerate with
           <code>PYTHONPATH=. python examples/interactive_geometry.py</code>.
         </p>
       </details>
