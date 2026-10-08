@@ -64,22 +64,19 @@ async function run() {
     await page.waitForFunction(() => window.explorerState);
     const beforeExplanation = await state();
     assert.ok(await page.locator("#overview").isVisible());
-    assert.equal(await page.locator("#guided-tour li").count(), 3);
+    assert.equal(await page.locator("#guided-tour").count(), 0);
     const explanation = (await page.locator("#overview").innerText()).replace(
       /\s+/g,
       " ",
     );
     if (name === "hyperbolicity-cone") {
-      assert.match(explanation, /A point is a matrix/);
-      assert.match(
-        explanation,
-        /counts of positive and negative eigenvalues stay constant/,
-      );
-      assert.match(explanation, /boundary pieces.*not chambers themselves/);
+      assert.match(explanation, /connected components.*constant inertia/);
+      assert.match(explanation, /boundary pieces outside the PSD region/);
+      assert.match(explanation, /two negative eigenvalues/);
     } else {
-      assert.match(explanation, /only the polynomial variable x = s changes/);
-      assert.match(explanation, /Roots are negatives of eigenvalues/);
-      assert.match(explanation, /counting multiplicity/);
+      assert.match(explanation, /negative eigenvalues of A/);
+      assert.match(explanation, /ordered root ranks/);
+      assert.match(explanation, /avoided crossings/);
     }
     await page.locator("details.notes summary").focus();
     await page.keyboard.press("Enter");
@@ -148,7 +145,7 @@ async function run() {
       reports.push({
         example: name,
         checks: [
-          "visible matrix/PSD/chamber explanation and three-step guide",
+          "concise section/chamber context without tutorial card",
           "keyboard deeper-math toggle preserves probe state",
           "default PSD/eigenvalue trace",
           "positive determinant with two negative eigenvalues",
@@ -211,7 +208,7 @@ async function run() {
       reports.push({
         example: name,
         checks: [
-          "visible variable/eigenvalue explanation and three-step guide",
+          "concise pencil/root-track context without tutorial card",
           "keyboard deeper-math toggle preserves line state",
           "exact default coefficients",
           "four real roots and residual",
@@ -227,7 +224,7 @@ async function run() {
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(80);
-    for (const id of ["overview", "guided-tour"]) {
+    for (const id of ["overview"]) {
       const box = await page.locator("#" + id).boundingBox();
       assert.ok(box.x >= 0 && box.x + box.width <= 391);
     }
