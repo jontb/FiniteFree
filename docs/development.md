@@ -105,6 +105,35 @@ NODE_PATH=/tmp/finitefree-browser/node_modules node visuals/interactive/browser-
 
 Set `FINITEFREE_BROWSER` to the browser executable if it is not on PATH. CI runs this check on Ubuntu. Neither Playwright nor Node is needed to open the generated HTML. Existing batch visual scripts and their optional Matplotlib/Pillow dependencies are unaffected.
 
+## Spectral dashboards on develop
+
+Five dashboards consolidate the existing spectral visualization families into shared controls and paired plots:
+
+```bash
+OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python examples/spectral_dashboards.py
+```
+
+Open the generated HTML files directly; each embeds its data, styling and scripts and makes no external requests.
+
+| File in `visuals/generated/` | Dropdowns and sliders |
+| --- | --- |
+| `ensemble-convergence.html` | Real/Hermitian Wigner, GSE, real/complex/quaternionic Wishart; applicable Gaussian/Rademacher/uniform coordinates; deterministic Hermite/Laguerre/Legendre roots; size, aspect ratio and recorded sample |
+| `finite-transforms.html` | Wishart finite T-transform or additive-CLT cumulants; dimension, aspect ratio and probe t |
+| `convolution-interlacing.html` | Additive or multiplicative convolution; exact rational input-root shift |
+| `hermite-kernels.html` | Bulk/sine or soft-edge/Airy kernel section; projection rank |
+| `unitary-root-flow.html` | Degree and time; polynomial phase portrait and angular root tracks |
+
+Ensemble plots distinguish a single sampled ESD from an expected-polynomial root measure. Covariance normalization is `XX*/n`, with γ = d/n and zero atom `max(0,1−1/γ)`; the quaternionic complex representation uses `XX*/(2n)` and one eigenvalue per pair. Histograms exclude the structural atom and retain probability normalization; CDFs retain all finite mass. Recorded seeds are reproducible within the numerical environment, with independently generated matrices across dimensions. Bounded-entry models use independent centered, variance-one coordinates and Wigner off-diagonal variance 1/d; GSE remains Gaussian. Gaussian samplers and polynomial construction use public FiniteFree APIs. Rendering and matrix diagonalization are Float64 approximations, not certificates.
+
+Wishart T-transform steps retain exact rational values and the right-continuous jump convention. The additive CLT uses even square dimensions so its dilation is rational; finite variance is d/(d−1), rather than exactly one. Hermite kernel sections use normalized function recurrence, not random ESDs. Unitary roots at t = 0 are inserted from the exact coalesced polynomial; positive-time roots retain the public companion solver's numerical radial defect.
+
+```bash
+PYTHONPATH=. python -m pytest --import-mode=importlib scripts/tests/test_spectral_dashboards.py
+NODE_PATH=/tmp/finitefree-browser/node_modules node visuals/interactive/dashboard-check.cjs visuals/generated visuals/generated/dashboard-screenshots
+```
+
+CI generates both the geometry explorers and spectral dashboards, exercises dropdowns, slider endpoints, jumps, zero atoms, sample selection, sweep/reset and desktop/tablet/phone layouts, and saves the HTML and screenshots as a development artifact. Mathematical references include [Menon's random matrix notes](https://www.dam.brown.edu/people/menon/publications/rmt-2021.pdf), [S-transform in finite free probability](https://arxiv.org/abs/2408.09337), and [unitary Hermite polynomials](https://arxiv.org/abs/2203.05533). Existing batch-only compound-Wishart/free-lognormal and continuous-gap illustrations remain separate; their analytical-branch and quadrature validation are outside these dashboards.
+
 ## Benchmarks
 
 These small cases exercise all five benchmark tools. They write JSON only at the supplied output paths:
