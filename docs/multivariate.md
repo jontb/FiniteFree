@@ -301,8 +301,9 @@ PYTHONPATH=. python scripts/benchmark_prepared_pencils.py --backend cupy --size 
 The JSON separates context startup, preparation, coefficient/input/output
 transfers, first factor/derivative calls, synchronized warm factorization,
 reused-factor HVPs, cached gradients, CUDA-event time, numerical error and memory.
-It records failures and never emulates a GPU. Python traced memory and an isolated
-CuPy pool high-water allocation are useful partial measurements, **not total
-native/device peak memory**; collect external telemetry for that. Compare matching
+It records failures and never emulates a GPU. Native process peak RSS (where available) is cumulative and includes imports,
+setup and prior cases. Python traced memory and an isolated CuPy pool high-water
+allocation are partial measurements, **not total device peak memory**; collect
+external telemetry for that. Compare matching
 matrix sizes, batches, dtype, thread limits and accuracy before locating a measured
 CPU/GPU crossover. No GPU speedup is established by CPU tests or CPU timings.

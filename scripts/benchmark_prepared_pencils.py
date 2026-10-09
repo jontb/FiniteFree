@@ -29,9 +29,20 @@ def timed(call: Callable[[], Any], sync: Callable[[], Any]) -> tuple[Any, float]
     return result, time.perf_counter() - start
 
 
+def process_peak_rss_bytes() -> int | None:
+    """Native process high-water RSS, including imports/setup and prior cases."""
+    try:
+        resource = importlib.import_module("resource")
+    except ImportError:
+        return None
+    scale = 1 if platform.system() == "Darwin" else 1024
+    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * scale
+
+
 def benchmark(
     backend: str, n: int, m: int, batches: list[int], repeats: int
 ) -> dict[str, Any]:
+    initial_rss = process_peak_rss_bytes()
     xp: Any = np
     device = None
 
@@ -149,6 +160,7 @@ def benchmark(
                 "cached_gradient_samples_seconds": gradient_samples,
                 "cuda_event_hvp_samples_seconds": event_samples,
                 "python_traced_peak_bytes": traced_peak,
+                "process_peak_rss_bytes": process_peak_rss_bytes(),
                 "isolated_cupy_pool_high_water_bytes": device_peak,
                 "coefficient_storage_bytes": 2 * m * n * n * 8,
                 "lu_storage_bytes_excluding_pivots": batch * n * n * 8,
@@ -182,11 +194,12 @@ def benchmark(
         "matrix_size": n,
         "variables": m,
         "context_initialization_seconds": context_seconds,
+        "initial_process_peak_rss_bytes": initial_rss,
         "coefficient_transfer_seconds": coefficient_transfer
         if backend == "cupy"
         else 0.0,
         "preparation_seconds": preparation,
-        "memory_note": "Traced Python memory and isolated CuPy pool high-water are not total native/device peak memory. Record external peak RSS/device telemetry separately. Outputs, coefficients and existing factors are excluded from the isolated pool.",
+        "memory_note": "Process peak RSS is cumulative, includes imports/setup/prior cases, and is unavailable on platforms without resource. Traced Python memory and isolated CuPy pool high-water are not total device peak memory. Record external device telemetry separately. Outputs, coefficients and existing factors are excluded from the isolated pool.",
         "timing_note": "Wall timings synchronize the current stream. First calls are process/device warm after imports/context initialization; use a fresh process per backend for cold context cost. CUDA events cover reused HVP queries including host submission gaps. CPU records never imply GPU speedups. Compare matching backend runs across batches to locate a crossover.",
         "records": records,
     }
