@@ -17,6 +17,9 @@ def test_workflow_runs_and_retains_sampling_units() -> None:
     state = np.random.get_state()
     result = workflow.run_workflow(dimension=3, samples=8, seed=81)
     after = np.random.get_state()
+    # NumPy stubs also allow non-legacy dict states; these calls request the
+    # default legacy tuple. Narrow explicitly across supported NumPy versions.
+    assert isinstance(state, tuple) and isinstance(after, tuple)
     assert state[0] == after[0]
     np.testing.assert_array_equal(state[1], after[1])
     assert state[2:] == after[2:]

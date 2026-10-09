@@ -14,6 +14,12 @@ from finitefree import (
 )
 
 
+def exact_rational(value: Any) -> sp.Rational:
+    # SymPy 1.12 does not reliably coerce FLINT fmpq directly. Preserve the
+    # exact numerator/denominator instead of passing through a float/string.
+    return sp.Rational(int(value.p), int(value.q))
+
+
 @pytest.mark.parametrize("d", [1, 2, 5, 12])
 def test_composed_gue_measures(d: int) -> None:
     p = gue_expected_poly(d)
@@ -78,12 +84,12 @@ def test_scaled_shifted_signed_basis(variance: Any, center: Any, mass: Any) -> N
     for a, b in [(0.3, 1.2), (0.5, 0.5), (0.5, float(np.nextafter(0.5, 1.0)))]:
         aq, bq = sp.Rational(a), sp.Rational(b)
         expected = sum(
-            sp.Rational(poly.evaluate(aq)) * sp.Rational(poly.evaluate(bq)) / norm
+            exact_rational(poly.evaluate(aq)) * exact_rational(poly.evaluate(bq)) / norm
             for poly, norm in zip(polys[:-1], norms)
         )
         assert kernel(a, b) == pytest.approx(float(expected), rel=3e-13, abs=1e-12)
         assert kernel(a, b) == kernel(b, a)
-        assert sp.Rational(kernel(aq, bq)) == expected
+        assert exact_rational(kernel(aq, bq)) == expected
     before = kernel(0.3, 1.2)
     polys[1]._fmpq_poly[0] = 999
     kernel.polys[2]._fmpq_poly[0] = 999
@@ -125,7 +131,7 @@ def test_inconsistent_data_does_not_dispatch() -> None:
     kernel = OrthogonalPolynomialKernel(basis, [3 * h for h in norms])
     assert kernel._hermite_parameters is not None
     exact = sum(
-        sp.Rational(poly.evaluate(sp.Rational(1, 2))) ** 2 / (3 * h)
+        exact_rational(poly.evaluate(sp.Rational(1, 2))) ** 2 / (3 * h)
         for poly, h in zip(basis[:-1], norms)
     )
     assert kernel(0.5, 0.5) == pytest.approx(float(exact))
