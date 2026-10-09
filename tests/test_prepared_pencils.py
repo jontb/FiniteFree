@@ -1,8 +1,10 @@
 import importlib
+import warnings
 from typing import Any
 
 import numpy as np
 import pytest
+import scipy.linalg as sla
 
 from finitefree.hyperbolic import (
     MultiplicativeMatrixPencil,
@@ -223,7 +225,93 @@ def test_real_gpu_parity() -> None:
         )
     with pytest.raises(TypeError, match="resident"):
         gpu.factor(np.ones(2))
-    singular = gpu.factor(cp.array([1.0, 1.0]))
-    assert singular.slogdet()[0].item() == 0
-    with pytest.raises(np.linalg.LinAlgError):
-        singular.logabsdet_gradient()
+    # Genuine-device coverage: zero and rank-deficient matrices, mixed batches,
+    # and strict warnings. This entire test remains skipped without a real GPU.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for points in (
+            cp.array([1.0, 1.0]),
+            cp.array([0.0, 0.0]),
+            cp.array([[0.0, 0.0], [1.0, 1.0], [2.0, 0.0]]),
+        ):
+            singular = gpu.factor(points)
+            sign, log = singular.slogdet()
+            expected = cpu.factor(cp.asnumpy(points)).slogdet()
+            np.testing.assert_array_equal(cp.asnumpy(sign), expected[0])
+            np.testing.assert_allclose(cp.asnumpy(log), expected[1])
+            with pytest.raises(np.linalg.LinAlgError):
+                singular.logabsdet_gradient()
+            with pytest.raises(np.linalg.LinAlgError):
+                singular.logabsdet_hvp(cp.ones(2))
+
+
+@pytest.mark.parametrize("category", [RuntimeWarning, sla.LinAlgWarning])
+def test_singular_solver_warning_contract_under_warnings_as_errors(
+    monkeypatch: pytest.MonkeyPatch, category: type[Warning]
+) -> None:
+    """CPU fault injection checks warning dispatch, not GPU numerical parity."""
+    import warnings
+
+    import scipy.linalg as sla
+
+    prepared = PreparedMatrixPencil(coefficients())
+    original = sla.lu_factor
+
+    def singular_diagnostic(matrix: Any, **kwargs: Any) -> Any:
+        if np.all(matrix == 0):
+            warnings.warn(
+                "Diagonal number 1 is exactly zero. Singular matrix.",
+                category,
+                stacklevel=2,
+            )
+            # A backend can return invalid singular factors if the diagnostic
+            # is ignored. They must never become derivative solve inputs.
+            return np.full_like(matrix, np.nan), np.arange(len(matrix))
+        return original(matrix, **kwargs)
+
+    monkeypatch.setattr(sla, "lu_factor", singular_diagnostic)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        factors = prepared.factor(np.array([[0.0, 0.0], [2.0, 1.0]]))
+        signs, logs = factors.slogdet()
+        np.testing.assert_array_equal(signs, [0.0, 1.0])
+        assert np.isneginf(logs[0])
+        assert logs[1] == pytest.approx(np.log(3.0))
+        with pytest.raises(np.linalg.LinAlgError, match="nonsingular"):
+            factors.logabsdet_gradient()
+        with pytest.raises(np.linalg.LinAlgError, match="nonsingular"):
+            factors.logabsdet_hvp(np.ones(2))
+
+
+@pytest.mark.parametrize("invalid", [np.nan, np.inf])
+def test_nonfinite_lu_without_singular_diagnostic_is_not_hidden(
+    monkeypatch: pytest.MonkeyPatch, invalid: float
+) -> None:
+    import scipy.linalg as sla
+
+    def invalid_factor(matrix: Any, **kwargs: Any) -> Any:
+        return np.full_like(matrix, invalid), np.arange(len(matrix))
+
+    monkeypatch.setattr(sla, "lu_factor", invalid_factor)
+    with pytest.raises(FloatingPointError, match="Nonfinite"):
+        PreparedMatrixPencil(coefficients()).factor(np.array([2.0, 1.0]))
+
+
+def test_unrelated_solver_warning_is_not_suppressed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import warnings
+
+    import scipy.linalg as sla
+
+    def overflow_diagnostic(matrix: Any, **kwargs: Any) -> Any:
+        warnings.warn(
+            "overflow encountered in factorization", RuntimeWarning, stacklevel=2
+        )
+        return matrix, np.arange(len(matrix))
+
+    monkeypatch.setattr(sla, "lu_factor", overflow_diagnostic)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(RuntimeWarning, match="overflow"):
+            PreparedMatrixPencil(coefficients()).factor(np.array([2.0, 1.0]))

@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import importlib
 import operator
+import re
 import warnings
 from contextlib import nullcontext
 from typing import Any
 
 import numpy as np
 import scipy.linalg as sla
+
+_SINGULAR_LU_WARNING = (
+    r"Diagonal number [1-9][0-9]* is exactly zero\. Singular matrix\."
+)
 
 
 def _positive_size(value: int, name: str) -> int:
@@ -146,33 +151,50 @@ class PreparedMatrixPencil:
             result[start:stop] = self._assemble(flat[start:stop])
         return result.reshape(*shape, self.n, self.n)
 
+    def _factor_matrix(self, matrix: Any) -> tuple[Any, Any] | None:
+        # SciPy uses LinAlgWarning; CuPy uses RuntimeWarning for positive GETRF
+        # info. Convert ONLY that exact diagnostic to a local exception so no
+        # unusable singular LU (which CuPy may fill with NaNs) is retained or
+        # inspected. This also works under caller warnings-as-errors policies.
+        # All other warnings/errors retain their original behavior; nonfinite
+        # LU without an explicit singular diagnostic still fails validation.
+        try:
+            with warnings.catch_warnings():
+                for category in (sla.LinAlgWarning, RuntimeWarning):
+                    warnings.filterwarnings(
+                        "error", message=f"^{_SINGULAR_LU_WARNING}$", category=category
+                    )
+                lu, piv = self._linalg.lu_factor(matrix, check_finite=False)
+        except (sla.LinAlgWarning, RuntimeWarning) as error:
+            if re.fullmatch(_SINGULAR_LU_WARNING, str(error)) is None:
+                raise
+            return None
+        self._finite_result(lu)
+        return lu, piv
+
     def factor(self, points: Any) -> PencilFactorization:
         """Own LU factors for a point snapshot, reusable across derivative queries.
 
-        Singular matrices are retained for slogdet but all derivative queries
+        Singular points are recorded for slogdet but all derivative queries
         reject a batch containing one. No tolerance truncates near-singular
         matrices; their derivatives remain conditioning-dependent.
         """
         flat, shape = self._points(points)
         xp = self._xp
-        factors: list[tuple[Any, Any]] = []
+        factors: list[tuple[Any, Any] | None] = []
         signs = xp.empty(len(flat), dtype=np.float64)
         logs = xp.empty(len(flat), dtype=np.float64)
         indices = xp.arange(self.n)
         for start in range(0, len(flat), self._point_block):
             matrices = self._assemble(flat[start : start + self._point_block])
             for offset, matrix in enumerate(matrices):
-                # Positive LU info denotes singularity, a valid slogdet result.
-                context = (
-                    self._cupyx.errstate(linalg="ignore")
-                    if self._cupyx is not None
-                    else nullcontext()
-                )
-                with context, warnings.catch_warnings():
-                    warnings.simplefilter("ignore", sla.LinAlgWarning)
-                    lu, piv = self._linalg.lu_factor(matrix, check_finite=False)
-                self._finite_result(lu)
-                factors.append((lu, piv))
+                factor = self._factor_matrix(matrix)
+                factors.append(factor)
+                if factor is None:
+                    signs[start + offset] = 0.0
+                    logs[start + offset] = -xp.inf
+                    continue
+                lu, piv = factor
                 diagonal = xp.diagonal(lu)
                 parity = xp.count_nonzero(piv != indices) % 2
                 signs[start + offset] = (1 - 2 * parity) * xp.prod(xp.sign(diagonal))
@@ -194,7 +216,7 @@ class PencilFactorization:
     def __init__(
         self,
         pencil: PreparedMatrixPencil,
-        factors: list[tuple[Any, Any]],
+        factors: list[tuple[Any, Any] | None],
         signs: Any,
         logs: Any,
         shape: tuple[int, ...],
@@ -241,6 +263,7 @@ class PencilFactorization:
         )
         hvp = xp.empty_like(gradient) if directions is not None else None
         for row, factor in enumerate(self._factors):
+            assert factor is not None  # Singular batches were rejected above.
             bv = None
             if directions is not None:
                 av = p._assemble(directions[row : row + 1])[0]

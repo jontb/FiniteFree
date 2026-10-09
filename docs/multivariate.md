@@ -257,6 +257,10 @@ there is no CPU fallback when the GPU backend is requested.
 - Numerical domain: finite float64 only. Finite checks occur at API boundaries
   and after assembly/solves to catch overflow. Exact singular LU pivots produce
   `(0,-inf)`; derivatives reject an entire batch containing a singular matrix.
+  The exact singular-pivot warning from SciPy/CuPy is handled even under
+  warnings-as-errors; CuPy may leave unusable NaNs in singular LU factors, so
+  these are discarded. Other solver warnings and unexplained nonfinite LU
+  results are not suppressed.
   No pseudoinverse, determinant-magnitude threshold, lower precision or
   regularization is substituted. Near-singular derivatives can be inaccurate
   because of conditioning, and nonfinite results raise `FloatingPointError`.
