@@ -41,6 +41,7 @@ nav:
   - API Reference: api.md
   - Tutorial: tutorial.md
   - Multivariate Workflows: multivariate.md
+  - GUE Spectral Workflow: gue-workflow.md
   - Development: development.md
   - Release Review: release.md
 validation:
