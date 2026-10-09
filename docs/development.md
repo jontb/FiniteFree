@@ -157,3 +157,44 @@ The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison
 ## Release validation
 
 The 0.2.0 release includes the compatible symmetric S convention and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md). Follow the [release review checklist](release.md) to inspect artifacts and checks on the final commit. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+
+## Prepared pencil validation checklist
+
+Cloud inspection on 2026-10-09: AMD EPYC 9V45, x86_64; 5 visible CPU threads,
+4-core cgroup quota, 16 GiB memory limit. No NVIDIA/DRI device nodes, no
+`nvidia-smi`, and no CuPy installation. This environment supports CPU verification;
+real GPU validation is **pending**, not inferred from CPU parity or mocks.
+
+- [x] Prepared float64 coefficients, batch evaluation, reusable pivoted LU,
+  slogdet, log-absolute-determinant gradient and HVP.
+- [x] CPU analytic/exact/finite-difference coverage, singular and near-singular
+  cases, zero coordinates, empty/strided arrays, ownership and backend absence.
+- [x] Benchmark harness separates setup, transfers, synchronized execution,
+  reuse, partial memory measurements, errors and failures.
+- [ ] Obtain access to an already authorized real **cloud** GPU. No local-computer
+  execution, paid compute or external GPU provisioning is authorized.
+- [ ] Record device model, driver/runtime/CuPy versions and actual float64
+  precision; run GPU tests, including CPU parity and singular handling.
+- [ ] Measure cold startup and warm latency, all transfer costs and total peak
+  device/native memory; retain individual samples and failure records.
+- [ ] Measure crossover batch sizes for matching matrix/variable sizes and
+  accuracy. Do not publish speed claims before obtaining that evidence.
+- [ ] Later milestones: compiled sparse-polynomial GPU evaluation and exact
+  modular GPU construction (outside prepared-pencil scope).
+
+### Internal spectral workflow track
+
+Keep this separate from prepared-pencil implementation. Compose existing GUE
+sampling, expected characteristic polynomials, projected orthogonal bases, DPP
+kernels and empirical comparisons using one consistent Gaussian measure. Reuse
+exact-verified scaled Hermite recurrence data where it avoids monomial evaluation;
+preserve generic fallbacks and public signatures. Include a runnable workflow and
+exact integration checks. The finite-size mean ESD differs from the zero measure
+of the expected characteristic polynomial. No new mathematical APIs are implied.
+
+- [ ] Subsequent concentration showcase: use a normalized spectral statistic
+  across increasing GUE matrix sizes, compare observed fluctuations with an
+  applicable variance/concentration result, and separately quantify Monte Carlo
+  estimation uncertainty. Exercise the same ensemble/polynomial/kernel workflow;
+  increasing sample count is not increasing concentration in matrix size. Keep
+  the simulation bounded and add it after the current integration is reviewed.

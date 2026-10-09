@@ -211,3 +211,103 @@ p = MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(
 x, y, z = p.variables
 assert sp.expand(p.expr - x * (y - 2*z)) == 0
 ```
+
+## Prepared numerical pencils (develop)
+
+For repeated numerical queries, call `prepare_numeric()` on a symmetric or
+multiplicative pencil. It takes an owned snapshot of the existing float64 matrix
+view. No determinant polynomial is expanded, and exact FLINT methods and existing
+SLP/polynomial derivative behavior are unchanged.
+
+```python
+import numpy as np
+from finitefree.hyperbolic import SymmetricMatrixPencil
+
+pencil = SymmetricMatrixPencil([np.eye(2), np.array([[0., 1.], [1., 0.]])])
+prepared = pencil.prepare_numeric(point_block_size=64, coefficient_block_size=16)
+points = np.array([[2., 0.], [2., 1.]])
+factors = prepared.factor(points)
+sign, logabsdet = factors.slogdet()
+gradient = factors.logabsdet_gradient()
+hvp = factors.logabsdet_hvp(np.array([1., 0.]))
+assert np.allclose(logabsdet, np.log([4., 3.]))
+assert np.allclose(gradient, [[1., 0.], [4./3., -2./3.]])
+```
+
+`PreparedMatrixPencil(matrices, backend="numpy")` also accepts an already numeric
+resident float64 array `(m,n,n)`, with positive m and n. The object owns both a
+coefficient snapshot and packed right-hand sides: approximately `2*m*n*n*8` bytes.
+There is deliberately no implicit dtype conversion in this constructor or its
+queries. To use CuPy, install the CuPy distribution appropriate for the cloud
+GPU's CUDA runtime, select `backend="cupy"`, and transfer point/direction arrays
+explicitly with `cupy.asarray`. The pencil's `prepare_numeric(backend="cupy")`
+convenience method explicitly transfers the coefficients once. CuPy is optional;
+there is no CPU fallback when the GPU backend is requested.
+
+- Coordinates: resident float64 arrays `(...,m)`, including zero coordinates,
+  arbitrary leading batch axes, strided inputs and empty batches. Lists, complex,
+  object, integer and float32 query arrays are rejected. Convert deliberately
+  before repeated calls. Strided reshaping can copy; contiguous inputs avoid it.
+- Results: `evaluate` returns `(...,n,n)`; `slogdet` returns two arrays of shape
+  `(...)`, including zero-dimensional arrays for a single point. Gradient/HVP
+  return `(...,m)`. HVP directions are `(m,)` or exactly the point shape.
+- Ownership: prepared coefficients and LU factors do not alias caller inputs.
+  Output arrays are caller-owned; cached gradients and slogdet survive edits to
+  prior outputs. Retaining a factorization also retains its prepared pencil.
+- Numerical domain: finite float64 only. Finite checks occur at API boundaries
+  and after assembly/solves to catch overflow. Exact singular LU pivots produce
+  `(0,-inf)`; derivatives reject an entire batch containing a singular matrix.
+  The exact singular-pivot warning from SciPy/CuPy is handled even under
+  warnings-as-errors; CuPy may leave unusable NaNs in singular LU factors, so
+  these are discarded. Other solver warnings and unexplained nonfinite LU
+  results are not suppressed.
+  No pseudoinverse, determinant-magnitude threshold, lower precision or
+  regularization is substituted. Near-singular derivatives can be inaccurate
+  because of conditioning, and nonfinite results raise `FloatingPointError`.
+  These are derivatives of `log(abs(det(A(x))))`, not of the determinant.
+- Cone domain: general real nonsingular pencils, including indefinite and
+  asymmetric matrices, are supported. Positive determinant is not a test for
+  positive definiteness; this milestone supplies no cone-specific operation.
+- Reuse: one pivoted LU per point supplies slogdet and all subsequent solves.
+  The first HVP caches the gradient using those same coefficient solves.
+  Repeated gradient/slogdet queries copy cached results. Repeated HVPs reuse LU
+  and packed coefficients but recompute coefficient solves to bound memory.
+  No inverse or full Hessian is formed. LU currently dispatches one matrix at a
+  time through SciPy or CuPy's public two-dimensional LU interface.
+- Blocking: `point_block_size` bounds matrix-assembly scratch, and
+  `coefficient_block_size` bounds RHS-solve scratch. Factors retain
+  `O(batch*n*n)` storage, gradients `O(batch*m)`, and HVP scratch includes
+  `O(coefficient_block_size*n*n)`. Output storage, persistent coefficients,
+  backend workspaces and any input-contiguity copy are not covered by block
+  sizes. Split very large inputs into external batches to bound total memory.
+- Device: CuPy coefficients, factors, inputs and outputs remain on the same
+  preparation device. A changed current device or cross-device input is an
+  error. Operations use the current stream; callers must order multiple streams.
+  Validation and solver status checks can synchronize. No array is implicitly
+  copied back to the CPU, but scalar validation decisions are host-visible.
+
+The backend uses the official CuPy
+[LU factorization](https://docs.cupy.dev/en/stable/reference/generated/cupyx.scipy.linalg.lu_factor.html)
+and [solve](https://docs.cupy.dev/en/stable/reference/generated/cupyx.scipy.linalg.lu_solve.html)
+contracts. GPU execution remains unverified in this milestone's CPU-only cloud
+environment; see the [validation checklist](development.md#prepared-pencil-validation-checklist).
+
+### Prepared pencil benchmark
+
+Run each backend in a separate process; start with small cases:
+
+```bash
+OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python scripts/benchmark_prepared_pencils.py --backend numpy --size 16 --variables 4 --batches 1 16 128 --output /tmp/pencils-cpu.json
+# Run only on an available cloud GPU with a compatible CuPy installation:
+PYTHONPATH=. python scripts/benchmark_prepared_pencils.py --backend cupy --size 16 --variables 4 --batches 1 16 128 --output /tmp/pencils-gpu.json
+```
+
+The JSON separates context startup, preparation, coefficient/input/output
+transfers, first factor/derivative calls, synchronized warm factorization,
+reused-factor HVPs, cached gradients, CUDA-event time, numerical error and memory.
+It records failures and never emulates a GPU. Native process peak RSS (where available) is cumulative and includes imports,
+setup and prior cases. Python traced memory and an isolated CuPy pool high-water
+allocation are partial measurements, **not total device peak memory**; collect
+external telemetry for that. Compare matching
+matrix sizes, batches, dtype, thread limits and accuracy before locating a measured
+CPU/GPU crossover. No GPU speedup is established by CPU tests or CPU timings.

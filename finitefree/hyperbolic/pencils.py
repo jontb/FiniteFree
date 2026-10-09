@@ -1,5 +1,5 @@
 import math
-from typing import Any, List, Sequence
+from typing import TYPE_CHECKING, Any, List, Sequence
 
 import flint
 import numpy as np
@@ -13,6 +13,9 @@ from ..utils.parallel import (
     ParallelScheduler,
     _eval_diagonal_specialization_prime_worker,
 )
+
+if TYPE_CHECKING:
+    from .prepared import PreparedMatrixPencil
 
 
 def _prepare_matrices(
@@ -73,6 +76,37 @@ class SymmetricMatrixPencil:
         self.matrices, self._matrices_exact = _prepare_matrices(matrices, True)
         self.m = len(self.matrices)
         self.n = self.matrices[0].shape[0]
+
+    def prepare_numeric(
+        self,
+        *,
+        backend: str = "numpy",
+        point_block_size: int = 64,
+        coefficient_block_size: int = 16,
+    ) -> "PreparedMatrixPencil":
+        """Copy the numerical view once; CuPy explicitly transfers it to the GPU.
+
+        Retain the returned object for repeated resident float64 batch queries.
+        Subsequent edits to this pencil's matrices do not change that snapshot.
+        Exact coefficients and existing polynomial/SLP methods are unaffected.
+        """
+        from .prepared import PreparedMatrixPencil
+
+        matrices = np.stack(self.matrices)
+        if backend == "cupy":
+            import importlib
+
+            try:
+                cp = importlib.import_module("cupy")
+            except ImportError as error:
+                raise ImportError("backend='cupy' requires CuPy") from error
+            matrices = cp.asarray(matrices)
+        return PreparedMatrixPencil(
+            matrices,
+            backend=backend,
+            point_block_size=point_block_size,
+            coefficient_block_size=coefficient_block_size,
+        )
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         r"""
@@ -303,6 +337,37 @@ class MultiplicativeMatrixPencil:
         self.matrices, self._matrices_exact = _prepare_matrices(matrices, False)
         self.m = len(self.matrices)
         self.n = self.matrices[0].shape[0]
+
+    def prepare_numeric(
+        self,
+        *,
+        backend: str = "numpy",
+        point_block_size: int = 64,
+        coefficient_block_size: int = 16,
+    ) -> "PreparedMatrixPencil":
+        """Copy the numerical view once; CuPy explicitly transfers it to the GPU.
+
+        Retain the returned object for repeated resident float64 batch queries.
+        Subsequent edits to this pencil's matrices do not change that snapshot.
+        Exact coefficients and existing polynomial/SLP methods are unaffected.
+        """
+        from .prepared import PreparedMatrixPencil
+
+        matrices = np.stack(self.matrices)
+        if backend == "cupy":
+            import importlib
+
+            try:
+                cp = importlib.import_module("cupy")
+            except ImportError as error:
+                raise ImportError("backend='cupy' requires CuPy") from error
+            matrices = cp.asarray(matrices)
+        return PreparedMatrixPencil(
+            matrices,
+            backend=backend,
+            point_block_size=point_block_size,
+            coefficient_block_size=coefficient_block_size,
+        )
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         if len(x) != self.m:
