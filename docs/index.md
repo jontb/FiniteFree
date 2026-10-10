@@ -17,6 +17,8 @@ To prevent numerical floating-point drift and avoid the computational complexity
 
 The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
 
+On `develop`, interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](development.md#documentation). They are development examples, not additions to the published 0.2.0 API.
+
 ??? "1. Limiting Distributions of Free Convolutions"
 
     Animates the convergence of root distributions of expectation polynomials towards their theoretical free probability limits as the dimension/degree $d$ scales up to 300:
@@ -30,9 +32,13 @@ The following pre-rendered figures illustrate selected finite-degree examples an
     | :---: | :---: |
     | ![Wigner Semicircle Convergence](visuals/assets/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/assets/marchenko_pastur_convergence.gif) |
 
+    Interactive companion: [Open ensemble convergence](visuals/interactive/ensemble-convergence.html) to compare sampled spectra and Hermite/Laguerre/Legendre root measures with their limiting laws.
+
     | Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 300$) |
     | :---: | :---: |
     | ![Free Jacobi Arcsine Convergence](visuals/assets/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/assets/free_lognormal_convergence.gif) |
+
+    Interactive companion: [Open ensemble convergence](visuals/interactive/ensemble-convergence.html) and select Legendre roots for the arcsine comparison or compound Wishart for a bounded-degree, mean-one free-lognormal comparison (τ = 1).
 
 
 ??? "2. Determinantal Point Processes & Spectral Universality"
@@ -41,16 +47,20 @@ The following pre-rendered figures illustrate selected finite-degree examples an
 
     - **CD Bulk Scaling Limit**: Christoffel-Darboux kernel bulk scaling limit convergence to the infinite Sine kernel.
     - **CD Edge Scaling Limit**: Christoffel-Darboux kernel edge scaling limit convergence to the infinite Airy kernel.
-    - **Tracy-Widom Edge Convergence**: Empirical max eigenvalue CDF from HKPV samples converging to the Tracy-Widom (Fredholm determinant) distribution.
+    - **Tracy-Widom Edge Convergence**: The batch illustration compares HKPV max-eigenvalue samples with a finite-rank continuous Hermite determinant. The interactive companion separately compares finite-rank Hermite CDFs with an Airy-kernel approximation to Tracy–Widom β = 2.
     - **Nearest-Neighbor Level Repulsion**: GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
 
     | CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
     | :---: | :---: |
     | ![Asymptotic Bulk Scaling](visuals/assets/asymptotic_kernel_bulk.gif) | ![Asymptotic Edge Scaling](visuals/assets/asymptotic_kernel_edge.gif) |
 
+    Interactive companion: [Open Hermite kernels](visuals/interactive/hermite-kernels.html) to switch between bulk/sine and soft-edge/Airy sections and vary the projection rank.
+
     | Tracy-Widom Edge Convergence ($d=100$) | Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
     | :---: | :---: |
     | ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) | ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
+
+    Interactive companion: [Open Hermite kernels](visuals/interactive/hermite-kernels.html) and select continuous gap / edge CDF. Vary rank and threshold; inspect quadrature and tail-cutoff sensitivity beside the finite-rank and Tracy–Widom β = 2 curves.
 
 
 ??? "3. Algebraic Properties"
@@ -65,9 +75,13 @@ The following pre-rendered figures illustrate selected finite-degree examples an
     | :---: | :---: | :---: |
     | ![Original Roots](visuals/assets/root_interlacing_original.png) | ![Additive Interlacing](visuals/assets/root_interlacing_additive.png) | ![Multiplicative Interlacing](visuals/assets/root_interlacing_multiplicative.png) |
 
+    Interactive companions: [Open convolution interlacing](visuals/interactive/convolution-interlacing.html) for additive/multiplicative examples, or [Open moving line roots](visuals/interactive/moving-line-roots.html) for matrix-pencil restrictions and derivative interlacing.
+
     | Hyperbolic Matrix Pencil Eigencones & Topography | Unitary Hermite Eigenvalue Repulsion Trajectories |
     | :---: | :---: |
     | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) | ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+
+    Interactive companions: [Open the hyperbolicity cone explorer](visuals/interactive/hyperbolicity-cone.html) for linked cone sections, or [Open unitary root flow](visuals/interactive/unitary-root-flow.html) to vary degree and time.
 
 
 ??? "4. Asymptotic Convergence of Finite Free Transforms"
@@ -82,6 +96,8 @@ The following pre-rendered figures illustrate selected finite-degree examples an
     | Fujie-Ueda T-Transform Convergence | Asymptotic Decay of Cumulants |
     | :---: | :---: |
     | ![T-Transform Convergence](visuals/assets/t_transform_convergence.gif) | ![Cumulant Decay](visuals/assets/cumulant_decay.gif) |
+
+    Interactive companion: [Open finite transforms](visuals/interactive/finite-transforms.html) for the Wishart T-transform and additive-CLT cumulants. The S-transform and Cauchy-domain animations remain separate batch illustrations.
 
     | S-Transform Convergence | Cauchy Transform Convergence |
     | :---: | :---: |
