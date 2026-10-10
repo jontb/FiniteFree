@@ -117,6 +117,8 @@ NODE_PATH=/tmp/finitefree-browser/node_modules node visuals/interactive/browser-
 
 Set `FINITEFREE_BROWSER` to the browser executable if it is not on PATH. CI runs this check on Ubuntu. Neither Playwright nor Node is needed to open the generated HTML. Existing batch visual scripts and their optional Matplotlib/Pillow dependencies are unaffected.
 
+For managed browsers that disallow `file://`, serve only the generated directory with `python -m http.server 8765 --bind 127.0.0.1 --directory visuals/generated`, then set `FINITEFREE_BASE_URL=http://127.0.0.1:8765/` on either browser-check command. The optional transport accepts only loopback HTTP; Chromium sandboxing remains enabled and any non-navigation network request still fails the checks. The standalone files themselves need no server in browsers that permit local HTML.
+
 ## Spectral dashboards on develop
 
 Five dashboards consolidate the existing spectral visualization families into shared controls and paired plots:
@@ -131,7 +133,11 @@ Open the generated HTML files directly; each embeds its data, styling and script
 
 [Open ensemble convergence](visuals/interactive/ensemble-convergence.html) in a built documentation site, or generate and open `visuals/generated/ensemble-convergence.html` from the source checkout.
 
-Choose real/Hermitian Wigner, GSE or real/complex/quaternionic Wishart; applicable Gaussian/Rademacher/uniform coordinates; or deterministic Hermite/Laguerre/Legendre roots. Vary size, aspect ratio and recorded sample.
+Choose real/Hermitian Wigner, GSE or real/complex/quaternionic Wishart; applicable Gaussian/Rademacher/uniform coordinates; or deterministic Hermite/Laguerre/Legendre/compound-Wishart roots. Vary size, aspect ratio and recorded sample.
+
+The compound-Wishart option keeps τ = 1: degree d, d multiplicative factors, and n = d². It records only d = 8,16,32,64, using exact normalized coefficients of the mean-one Wishart polynomial raised to the d-th power and scoped 192-bit root isolation. There is no expensive root solve in the browser. Tests independently construct the coefficients and compare all recorded roots with a 384-bit Arb reference; displayed Float64 values are not interval certificates.
+
+The mean-one free-lognormal convention is S(w) = exp(−w), with moments m₀,m₁,m₂,m₃ = 1,1,2,11/2. The finite coefficient ratio is (1−(k−1)/d²)^(−d), tending to exp(t) when k/d → t, consistent with S(−t). The boundary relation x = (1+w)exp(w)/w is solved with w = a−ib: bracket b cot(b)−b² = a(a+1) on 0 < b < π/2, as a runs between (−1±√5)/2. This follows the positive-density branch across the complete support [0.0757393348,4.8571781362] without unchecked complex Newton iteration. The density is b/(πx). A 2,049-point endpoint-clustered grid is integrated and normalized by its raw mass (shown in the dashboard); tests check raw moments, the off-support Stieltjes equation and refinement to 4,097 points. This is a numerical reference, not a certified density enclosure.
 
 ### Finite transforms
 
@@ -149,7 +155,11 @@ Switch between additive and multiplicative convolution and vary the exact ration
 
 [Open hermite kernels](visuals/interactive/hermite-kernels.html) in a built documentation site, or generate and open `visuals/generated/hermite-kernels.html` from the source checkout.
 
-Switch between bulk/sine and soft-edge/Airy kernel sections and vary the projection rank.
+Switch between bulk/sine and soft-edge/Airy kernel sections or continuous gap / edge CDF. Vary the projection rank; in the CDF view, the threshold slider selects s in [−4,3].
+
+For the weight e^(−x²), a_d = √(2d) and s_d = 1/(√2 d^(1/6)). The finite-rank curve approximates P((λ_max−a_d)/s_d ≤ s) using the Hermite continuous gap determinant, and the separate Tracy–Widom β = 2 reference uses the Airy kernel. Both use Gauss–Legendre Nyström determinants on the rescaled interval [s,10] with 64 nodes. Precomputation checks 96 nodes and cutoff 14 at every one of the 71 thresholds for all six ranks 8–256 and the Airy reference, rejecting discrepancies above 10⁻⁹. Controls only select stored curves and thresholds. The displayed sensitivity is empirical, not a certified quadrature or tail bound.
+
+Independent tests cover the rank-one Gaussian CDF, a finite-rank half-line Gram determinant integrated with explicit Hermite polynomials, and the Airy integral-kernel identity. Numerical tail-trace integrals assess the omitted half-line separately. The finite-rank curve is not labeled Tracy–Widom. See [Bornemann's numerical RMT review](https://arxiv.org/abs/0904.1581) for the Fredholm/Nyström formulation and edge scaling. The batch HKPV figure remains a distinct approximate sampling illustration; it does not supply this dashboard's reference.
 
 ### Unitary root flow
 
@@ -168,7 +178,7 @@ PYTHONPATH=. python -m pytest --import-mode=importlib scripts/tests/test_spectra
 NODE_PATH=/tmp/finitefree-browser/node_modules node visuals/interactive/dashboard-check.cjs visuals/generated visuals/generated/dashboard-screenshots
 ```
 
-CI generates both the geometry explorers and spectral dashboards, exercises dropdowns, slider endpoints, jumps, zero atoms, sample selection, sweep/reset and desktop/tablet/phone layouts, and saves the HTML and screenshots as a development artifact. Mathematical references include [Menon's random matrix notes](https://www.dam.brown.edu/people/menon/publications/rmt-2021.pdf), [S-transform in finite free probability](https://arxiv.org/abs/2408.09337), and [unitary Hermite polynomials](https://arxiv.org/abs/2203.05533). Existing batch-only compound-Wishart/free-lognormal and continuous-gap illustrations remain separate; their analytical-branch and quadrature validation are outside these dashboards.
+CI generates both the geometry explorers and spectral dashboards, exercises dropdowns, slider endpoints, jumps, zero atoms, sample selection, sweep/reset and desktop/tablet/phone layouts, and saves the HTML and screenshots as a development artifact. Mathematical references include [Menon's random matrix notes](https://www.dam.brown.edu/people/menon/publications/rmt-2021.pdf), [S-transform in finite free probability](https://arxiv.org/abs/2408.09337), and [unitary Hermite polynomials](https://arxiv.org/abs/2203.05533). The compound-Wishart and continuous-gap families are consolidated into the ensemble and Hermite dropdowns. The older batch scripts are not imported by these generators.
 
 ## Benchmarks
 

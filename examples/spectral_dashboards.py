@@ -10,10 +10,16 @@ from typing import Any
 
 import numpy as np
 import sympy as sp
-from scipy.integrate import cumulative_trapezoid
-from scipy.special import airy
+from scipy.integrate import cumulative_trapezoid, trapezoid
+from scipy.optimize import brentq
+from scipy.special import airy, roots_legendre
 
-from finitefree import FiniteRTransform, FiniteTTransform, RealRootedPolynomial
+from finitefree import (
+    FiniteRTransform,
+    FiniteTTransform,
+    PrecisionContext,
+    RealRootedPolynomial,
+)
 from finitefree.convolutions import multiplicative, symmetric_additive
 from finitefree.ensembles import (
     gue_expected_poly,
@@ -30,6 +36,71 @@ ASSETS = ROOT / "visuals" / "interactive"
 DEGREES = [8, 16, 32, 64, 128, 256]
 RATIOS = [sp.Rational(1, 4), sp.Rational(1, 2), sp.Integer(1), sp.Integer(2)]
 SEEDS = [1701, 2903, 4517]
+COMPOUND_DEGREES = [8, 16, 32, 64]
+
+
+def compound_polynomial(d: int) -> RealRootedPolynomial:
+    """d multiplicative factors, each mean-one Wishart with n=d²."""
+    if d not in COMPOUND_DEGREES:
+        raise ValueError("Compound dashboard degrees are bounded at 8,16,32,64")
+    q = wishart_expected_poly(d, d * d)
+    return RealRootedPolynomial.from_normalized_coeffs(
+        [value**d for value in q.normalized_coeffs()]
+    )
+
+
+def lognormal_measure(points: int = 2049) -> dict[str, Any]:
+    """Mean-one S(w)=exp(-w) law, via its lower-half-plane boundary branch.
+
+    z=(1+w)exp(w)/w. Write w=a-ib: Im(z)=0 is equivalent to
+    b cot(b)-b²=a(a+1). Its unique b in (0,pi/2) joins both real
+    critical points a=(-1±sqrt(5))/2 without a complex Newton solve.
+    """
+    a = -0.5 - np.sqrt(5) / 2 * np.cos(np.linspace(0, np.pi, points))
+    b = np.zeros_like(a)
+    for i in range(1, points - 1):
+        b[i] = brentq(
+            lambda v, a0=a[i]: np.cos(v) / np.sinc(v / np.pi) - v * v - a0 * (a0 + 1),
+            0,
+            np.pi / 2,
+            xtol=1e-14,
+        )
+    w = a - 1j * b
+    z = (1 + w) / w * np.exp(w)
+    x = z.real
+    density = b / (np.pi * x)
+    cdf = cumulative_trapezoid(density, x, initial=0)
+    moments = [float(trapezoid(x**k * density, x)) for k in range(4)]
+    residual = float(np.max(np.abs(z.imag)))
+    if (
+        not np.all(np.diff(x) > 0)
+        or residual > 1e-11
+        or max(abs(v - t) for v, t in zip(moments, [1, 1, 2, 5.5])) > 2e-5
+    ):
+        raise ValueError("Free-lognormal branch or mass/moment check failed")
+    # Retain raw moments as diagnostics, then remove only quadrature mass error.
+    density /= moments[0]
+    cdf /= moments[0]
+    return {
+        "x": x.tolist(),
+        "density": density.tolist(),
+        "cdf": cdf.tolist(),
+        "atom": 0.0,
+        "support": [float(x[0]), float(x[-1])],
+        "moments": moments,
+        "branch_residual": residual,
+    }
+
+
+def compound_data() -> list[dict[str, Any]]:
+    rows = []
+    for d in COMPOUND_DEGREES:
+        with PrecisionContext(degree=d, prec=192):
+            roots = compound_polynomial(d).evaluate_roots_float64(exact=True)
+        if len(roots) != d or np.min(roots) <= 0:
+            raise ValueError("Compound root extraction failed")
+        rows.append({"d": d, "n": d * d, "roots": roots.tolist()})
+    return rows
 
 
 def limit_measure(kind: str, gamma: float = 1.0) -> dict[str, Any]:
@@ -183,6 +254,7 @@ def sampled_spectra(degrees: list[int], distribution: str) -> dict[str, Any]:
 
 def ensemble_data(degrees: list[int] = DEGREES) -> dict[str, Any]:
     spectra = sampled_spectra(degrees, "gaussian")
+    spectra["compound"] = compound_data()
     spectra["hermite"] = [
         {
             "d": d,
@@ -208,6 +280,7 @@ def ensemble_data(degrees: list[int] = DEGREES) -> dict[str, Any]:
     ]
     return {
         "degrees": degrees,
+        "compound_degrees": COMPOUND_DEGREES,
         "ratios": [float(r) for r in RATIOS],
         "seeds": SEEDS,
         "spectra": spectra,
@@ -215,6 +288,7 @@ def ensemble_data(degrees: list[int] = DEGREES) -> dict[str, Any]:
             name: sampled_spectra(degrees, name) for name in ["rademacher", "uniform"]
         },
         "limits": {
+            "lognormal": lognormal_measure(),
             "semicircle": limit_measure("semicircle"),
             "arcsine": limit_measure("arcsine"),
             "mp": [limit_measure("mp", float(r)) for r in RATIOS],
@@ -300,6 +374,66 @@ def hermite_functions(d: int, xs: Any) -> Any:
     return phi
 
 
+def edge_probability(
+    d: int | None, s: float, nodes: int = 64, cutoff: float = 10.0
+) -> float:
+    """Nyström gap on [s,cutoff] in edge coordinates; None selects Airy.
+
+    These are finite-interval approximations to largest-eigenvalue CDFs,
+    not certified half-line determinants. No clipping of computed values.
+    """
+    if cutoff <= s:
+        raise ValueError("The tail cutoff must exceed s")
+    t, weights = roots_legendre(nodes)
+    xs = s + (t + 1) * (cutoff - s) / 2
+    weights = weights * (cutoff - s) / 2
+    if d is None:
+        ai, aip, _, _ = airy(xs)
+        delta = xs[:, None] - xs[None, :]
+        kernel = np.zeros_like(delta)
+        np.divide(
+            ai[:, None] * aip[None, :] - aip[:, None] * ai[None, :],
+            delta,
+            out=kernel,
+            where=delta != 0,
+        )
+        np.fill_diagonal(kernel, aip**2 - xs * ai**2)
+    else:
+        scale = 1 / (np.sqrt(2) * d ** (1 / 6))
+        phi = hermite_functions(d, np.sqrt(2 * d) + scale * xs)
+        kernel = scale * (phi.T @ phi)
+    weighted = np.sqrt(weights[:, None] * weights[None, :]) * kernel
+    sign, logdet = np.linalg.slogdet(np.eye(nodes) - weighted)
+    result = float(sign * np.exp(logdet))
+    if not 0 <= result <= 1:
+        raise ValueError("Gap probability outside [0,1]")
+    return result
+
+
+def edge_distribution_data(degrees: list[int]) -> dict[str, Any]:
+    xs = np.linspace(-4, 3, 71)
+    curves, diagnostics = [], []
+    for d in [None, *degrees]:
+        values = np.array([edge_probability(d, float(s)) for s in xs])
+        refined = np.array([edge_probability(d, float(s), 96) for s in xs])
+        extended = np.array([edge_probability(d, float(s), 96, 14) for s in xs])
+        quadrature = float(np.max(np.abs(values - refined)))
+        tail = float(np.max(np.abs(refined - extended)))
+        if max(quadrature, tail) > 1e-9 or np.min(np.diff(values)) < -1e-12:
+            raise ValueError("Edge quadrature/tail sensitivity check failed")
+        curves.append(values.tolist())
+        diagnostics.append({"quadrature": quadrature, "tail": tail})
+    return {
+        "x": xs.tolist(),
+        "limit": curves[0],
+        "curves": curves[1:],
+        "reference_diagnostic": diagnostics[0],
+        "diagnostics": diagnostics[1:],
+        "nodes": 64,
+        "cutoff": 10,
+    }
+
+
 def kernel_data(degrees: list[int] = DEGREES) -> dict[str, Any]:
     rows: dict[str, Any] = {}
     for region, bounds in [("bulk", (-3, 3)), ("edge", (-4, 2))]:
@@ -324,7 +458,7 @@ def kernel_data(degrees: list[int] = DEGREES) -> dict[str, Any]:
             values = np.sum(phi[:, :-1] * phi[:, -1:], axis=0) * scale
             curves.append(values.tolist())
         rows[region] = {"x": xs.tolist(), "limit": limit.tolist(), "curves": curves}
-    return {"degrees": degrees, "rows": rows}
+    return {"degrees": degrees, "rows": rows, "gap": edge_distribution_data(degrees)}
 
 
 def unitary_data() -> dict[str, Any]:

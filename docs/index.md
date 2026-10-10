@@ -38,7 +38,7 @@ On `develop`, interactive companions are linked beside their related figures. In
     | :---: | :---: |
     | ![Free Jacobi Arcsine Convergence](visuals/assets/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/assets/free_lognormal_convergence.gif) |
 
-    Interactive companion: [Open ensemble convergence](visuals/interactive/ensemble-convergence.html) and select Legendre roots for the arcsine comparison. The free log-normal animation remains a separate batch illustration.
+    Interactive companion: [Open ensemble convergence](visuals/interactive/ensemble-convergence.html) and select Legendre roots for the arcsine comparison or compound Wishart for a bounded-degree, mean-one free-lognormal comparison (τ = 1).
 
 
 ??? "2. Determinantal Point Processes & Spectral Universality"
@@ -47,7 +47,7 @@ On `develop`, interactive companions are linked beside their related figures. In
 
     - **CD Bulk Scaling Limit**: Christoffel-Darboux kernel bulk scaling limit convergence to the infinite Sine kernel.
     - **CD Edge Scaling Limit**: Christoffel-Darboux kernel edge scaling limit convergence to the infinite Airy kernel.
-    - **Tracy-Widom Edge Convergence**: Empirical max eigenvalue CDF from HKPV samples converging to the Tracy-Widom (Fredholm determinant) distribution.
+    - **Tracy-Widom Edge Convergence**: The batch illustration compares HKPV max-eigenvalue samples with a finite-rank continuous Hermite determinant. The interactive companion separately compares finite-rank Hermite CDFs with an Airy-kernel approximation to Tracy–Widom β = 2.
     - **Nearest-Neighbor Level Repulsion**: GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
 
     | CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
@@ -59,6 +59,8 @@ On `develop`, interactive companions are linked beside their related figures. In
     | Tracy-Widom Edge Convergence ($d=100$) | Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
     | :---: | :---: |
     | ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) | ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
+
+    Interactive companion: [Open Hermite kernels](visuals/interactive/hermite-kernels.html) and select continuous gap / edge CDF. Vary rank and threshold; inspect quadrature and tail-cutoff sensitivity beside the finite-rank and Tracy–Widom β = 2 curves.
 
 
 ??? "3. Algebraic Properties"

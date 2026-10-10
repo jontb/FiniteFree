@@ -5,6 +5,16 @@ const assert = require("node:assert/strict"),
   { execFileSync } = require("node:child_process"),
   { pathToFileURL } = require("node:url"),
   { chromium } = require("playwright-core");
+// Optional loopback transport for managed browsers that prohibit file://.
+const baseURL = process.env.FINITEFREE_BASE_URL;
+if (baseURL) {
+  const url = new URL(baseURL);
+  assert.ok(
+    url.protocol === "http:" &&
+      ["localhost", "127.0.0.1"].includes(url.hostname),
+    "Browser check base URL must be loopback HTTP",
+  );
+}
 const directory = path.resolve(process.argv[2] || "visuals/generated"),
   output = path.resolve(
     process.argv[3] || "visuals/generated/dashboard-screenshots",
@@ -43,7 +53,15 @@ async function run() {
     page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => {
-    if (/^https?:/.test(r.url())) external.push(r.url());
+    if (
+      /^https?:/.test(r.url()) &&
+      !(
+        baseURL &&
+        r.isNavigationRequest() &&
+        new URL(r.url()).origin === new URL(baseURL).origin
+      )
+    )
+      external.push(r.url());
   });
   const state = () => page.evaluate(() => window.explorerState),
     slide = async (id, value) => {
@@ -57,6 +75,22 @@ async function run() {
         path: path.join(output, name + ".png"),
         fullPage: true,
       });
+  const responsiveSelection = async (name) => {
+    const before = await state();
+    for (const width of [1024, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(50);
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth + 1,
+        ),
+      );
+      assert.deepEqual(await state(), before);
+      if (width === 390) await shot(name + "-mobile");
+    }
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await shot(name);
+  };
   for (const name of [
     "ensemble-convergence",
     "finite-transforms",
@@ -64,7 +98,11 @@ async function run() {
     "hermite-kernels",
     "unitary-root-flow",
   ]) {
-    await page.goto(pathToFileURL(path.join(directory, name + ".html")).href);
+    await page.goto(
+      baseURL
+        ? new URL(name + ".html", baseURL).href
+        : pathToFileURL(path.join(directory, name + ".html")).href,
+    );
     await page.waitForFunction(() => window.explorerState);
     const initial = await state();
     assert.equal(initial.kind, name);
@@ -151,6 +189,33 @@ async function run() {
         "Gaussian-only GSE and deterministic measures disable entry controls",
       );
 
+      // Switch from a larger degree range, then repeat all compound controls.
+      await page.selectOption("#family", "gue");
+      await slide("size", 5);
+      for (let repeat = 0; repeat < 2; repeat++) {
+        await page.selectOption("#family", "compound");
+        assert.ok((await state()).d <= 64);
+        for (const id of ["entries", "ratio", "sample"])
+          assert.equal(await page.locator("#" + id).isDisabled(), true);
+        for (const dimension of [0, 1, 2, 3]) {
+          await slide("size", dimension);
+          const s = await state();
+          assert.equal(s.d, [8, 16, 32, 64][dimension]);
+          assert.equal(s.sampled, false);
+          assert.equal(s.n, s.d * s.d);
+          near(s.values.reduce((a, b) => a + b, 0) / s.d, 1);
+          near(s.histogramMass, 1);
+          assert.ok(s.values.every((v) => v > 0));
+        }
+        await responsiveSelection("compound-wishart-free-lognormal");
+        await page.click("#sweep");
+        await page.waitForTimeout(750);
+        assert.equal((await state()).d, 8);
+        await page.selectOption("#family", "gue");
+      }
+      reports.push(
+        "Compound Wishart all bounded degrees, repeat switching, sweep, disabled controls and responsive layouts",
+      );
       await page.selectOption("#family", "wishart2");
       await page.selectOption("#ratio", "3");
       await shot("ensemble-zero-atom");
@@ -222,6 +287,45 @@ async function run() {
         "Bulk and edge sections, finite residuals and rank endpoints",
       );
       await shot("hermite-edge");
+      for (let repeat = 0; repeat < 2; repeat++) {
+        await page.selectOption("#family", "gap");
+        assert.equal(
+          await page.locator("#parameter-control").isVisible(),
+          true,
+        );
+        for (const dimension of [0, 1, 2, 3, 4, 5]) {
+          await slide("size", dimension);
+          for (const probe of [0, 40, 70, 40]) {
+            await slide("parameter", probe);
+            const s = await state();
+            near(s.s, -4 + probe / 10);
+            near(s.selected, s.values[probe]);
+            assert.ok(
+              s.values.every((v) => Number.isFinite(v) && v >= 0 && v <= 1),
+            );
+            assert.ok(
+              s.values.every((v, i) => i === 0 || v >= s.values[i - 1]),
+            );
+            assert.ok(Math.max(...Object.values(s.diagnostic)) < 1e-9);
+          }
+        }
+        await responsiveSelection("continuous-gap-edge-distribution");
+        await page.click("#sweep");
+        await page.waitForTimeout(750);
+        assert.equal((await state()).d, 8);
+        await page.selectOption("#family", "edge");
+        assert.equal(
+          await page.locator("#parameter-control").isVisible(),
+          false,
+        );
+        assert.equal(
+          await page.locator("#left-title").innerText(),
+          "Rescaled kernel section",
+        );
+      }
+      reports.push(
+        "Continuous gap all ranks and thresholds, monotone probabilities, repeat switching, sweep and responsive layouts",
+      );
       await page.click("#reset");
       await shot(name);
     } else {
