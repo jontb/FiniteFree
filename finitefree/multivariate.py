@@ -18,32 +18,19 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from .hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
-from .utils.modular import _as_modular_array, crt, prime_generator
+from .utils.modular import (
+    _as_modular_array,
+    crt,
+    prime_generator,
+)
+from .utils.modular import (
+    _determinant_coefficient_bound as _determinant_coefficient_bound,
+)
 from .utils.parallel import ParallelScheduler, _eval_prime_worker
 
 _FloatTerms = Tuple[Tuple[Tuple[Tuple[int, int], ...], float], ...]
 _MAX_FLOAT64_POWER_CACHE = 64
 _MAX_FLOAT64_BATCH = 8192
-
-
-def _determinant_coefficient_bound(
-    matrices: Sequence[Sequence[Sequence[int]]],
-) -> int:
-    """Bound every coefficient of det(sum_j x_j A_j) for integer matrices.
-
-    Each determinant permutation contributes a product of linear forms.
-    The coefficient l1 norm of that product is at most the product of their
-    coefficient l1 norms. Summing over n! permutations gives the rowwise bound
-    n! * product_r max_c sum_j abs(A_j[r,c]).
-    """
-    n = len(matrices[0])
-    return math.factorial(n) * math.prod(
-        max(
-            (sum(abs(matrix[r][c]) for matrix in matrices) for c in range(n)),
-            default=0,
-        )
-        for r in range(n)
-    )
 
 
 def _determinant_encoding_parameters(

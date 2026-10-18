@@ -1,9 +1,30 @@
 import functools
-from typing import Any
+import math
+from typing import Any, Sequence
 
 import flint
 import numpy as np
 from numpy.typing import NDArray
+
+
+def _determinant_coefficient_bound(
+    matrices: Sequence[Sequence[Sequence[int]]],
+) -> int:
+    """Bound every coefficient of det(sum_j x_j A_j) for integer matrices.
+
+    Each determinant permutation contributes a product of linear forms.
+    The coefficient l1 norm of that product is at most the product of their
+    coefficient l1 norms. Summing over n! permutations gives the rowwise bound
+    n! * product_r max_c sum_j abs(A_j[r,c]).
+    """
+    n = len(matrices[0])
+    return math.factorial(n) * math.prod(
+        max(
+            (sum(abs(matrix[r][c]) for matrix in matrices) for c in range(n)),
+            default=0,
+        )
+        for r in range(n)
+    )
 
 
 def _as_modular_array(values: Any, p: int) -> NDArray[np.int64]:

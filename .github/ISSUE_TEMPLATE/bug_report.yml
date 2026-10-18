@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible correctness, numerical, packaging or tooling problem.
+body:
+  - type: markdown
+    attributes:
+      value: Search existing issues and PRs first. Small, runnable examples help reproduce a problem.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the FiniteFree version or Git commit, OS, Python and relevant dependency versions. For numerical issues include precision, backend and seeds.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: Include imports, inputs and the command needed to reproduce the problem. Remove private data.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result and reference
+      description: Explain the expected behavior. Include an exact result, analytic identity, documentation contract or independent reference when available.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the output, error or discrepancy and any relevant logs.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Controls and scope
+      description: Optional smaller cases, alternative backends, regression versions or known workarounds.
