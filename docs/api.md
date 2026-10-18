@@ -1,6 +1,6 @@
 # API Reference
 
-This page describes **FiniteFree 0.2.0**, with executable examples and reference sections generated from its docstrings. Install [the PyPI package](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`; its source is [tagged v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [development guide](development.md) and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md).
+This page describes **FiniteFree 0.3.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
 
 ## Root evaluation and conditioning
 
@@ -358,7 +358,7 @@ assert prepared.state_space == ("excluded", "included")
 
 Diagonal specialization also preserves rational weights and offsets, including the stored binary ratios of Python/NumPy floats. Its result retains monic normalization and lazy root validation. Modular reconstruction continues until the modulus exceeds twice a proved bound on every integer coefficient; repeated agreement alone does not establish correctness. Nonfinite, complex and irrational parameters raise `ValueError` before reconstruction.
 
-Invalid shape, inconsistent dimensions, empty matrix sequences, nonfinite/complex entries or nonsymmetric supplied entries in `SymmetricMatrixPencil` raise `ValueError`. Symmetry uses the rational entries without an approximate tolerance, so float rounding cannot hide a difference between large integers. Coordinate sequences must match the number of matrices in numerical and rational evaluation. Modular paths reduce integer entries modulo each prime before int64 conversion for Cython calculations.
+Invalid shape, inconsistent dimensions, empty matrix sequences, nonfinite/complex entries or nonsymmetric supplied entries in `SymmetricMatrixPencil` raise `ValueError`. Complex entries are rejected even when their imaginary part is zero. Symmetry uses the rational entries without an approximate tolerance, so float rounding cannot hide a difference between large integers. Coordinate sequences must match the number of matrices in numerical and rational evaluation. Modular paths reduce integer entries modulo each prime before int64 conversion for Cython calculations.
 
 Generic straight-line gradients use reverse-mode differentiation of scalar operations. Determinant-pencil gradients and Hessians instead use determinant/inverse trace identities. Exact derivatives reject singular evaluated matrices. Numerical inverse/pseudoinverse formulas do not reliably give derivatives at singular points; use symbolic polynomial differentiation when singular-point derivatives are needed. `verify_hyperbolicity(e)` checks the sufficient positive-definite-pencil condition; numerical eigenvalues must exceed `1e-14`, while `exact=True` uses exact rational positivity.
 
@@ -391,6 +391,36 @@ assert pencil.evaluate([1])[0, 0] == float(large)
 ```
 
 Numerical evaluation processes bounded point blocks and reuses monomial buffers. Derivative coordinate powers are cached only within each block. Strided and broadcast inputs retain their logical point order without copying the entire input to flatten it. The returned array is still fully allocated: Hessians require `8 * batch_size * m**2` bytes for their float64 output alone. Input conversion/validation, lazy exact derivative caches and native arithmetic have additional costs; bounded power storage is not a total memory limit. Context permutations use native sparse projection after validating symbol identity, while general substitutions retain exact native composition.
+
+## Prepared numerical pencils
+
+`PreparedMatrixPencil` and `PencilFactorization` are exported from
+`finitefree.hyperbolic`. `pencil.prepare_numeric()` creates an owned float64
+coefficient snapshot; `evaluate(points)` assembles matrices, and `factor(points)`
+retains pivoted LU factors for `slogdet()`, `logabsdet_gradient()` and
+`logabsdet_hvp(directions)`. Inputs have shape `(..., variable_count)` and outputs
+preserve the leading batch shape. This opt-in path leaves exact methods intact.
+
+```python
+import numpy as np
+from finitefree.hyperbolic import SymmetricMatrixPencil
+
+pencil = SymmetricMatrixPencil([np.diag([2.0, 3.0]), np.eye(2)])
+prepared = pencil.prepare_numeric()
+points = np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.float64)
+factors = prepared.factor(points)
+sign, logabsdet = factors.slogdet()
+np.testing.assert_array_equal(sign, [1.0, 1.0])
+np.testing.assert_allclose(logabsdet, np.log([6.0, 4.0]))
+np.testing.assert_allclose(factors.logabsdet_gradient()[0], [2.0, 5.0/6.0])
+```
+
+`backend="cupy"` explicitly selects resident float64 GPU arrays and requires
+compatible installed CuPy/CUDA. Device/stream ordering, singular-point derivative
+limits and retained factor/output memory remain caller responsibilities; point
+and coefficient blocking bound scratch space, not total output storage. See the
+[full contract and benchmark protocol](multivariate.md). Local GPU correctness
+validation does not establish a speed or memory advantage.
 
 ## Core Operations
 

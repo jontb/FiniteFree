@@ -1,6 +1,3 @@
-from typing import Iterator
-from typing import List as TList
-
 import numpy as np
 import pytest
 import sympy as sp
@@ -8,21 +5,25 @@ import sympy as sp
 from finitefree.core import RealRootedPolynomial
 from finitefree.transforms import (
     FiniteCauchyTransform,
-    FiniteRTransform,
     FiniteSTransform,
     FiniteTTransform,
     SymmetricFiniteSTransform,
 )
+from tests._cases import case
+from tests._cumulants import assert_cumulants
 
 
-def test_finite_cauchy_transform() -> None:
-    # p(z) = z^2 - 1
-    p = RealRootedPolynomial([1, 0, -1], assume_real_rooted=True)
-    G = FiniteCauchyTransform(p)
+def test_cauchy_transform_against_exact_root_sum() -> None:
     z = sp.Symbol("z")
-    # G(z) = 1/2 * (2z) / (z^2 - 1) = z / (z^2 - 1)
-    val = sp.simplify(G - z / (z**2 - 1))
-    assert val == 0
+    for roots in ([-1, 1], [0, 1, 3]):
+        with case(roots=roots):
+            p = RealRootedPolynomial.from_roots(roots)
+            expected = sum(sp.Rational(1, len(roots)) / (z - root) for root in roots)
+            actual = FiniteCauchyTransform(p)
+            assert not actual.atoms(sp.Float)
+            assert sp.cancel(actual - expected) == 0
+    with pytest.raises(ValueError, match="positive degree"):
+        FiniteCauchyTransform(RealRootedPolynomial([1]))
 
 
 def test_finite_s_transform() -> None:
@@ -35,6 +36,7 @@ def test_finite_s_transform() -> None:
     # 2 = 1 e_2 => e_2 = 2
 
     S = FiniteSTransform(p)
+    assert list(S) == [sp.Rational(2, 3), sp.Rational(3, 4)]
     assert len(S) == 2
     assert np.isclose(float(S[0]), 1 / (3 / 2))  # e_0 / e_1 = 2/3
     assert np.isclose(float(S[1]), (3 / 2) / 2)  # e_1 / e_2 = 3/4
@@ -79,92 +81,61 @@ def test_finite_s_transform_errors() -> None:
         FiniteSTransform(p_unit)
 
 
-def test_finite_r_transform() -> None:
-    # Basic test for cumulant extraction
-    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
-    cumulants = FiniteRTransform(p, order=2)
-    assert len(cumulants) == 2
-
-
-def test_cumulant_additivity() -> None:
+def test_additive_convolution_and_powers_preserve_exact_cumulants() -> None:
     from finitefree.convolutions import symmetric_additive
 
-    # p: roots 1, 2, 3, 4
-    p = RealRootedPolynomial([1, -10, 35, -50, 24], assume_real_rooted=True)
-    # q: roots -3, -1, 1, 3
-    q = RealRootedPolynomial([1, 0, -10, 0, 9], assume_real_rooted=True)
-
-    d = 4
-    r = symmetric_additive(p, q, d)
-
-    cum_p = FiniteRTransform(p, order=d)
-    cum_q = FiniteRTransform(q, order=d)
-    cum_r = FiniteRTransform(r, order=d)
-
-    for i in range(d):
-        assert np.isclose(float(cum_r[i]), float(cum_p[i]) + float(cum_q[i])), (
-            f"Cumulant {i + 1} mismatch: {cum_r[i]} != {cum_p[i]} + {cum_q[i]}"
-        )
-
-
-def test_finite_free_cumulants_definition_consistency() -> None:
-    # A partition generator to compute the definition directly
-    def get_partitions(elements: TList[int]) -> Iterator[TList[TList[int]]]:
-        if not elements:
-            yield []
-            return
-        first = elements[0]
-        for sub in get_partitions(elements[1:]):
-            for i, block in enumerate(sub):
-                yield sub[:i] + [[first] + block] + sub[i + 1 :]
-            yield sub + [[first]]
-
-    # p(x) = (x - 1)(x - 2)(x - 3) = x^3 - 6x^2 + 11x - 6
-    p = RealRootedPolynomial([1, -6, 11, -6], assume_real_rooted=True)
-    d = 3
-    e_k = p.normalized_coeffs(d)
-
-    # Compute using Definition 2.14:
-    # κ_n^{(d)}(p) = (-d)^{n-1} / (n-1)! \sum_{\pi} ...
-    import math
-
-    for n in range(1, 4):
-        elements = list(range(1, n + 1))
-        sum_val = 0.0
-        for partition in get_partitions(elements):
-            num_blocks = len(partition)
-            coeff = ((-1) ** (num_blocks - 1)) * math.factorial(num_blocks - 1)
-            prod = 1.0
-            for block in partition:
-                prod *= float(e_k[len(block)])
-            sum_val += coeff * prod
-        expected = sum_val * ((-d) ** (n - 1)) / math.factorial(n - 1)
-
-        # Compare with FiniteRTransform
-        cumulants = FiniteRTransform(p, order=n, d=d)
-        assert np.isclose(float(cumulants[-1]), expected)
-
-
-def test_projection_cumulant_relation() -> None:
-    # p(x) = (x-1)(x-2)(x-3)(x-4)
-    p = RealRootedPolynomial([1, -10, 35, -50, 24], assume_real_rooted=True)
-    d = 4
-    j = 3
-
-    # LHS: κ_n^{(j)}(\partial^{j|d} p)
-    proj_p = p.projection(j)
-
-    # RHS: κ_n^{(d)}([Dil_{j/d} p]^{\boxplus_d d/j})
-    # Dilate by j/d = 3/4
-    dil_p = p.dilation(sp.Rational(j, d))
-    # Convolution power by d/j = 4/3
-    rhs_poly = dil_p.additive_power(sp.Rational(d, j))
-
-    # Compare cumulants for 1 <= n <= j
-    for n in range(1, j + 1):
-        lhs_cum = FiniteRTransform(proj_p, order=n, d=j)[-1]
-        rhs_cum = FiniteRTransform(rhs_poly, order=n, d=d)[-1]
-        assert np.isclose(float(lhs_cum), float(rhs_cum))
+    pairs = [
+        (
+            RealRootedPolynomial([1, -10, 35, -50, 24], assume_real_rooted=True),
+            RealRootedPolynomial([1, 0, -10, 0, 9], assume_real_rooted=True),
+        ),
+        (
+            RealRootedPolynomial.from_roots([0, 0, 3]),
+            RealRootedPolynomial.from_roots([0, 0, 3]),
+        ),
+        (
+            RealRootedPolynomial([2, -6, 4], monic=False),
+            RealRootedPolynomial([-3, 9, -6], monic=False),
+        ),
+    ]
+    for p, q in pairs:
+        with case(coefficients=list(p.coeffs)):
+            d = p.degree
+            a, b = assert_cumulants(p, d), assert_cumulants(q, d)
+            result = symmetric_additive(p, q, d)
+            assert_cumulants(result, d, expected=[x + y for x, y in zip(a, b)])
+            monic = [sp.cancel(c / p.coeffs[0]) for c in p.coeffs]
+            for power in (1, 2, sp.Rational(3, 2)):
+                powered = p.additive_power(power)
+                assert_cumulants(powered, d, expected=[power * x for x in a])
+                if power == 1:
+                    assert list(powered.coeffs) == monic
+                if power == 2:
+                    assert list(powered.coeffs) == list(
+                        symmetric_additive(p, p, d).coeffs
+                    )
+            if d == 4:
+                assert a == [
+                    sp.Rational(5, 2),
+                    sp.Rational(5, 3),
+                    0,
+                    sp.Rational(-4, 9),
+                ]
+            elif d == 3:
+                assert a == [1, 3, 9]
+                assert list(p.additive_power(sp.Rational(3, 2)).coeffs) == [
+                    1,
+                    sp.Rational(-9, 2),
+                    sp.Rational(9, 4),
+                    sp.Rational(3, 8),
+                ]
+                assert (
+                    list(p.additive_power(sp.Rational(1, 2)).additive_power(2).coeffs)
+                    == monic
+                )
+            else:
+                assert a == [sp.Rational(3, 2), sp.Rational(1, 2)]
+                assert list(p.additive_power(2).coeffs) == [1, -6, sp.Rational(17, 2)]
 
 
 def test_finite_t_transform() -> None:
@@ -266,92 +237,6 @@ def test_symmetric_polynomial_and_s_transform() -> None:
         p_non_sym.square_roots_map()
     with pytest.raises(ValueError):
         SymmetricFiniteSTransform(p_non_sym)
-
-
-def _build_hermite_poly(d: int) -> RealRootedPolynomial:
-    import math
-
-    coeffs = [0] * (d + 1)
-    for m in range(d // 2 + 1):
-        num = math.factorial(d)
-        den = math.factorial(m) * math.factorial(d - 2 * m) * (2**m)
-        val = ((-1) ** m) * (num // den)
-        coeffs[2 * m] = val
-    return RealRootedPolynomial(coeffs, assume_real_rooted=True)
-
-
-def test_r_transform_recurrence() -> None:
-    # Verify that FiniteRTransform computes exact expected FFP cumulants
-    # p(x) = (x-1)(x-2) = x^2 - 3x + 2 (d=2, e_1 = 3/2, e_2 = 2)
-    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
-    cumulants = FiniteRTransform(p, order=4)
-
-    assert cumulants[0] == sp.Rational(3, 2)
-    assert cumulants[1] == sp.Rational(1, 2)
-    assert cumulants[2] == 0
-    assert cumulants[3] == 0
-
-    # Scaled check: Hermite polynomial of degree 50, computing order 8 cumulants
-    p_scaled = _build_hermite_poly(50)
-    cumulants_scaled = FiniteRTransform(p_scaled, order=8)
-    assert len(cumulants_scaled) == 8
-    assert cumulants_scaled[1] != 0
-    assert cumulants_scaled[7] == 0
-
-
-def test_numerical_finite_r_transform() -> None:
-    # Create a simple polynomial
-    p = RealRootedPolynomial.from_roots([1, 2, 3])
-
-    # Compute cumulants exactly and numerically
-    exact_cumulants = FiniteRTransform(p, order=3, numerical=False)
-    num_cumulants = FiniteRTransform(p, order=3, numerical=True, prec=128)
-
-    for e, n in zip(exact_cumulants, num_cumulants):
-        assert np.isclose(float(e), float(n), rtol=1e-10)
-
-
-def test_cumulants_match_free_poisson_normalization() -> None:
-    # For the monic scaled Laguerre/Wishart polynomial, kappa_k = (d/n)^(k-1).
-    from finitefree import wishart_expected_poly
-
-    p = wishart_expected_poly(d=6, n=10)
-    expected = [sp.Rational(3, 5) ** k for k in range(6)]
-    assert FiniteRTransform(p, order=6) == expected
-    np.testing.assert_allclose(
-        FiniteRTransform(p, order=6, numerical=True), [float(v) for v in expected]
-    )
-
-
-def test_third_cumulant_and_convolution_power() -> None:
-    from finitefree.convolutions import symmetric_additive
-
-    p = RealRootedPolynomial.from_roots([0, 0, 3])
-    assert FiniteRTransform(p, order=3) == [1, 3, 9]
-    doubled = p.additive_power(2)
-    assert list(doubled.coeffs) == list(symmetric_additive(p, p, 3).coeffs)
-    assert FiniteRTransform(doubled, order=3) == [2, 6, 18]
-    # The coefficient formula is unchanged by correcting both normalization maps.
-    assert list(p.additive_power(sp.Rational(3, 2)).coeffs) == [
-        1,
-        sp.Rational(-9, 2),
-        sp.Rational(9, 4),
-        sp.Rational(3, 8),
-    ]
-    assert list(p.additive_power(sp.Rational(1, 2)).additive_power(2).coeffs) == list(
-        p.coeffs
-    )
-
-
-def test_cauchy_transform_stays_exact() -> None:
-    p = RealRootedPolynomial.from_roots([0, 1, 3])
-    z = sp.Symbol("z")
-    expected = sum(sp.Rational(1, 3) / (z - root) for root in [0, 1, 3])
-    result = FiniteCauchyTransform(p)
-    assert not result.atoms(sp.Float)
-    assert sp.cancel(result - expected) == 0
-    with pytest.raises(ValueError, match="positive degree"):
-        FiniteCauchyTransform(RealRootedPolynomial([1]))
 
 
 def test_coefficient_signs_do_not_certify_positive_roots() -> None:

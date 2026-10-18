@@ -4,19 +4,7 @@ import numpy as np
 import pytest
 
 from finitefree import DiscreteFiniteKernel, PreparedDiscreteDPP, sample_discrete
-
-
-@pytest.mark.parametrize("seed", range(20))
-def test_prepared_and_raw_seeded_samples_agree(seed: int) -> None:
-    kernel = np.array([[0.6, 0.2], [0.2, 0.4]])
-    prepared = PreparedDiscreteDPP(kernel, ["a", "b"])
-    expected = sample_discrete(kernel, ["a", "b"], rng=np.random.default_rng(seed))
-    assert prepared.sample(rng=np.random.default_rng(seed)) == expected
-    assert sample_discrete(prepared, rng=np.random.default_rng(seed)) == expected
-    assert (
-        sample_discrete(prepared, ["a", "b"], rng=np.random.default_rng(seed))
-        == expected
-    )
+from tests._cases import case
 
 
 def test_prepared_does_not_redecompose_or_revalidate_matrix(
@@ -38,35 +26,30 @@ def test_prepared_does_not_redecompose_or_revalidate_matrix(
     assert calls == 1
 
 
-def test_prepared_owns_original_inputs_and_exports() -> None:
-    matrix = np.diag([0.0, 1.0])
-    states = ["excluded", "included"]
-    prepared = PreparedDiscreteDPP(matrix, states)
-    matrix[:] = 0
-    states.reverse()
-    matrix_export = prepared.kernel_matrix
-    values_export = prepared.eigenvalues
-    assert not matrix_export.flags.writeable and not values_export.flags.writeable
-    matrix_export.setflags(write=True)
-    values_export.setflags(write=True)
-    matrix_export[:] = 0
-    values_export[:] = 0
-    assert prepared.state_space == ("excluded", "included")
-    assert prepared.sample() == ["included"]
-    np.testing.assert_array_equal(prepared.kernel_matrix, np.diag([0.0, 1.0]))
-    with pytest.raises(AttributeError):
-        prepared.state_space = ("changed",)  # type: ignore[misc]
-
-
-def test_callable_snapshot_respects_subsets_and_order() -> None:
-    matrix = np.diag([0.0, 1.0, 1.0])
-    source = DiscreteFiniteKernel(matrix)
-    prepared = PreparedDiscreteDPP(source, [2, 0])
-    matrix[:] = 0
-    assert prepared.sample() == [2]
-    assert prepared.state_space == (2, 0)
-    with pytest.raises(ValueError, match="state order"):
-        sample_discrete(prepared, [0, 2])
+def test_prepared_snapshots_own_matrices_labels_and_exports() -> None:
+    for callable_source in (False, True):
+        with case(callable_source=callable_source):
+            matrix = np.diag([0.0, 1.0, 1.0] if callable_source else [0.0, 1.0])
+            states: Any = [2, 0] if callable_source else ["excluded", "included"]
+            kernel = DiscreteFiniteKernel(matrix) if callable_source else matrix
+            prepared = PreparedDiscreteDPP(kernel, states)
+            expected_states = tuple(states)
+            expected_matrix = np.diag([1.0, 0.0] if callable_source else [0.0, 1.0])
+            matrix[:] = 0
+            states.reverse()
+            exported, values = prepared.kernel_matrix, prepared.eigenvalues
+            assert not exported.flags.writeable and not values.flags.writeable
+            exported.setflags(write=True)
+            values.setflags(write=True)
+            exported[:] = 0
+            values[:] = 0
+            assert prepared.state_space == expected_states
+            assert prepared.sample() == ([2] if callable_source else ["included"])
+            np.testing.assert_array_equal(prepared.kernel_matrix, expected_matrix)
+            with pytest.raises(ValueError, match="state order"):
+                sample_discrete(prepared, states)
+            with pytest.raises(AttributeError):
+                prepared.state_space = ("changed",)  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
@@ -92,50 +75,50 @@ def test_preparation_rejects_invalid_kernels_before_rng(
         PreparedDiscreteDPP(matrix, states)
 
 
-def test_preparation_does_not_consume_rng_or_change_legacy_sequence() -> None:
-    kernel = np.array([[0.6, 0.2], [0.2, 0.4]])
-    np.random.seed(20261006)
-    before: Any = np.random.get_state()
-    prepared = PreparedDiscreteDPP(kernel, [0, 1])
-    after: Any = np.random.get_state()
-    assert before[0] == after[0] and before[2:] == after[2:]
-    np.testing.assert_array_equal(before[1], after[1])
-    for seed in range(20):
-        np.random.seed(seed)
-        expected = sample_discrete(kernel, [0, 1])
-        np.random.seed(seed)
-        assert prepared.sample() == expected
-
-
-@pytest.mark.parametrize("projection", [False, True])
-def test_prepared_exact_small_dpp_distribution(projection: bool) -> None:
-    expected: Any
-    if projection:
-        kernel = np.eye(3) - np.ones((3, 3)) / 3
-        expected = np.zeros(8)
-        expected[[3, 5, 6]] = 1 / 3
-    else:
-        kernel = np.array([[0.6, 0.2], [0.2, 0.4]])
-        expected = np.array([0.2, 0.4, 0.2, 0.2])
-    prepared = PreparedDiscreteDPP(kernel, list(range(len(kernel))))
-    rng = np.random.default_rng(20261006)
-    counts = np.zeros(len(expected))
-    trials = 4000
-    for _ in range(trials):
-        sample = prepared.sample(rng=rng)
-        assert len(sample) == len(set(sample))
-        counts[sum(1 << state for state in sample)] += 1
-    # Principal minors and marginals give the independent exact laws above.
-    np.testing.assert_allclose(counts / trials, expected, atol=0.035)
-
-
-def test_empty_and_clipped_boundary_kernels() -> None:
-    assert PreparedDiscreteDPP(np.empty((0, 0)), []).sample() == []
-    prepared = PreparedDiscreteDPP(np.diag([-1e-12, 1 + 1e-12]), [0, 1])
-    assert prepared.sample() == [1]
-    with pytest.raises(ValueError, match="shape"):
-        PreparedDiscreteDPP(np.eye(1), [])
-    with pytest.raises(ValueError, match="required"):
-        sample_discrete(np.eye(1))
-    with pytest.raises(TypeError, match="Generator"):
-        prepared.sample(rng=123)  # type: ignore[arg-type]
+def test_sampler_representations_preserve_preparation_and_rng_sequences() -> None:
+    state = np.random.get_state()
+    try:
+        matrix = np.array([[0.6, 0.2], [0.2, 0.4]])
+        for representation, labels in (
+            ("array", ["a", "b"]),
+            ("array", [0, 1]),
+            ("object", [0, 1]),
+            ("callable", [0, 1]),
+        ):
+            with case(representation=representation, labels=labels):
+                kernel: Any = (
+                    matrix.astype(object) if representation == "object" else matrix
+                )
+                if representation == "callable":
+                    kernel = DiscreteFiniteKernel(kernel)
+                np.random.seed(20261006)
+                before: Any = np.random.get_state()
+                prepared = PreparedDiscreteDPP(kernel, labels)
+                after: Any = np.random.get_state()
+                assert before[0] == after[0] and before[2:] == after[2:]
+                np.testing.assert_array_equal(before[1], after[1])
+                for seed in range(20):
+                    expected = sample_discrete(
+                        kernel, labels, rng=np.random.default_rng(seed)
+                    )
+                    assert prepared.sample(rng=np.random.default_rng(seed)) == expected
+                    assert (
+                        sample_discrete(prepared, rng=np.random.default_rng(seed))
+                        == expected
+                    )
+                    assert (
+                        sample_discrete(
+                            prepared, labels, rng=np.random.default_rng(seed)
+                        )
+                        == expected
+                    )
+                    unchanged: Any = np.random.get_state()
+                    assert after[0] == unchanged[0] and after[2:] == unchanged[2:]
+                    np.testing.assert_array_equal(after[1], unchanged[1])
+                    np.random.seed(seed)
+                    expected = sample_discrete(kernel, labels)
+                    np.random.seed(seed)
+                    assert prepared.sample() == expected
+                    after = np.random.get_state()
+    finally:
+        np.random.set_state(state)

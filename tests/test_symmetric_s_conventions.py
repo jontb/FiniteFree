@@ -5,32 +5,36 @@ import pytest
 import sympy as sp
 
 from finitefree import RealRootedPolynomial, SymmetricFiniteSTransform
+from tests._cases import case
 
 
-@pytest.mark.parametrize(
-    "roots", [[-1, 1], [-2, -1, 1, 2], [-1, 0, 0, 1], [-2, -2, 2, 2]]
-)
-def test_standard_square_matches_independent_coefficient_ratios(
-    roots: list[int],
-) -> None:
-    x = sp.Symbol("x")
-    reference = sp.Poly(sp.prod(x - r for r in roots), x)
-    n = len(roots)
-    normalized = [
-        (-1) ** k * reference.nth(n - k) / sp.binomial(n, k) for k in range(n + 1)
-    ]
-    count = (n - roots.count(0)) // 2
-    expected = [normalized[2 * k - 2] / normalized[2 * k] for k in range(1, count + 1)]
-    p = RealRootedPolynomial(reference.all_coeffs())
-    legacy = SymmetricFiniteSTransform(p)
-    explicit = SymmetricFiniteSTransform(p, convention="ratio")
-    standard = SymmetricFiniteSTransform(p, convention="standard")
-    assert legacy.tolist() == explicit.tolist() == expected
-    assert [sp.simplify(s * s) for s in standard] == expected
-    assert all(sp.im(s) > 0 and sp.re(s) == 0 for s in standard)
-    numeric = SymmetricFiniteSTransform(p, exact=False, convention="standard")
-    assert numeric.dtype == np.complex128
-    np.testing.assert_allclose(numeric, [complex(v) for v in standard], rtol=2e-15)
+def test_standard_square_matches_independent_coefficient_ratios() -> None:
+    roots: list[int]
+    for roots in [[-1, 1], [-2, -1, 1, 2], [-1, 0, 0, 1], [-2, -2, 2, 2]]:
+        with case(roots=roots):
+            x = sp.Symbol("x")
+            reference = sp.Poly(sp.prod(x - r for r in roots), x)
+            n = len(roots)
+            normalized = [
+                (-1) ** k * reference.nth(n - k) / sp.binomial(n, k)
+                for k in range(n + 1)
+            ]
+            count = (n - roots.count(0)) // 2
+            expected = [
+                normalized[2 * k - 2] / normalized[2 * k] for k in range(1, count + 1)
+            ]
+            p = RealRootedPolynomial(reference.all_coeffs())
+            legacy = SymmetricFiniteSTransform(p)
+            explicit = SymmetricFiniteSTransform(p, convention="ratio")
+            standard = SymmetricFiniteSTransform(p, convention="standard")
+            assert legacy.tolist() == explicit.tolist() == expected
+            assert [sp.simplify(s * s) for s in standard] == expected
+            assert all(sp.im(s) > 0 and sp.re(s) == 0 for s in standard)
+            numeric = SymmetricFiniteSTransform(p, exact=False, convention="standard")
+            assert numeric.dtype == np.complex128
+            np.testing.assert_allclose(
+                numeric, [complex(v) for v in standard], rtol=2e-15
+            )
 
 
 def test_minimal_standard_and_legacy_example() -> None:
@@ -55,12 +59,14 @@ def test_legacy_parity_only_behavior_is_preserved() -> None:
     assert p._is_verified is False
 
 
-@pytest.mark.parametrize("coefficients", [[1, -1], [1, -3, 2], [1]])
-def test_standard_invalid_degree_or_symmetry(coefficients: list[int]) -> None:
-    with pytest.raises(ValueError):
-        SymmetricFiniteSTransform(
-            RealRootedPolynomial(coefficients), convention="standard"
-        )
+def test_standard_invalid_degree_or_symmetry() -> None:
+    coefficients: list[int]
+    for coefficients in [[1, -1], [1, -3, 2], [1]]:
+        with case(coefficients=coefficients):
+            with pytest.raises(ValueError):
+                SymmetricFiniteSTransform(
+                    RealRootedPolynomial(coefficients), convention="standard"
+                )
 
 
 @pytest.mark.parametrize("exact", [True, False])

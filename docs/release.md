@@ -1,6 +1,13 @@
 # Release process
 
-FiniteFree 0.2.0 is distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). This checklist distinguishes a locally built candidate from a verified production upload and records the validation required before a release tag is created.
+This source prepares **FiniteFree 0.3.0**. A candidate build and a version entry do not establish production publication: verify the approved tag, workflow and [PyPI files](https://pypi.org/project/finitefree/) using this checklist. The previous production release is [0.2.0](https://pypi.org/project/finitefree/0.2.0/), from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0).
+
+The 0.3.0 feature scope is prepared NumPy/optional-CuPy pencils, verified
+scaled Hermite workflows, bounded interactive examples and exact-input
+corrections. Test consolidation must include the integrated GUE regressions.
+GPU performance studies, rigorous rare-tail enclosures and new GPU algorithms
+are deferred research, not claims of this release. Preserve their documented
+limits when preparing release notes.
 
 ## Release promotion
 
@@ -16,9 +23,9 @@ Publication precedes promotion to `main`. If publication or verification fails, 
 
 ## Compatibility
 
-0.2.0 requires Python 3.10 or later and `python-flint>=0.9.0`. Testing the former Python 3.9 / FLINT 0.6 floor reproduced `AttributeError`: that backend does not expose `fmpq_mpoly_ctx`, needed for rational multivariate polynomials. Stable FLINT 0.7 and 0.8 require Python 3.11; FLINT 0.9 supports Python 3.10 and supplies this API. The exact supported runtime floors are recorded in `requirements/minimum-runtime.txt` and exercised separately in CI.
+0.3.0 retains Python 3.10 or later and `python-flint>=0.9.0` from 0.2.0. Testing the former Python 3.9 / FLINT 0.6 floor reproduced `AttributeError`: that backend does not expose `fmpq_mpoly_ctx`, needed for rational multivariate polynomials. Stable FLINT 0.7 and 0.8 require Python 3.11; FLINT 0.9 supports Python 3.10 and supplies this API. The exact supported runtime floors are recorded in `requirements/minimum-runtime.txt` and exercised separately in CI.
 
-The symmetric S default remains the legacy even-coefficient ratio. Use `convention="standard"` for the positive-imaginary square root in Definition 8.1. See [the API contract](api.md#symmetric-finite-s-output-convention) and [all migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md), including cumulant normalization and snapshot ownership.
+The symmetric S default remains the legacy even-coefficient ratio. Use `convention="standard"` for the positive-imaginary square root in Definition 8.1. See [the API contract](api.md#symmetric-finite-s-output-convention) and [all migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), including cumulant normalization and snapshot ownership.
 
 ## Review checklist
 
@@ -39,4 +46,4 @@ Linux build and test environments select compatible NumPy/SciPy binary wheels. T
 
 Each wheel build removes compiled extensions left by earlier Python/libc targets in the reused build checkout. Both workflows then require each wheel to contain exactly one modular extension matching its Python tag, alongside the installed-wheel regression suite.
 
-The `publish.yml` workflow builds platform wheels with cibuildwheel and uploads through PyPI trusted publishing. A matching `v*.*.*` tag or manual workflow dispatch starts that upload. Creating `v0.2.0` is therefore a publication action, not a harmless preparation step. Do not create the tag or dispatch publishing before the release review is complete. Its manual input defaults to TestPyPI; choosing `false` selects production. Tag routing only checks for `rc` or `dev`: other matching prerelease names can reach production. The tag does not change the static package version in `pyproject.toml`.
+The `publish.yml` workflow builds platform wheels with cibuildwheel and uploads through PyPI trusted publishing. A matching `v*.*.*` tag or manual workflow dispatch starts that upload. Creating `v0.3.0` is therefore a publication action, not a harmless preparation step. Do not create the tag or dispatch publishing before the release review is complete. Its manual input defaults to TestPyPI; choosing `false` selects production. Tag routing only checks for `rc` or `dev`: other matching prerelease names can reach production. The tag does not change the static package version in `pyproject.toml`.

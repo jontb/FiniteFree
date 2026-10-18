@@ -40,6 +40,8 @@ def _prepare_matrices(
         try:
             for r in range(n):
                 for c in range(n):
+                    if np.iscomplexobj(values[r, c]):
+                        raise ValueError("Complex matrix entries are not supported")
                     rational[r, c] = sympy_to_fmpq(values[r, c])
                     floats[r, c] = flint_to_float(rational[r, c])
         except (TypeError, ValueError, OverflowError) as error:

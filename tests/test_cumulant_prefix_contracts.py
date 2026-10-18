@@ -1,62 +1,86 @@
-import math
 from fractions import Fraction
-from typing import Any
 
 import flint
 import numpy as np
 import pytest
 import sympy as sp
 
-from finitefree import FiniteRTransform, RealRootedPolynomial, gue_expected_poly
+from finitefree import (
+    FiniteRTransform,
+    RealRootedPolynomial,
+    gue_expected_poly,
+    wishart_expected_poly,
+)
+from tests._cases import case
+from tests._cumulants import assert_cumulants, logarithm_reference, partition_reference
 
 
-def logarithm_reference(p: RealRootedPolynomial, order: int, d: int) -> list[Any]:
-    """Independent truncated log generating function from stored coefficients."""
-    z = sp.Symbol("z")
-    coefficients = list(p.coeffs)
-    moments = [
-        (-1) ** k * sp.Rational(coefficients[k]) / coefficients[0] / math.comb(d, k)
-        if k <= p.degree
-        else 0
-        for k in range(min(order, d) + 1)
+def test_cumulants_against_independent_definitions_and_closed_forms() -> None:
+    x = sp.Symbol("x")
+    scenarios = [
+        (
+            "quadratic",
+            RealRootedPolynomial([1, -3, 2]),
+            [sp.Rational(3, 2), sp.Rational(1, 2), 0, 0],
+        ),
+        ("cubic", RealRootedPolynomial.from_roots([1, 2, 3]), [2, 1, 0]),
+        (
+            "wishart",
+            wishart_expected_poly(6, 10),
+            [sp.Rational(3, 5) ** k for k in range(6)],
+        ),
+        (
+            "hermite",
+            RealRootedPolynomial(
+                sp.Poly(sp.hermite_prob(50, x), x).all_coeffs(), assume_real_rooted=True
+            ),
+            [0, 50] + [0] * 6,
+        ),
+        ("third cumulant", RealRootedPolynomial.from_roots([0, 0, 3]), [1, 3, 9]),
     ]
-    u = sum(moments[k] * z**k / math.factorial(k) for k in range(1, len(moments)))
-    # Formal logarithm expansion, avoiding the library's cumulant recurrence.
-    log = sp.Poly(0, z)
-    power = sp.Poly(1, z)
-    for k in range(1, min(order, d) + 1):
-        power = sp.Poly(power.as_expr() * u, z)
-        power = sp.Poly(
-            sum(c * z ** n[0] for n, c in power.terms() if n[0] <= order), z
+    for leading in (2, -3, flint.fmpq(1, 10**400), flint.fmpq(10**400), sp.sqrt(2)):
+        scenarios.append(
+            (
+                str(leading),
+                RealRootedPolynomial([leading, -3 * leading, 2 * leading], monic=False),
+                [sp.Rational(3, 2), sp.Rational(1, 2)],
+            )
         )
-        log += power * sp.Rational((-1) ** (k + 1), k)
-    return [
-        sp.cancel(n * (-d) ** (n - 1) * log.nth(n)) if n <= d else 0
-        for n in range(1, order + 1)
-    ]
+    for name, p, expected in scenarios:
+        with case(polynomial=name):
+            stored, verified = list(p.coeffs), p._is_verified
+            for order in range(len(expected) + 1):
+                assert_cumulants(p, order, expected=expected[:order], prec=128)
+            assert (
+                partition_reference(p, min(3, len(expected)), p.degree) == expected[:3]
+            )
+            if p.degree == 2:
+                coefficients = p.normalized_coeffs()
+                assert list(coefficients) == [1, sp.Rational(3, 2), 2]
+                assert coefficients is p.normalized_coeffs()
+                if p._is_flint:
+                    exact = p._normalized_coeffs_flint()
+                    assert exact is p._normalized_coeffs_flint()
+                else:
+                    assert not p._is_verified
+            assert list(p.coeffs) == stored and p._is_verified == verified
 
-
-@pytest.mark.parametrize("scale", [sp.Rational(7, 3), sp.Integer(10) ** 500])
-@pytest.mark.parametrize("ambient", [0, 3])
-@pytest.mark.parametrize("order", [0, 1, 3, 6, 9])
-def test_prefix_cumulants_match_independent_log_definition(
-    scale: sp.Expr, ambient: int, order: int
-) -> None:
-    roots = [Fraction(-2, 3), Fraction(1, 5), 0, 0, Fraction(7, 2), 5]
-    base = RealRootedPolynomial.from_roots(roots)
-    p = RealRootedPolynomial(
-        base._fmpq_poly * flint.fmpq(int(scale.p), int(scale.q)), monic=False
-    )
-    d = p.degree + ambient
-    expected = logarithm_reference(p, order, d)
-    assert FiniteRTransform(p, order=order, d=d) == expected
-    np.testing.assert_allclose(
-        FiniteRTransform(p, order=order, d=d, numerical=True, prec=256),
-        [float(v) for v in expected],
-        rtol=1e-11,
-        atol=1e-11,
-    )
-    assert p.coeffs[0] == scale
+    # Prefix truncation and ambient zero padding retain their original matrix.
+    for order in (0, 1, 3, 6, 9):
+        for ambient in (0, 3):
+            for scale in (sp.Rational(7, 3), sp.Integer(10) ** 500):
+                with case(scale=scale, ambient=ambient, order=order):
+                    base = RealRootedPolynomial.from_roots(
+                        [Fraction(-2, 3), Fraction(1, 5), 0, 0, Fraction(7, 2), 5]
+                    )
+                    p = RealRootedPolynomial(
+                        base._fmpq_poly * flint.fmpq(int(scale.p), int(scale.q)),
+                        monic=False,
+                    )
+                    assert_cumulants(
+                        p, order, d=p.degree + ambient, rtol=1e-11, atol=1e-11
+                    )
+                    assert p.coeffs[0] == scale
 
 
 def test_prefix_cache_is_bounded_owned_and_never_claimed_complete() -> None:
@@ -109,3 +133,39 @@ def test_prefixes_pad_ambient_zeros_without_geometry_certification() -> None:
         FiniteRTransform(p, order=1, d=1)
     assert FiniteRTransform(p, order=-2) == []
     assert FiniteRTransform(RealRootedPolynomial([1]), order=3) == [0, 0, 0]
+
+
+def test_affine_cumulants_against_logarithm_after_cache_reordering() -> None:
+    """Mix cache orders, ambient dimensions and extreme nonmonic scales."""
+    base = RealRootedPolynomial.from_roots([-3, sp.Rational(1, 7), 0, 0, 2, 5])
+    for scale in [flint.fmpq(-7, 3), flint.fmpq(1, 10**500), flint.fmpq(10**500)]:
+        with case(scale=scale):
+            p = RealRootedPolynomial(base._fmpq_poly * scale, monic=False)
+            stored = list(p.coeffs)
+            # Warming one dimension/order must not contaminate another.
+            for d, order in [(9, 3), (6, 6), (9, 9), (6, 1), (9, 2), (6, 6)]:
+                with case(d=d, order=order):
+                    expected = logarithm_reference(p, order, d)
+                    assert FiniteRTransform(p, order=order, d=d) == expected
+                    np.testing.assert_allclose(
+                        FiniteRTransform(p, order=order, d=d, numerical=True),
+                        [float(v) for v in expected],
+                        rtol=2e-12,
+                        atol=2e-12,
+                    )
+            shift, dilation = 10**50 + 1, sp.Rational(-3, 7)
+            transformed = p.shift(shift).dilation(dilation)
+            reference = logarithm_reference(transformed, 6, 6)
+            original = logarithm_reference(p, 6, 6)
+            assert reference == [
+                dilation * (original[0] + shift),
+                *[dilation**n * original[n - 1] for n in range(2, 7)],
+            ]
+            assert FiniteRTransform(transformed, order=6) == reference
+            np.testing.assert_allclose(
+                FiniteRTransform(transformed, order=6, numerical=True, prec=192),
+                [float(v) for v in reference],
+                rtol=2e-12,
+                atol=2e-12,
+            )
+            assert list(p.coeffs) == stored

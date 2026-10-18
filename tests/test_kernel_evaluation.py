@@ -12,6 +12,7 @@ from finitefree import (
     hermite_polynomial,
     legendre_polynomial,
 )
+from tests._cases import case
 
 
 def hermite_kernel(n: int) -> OrthogonalPolynomialKernel:
@@ -21,13 +22,15 @@ def hermite_kernel(n: int) -> OrthogonalPolynomialKernel:
     )
 
 
-@pytest.mark.parametrize("representation", [int, np.int64, sp.Integer, flint.fmpq])
-def test_exact_distinct_large_integers_are_not_diagonal(representation: Any) -> None:
-    kernel = hermite_kernel(2)
-    x = representation(10**16)
-    y = representation(10**16 + 1)
-    assert kernel(x, y) == 1 + (10**16) * (10**16 + 1)
-    assert kernel(y, x) == kernel(x, y)
+def test_exact_distinct_large_integers_are_not_diagonal() -> None:
+    representation: Any
+    for representation in [int, np.int64, sp.Integer, flint.fmpq]:
+        with case(representation=representation):
+            kernel = hermite_kernel(2)
+            x = representation(10**16)
+            y = representation(10**16 + 1)
+            assert kernel(x, y) == 1 + (10**16) * (10**16 + 1)
+            assert kernel(y, x) == kernel(x, y)
 
 
 def test_exact_inputs_do_not_require_float64_range() -> None:
@@ -37,30 +40,34 @@ def test_exact_inputs_do_not_require_float64_range() -> None:
     assert kernel(x, x) == 1 + x * x
 
 
-@pytest.mark.parametrize("x", [0.5, 2.0, 20.0, 1e6])
-@pytest.mark.parametrize("separation", [1e-9, 1e-8])
-def test_nearby_float_points_preserve_the_off_diagonal_kernel(
-    x: float, separation: float
-) -> None:
-    kernel = hermite_kernel(2)
-    y = x + separation
-    expected = float(1 + sp.Rational(x) * sp.Rational(y))
-    assert kernel(x, y) == pytest.approx(expected, rel=2e-15)
-    assert kernel(x, y) == kernel(y, x)
+def test_nearby_float_points_preserve_the_off_diagonal_kernel() -> None:
+    x: float
+    separation: float
+    for separation in [1e-9, 1e-8]:
+        for x in [0.5, 2.0, 20.0, 1e6]:
+            with case(x=x, separation=separation):
+                kernel = hermite_kernel(2)
+                y = x + separation
+                expected = float(1 + sp.Rational(x) * sp.Rational(y))
+                assert kernel(x, y) == pytest.approx(expected, rel=2e-15)
+                assert kernel(x, y) == kernel(y, x)
 
 
-@pytest.mark.parametrize("n", [5, 20, 40, 60])
-@pytest.mark.parametrize("x", [0.5, 2.0])
-def test_nearby_hermite_kernel_matches_exact_basis_reference(n: int, x: float) -> None:
-    kernel = hermite_kernel(n)
-    y = float(np.nextafter(x, np.inf))
-    x_exact, y_exact = sp.Rational(x), sp.Rational(y)
-    reference = sum(
-        p.evaluate(x_exact) * p.evaluate(y_exact) / math.factorial(j)
-        for j, p in enumerate(kernel.polys[:-1])
-    )
-    assert kernel(x, y) == pytest.approx(float(reference), rel=2e-12)
-    assert kernel(x, y) == kernel(y, x)
+def test_nearby_hermite_kernel_matches_exact_basis_reference() -> None:
+    n: int
+    x: float
+    for x in [0.5, 2.0]:
+        for n in [5, 20, 40, 60]:
+            with case(n=n, x=x):
+                kernel = hermite_kernel(n)
+                y = float(np.nextafter(x, np.inf))
+                x_exact, y_exact = sp.Rational(x), sp.Rational(y)
+                reference = sum(
+                    p.evaluate(x_exact) * p.evaluate(y_exact) / math.factorial(j)
+                    for j, p in enumerate(kernel.polys[:-1])
+                )
+                assert kernel(x, y) == pytest.approx(float(reference), rel=2e-12)
+                assert kernel(x, y) == kernel(y, x)
 
 
 def test_nearby_legendre_kernel_preserves_basis_normalization() -> None:
