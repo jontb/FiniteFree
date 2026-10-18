@@ -8,17 +8,19 @@ import sympy as sp
 from finitefree import RealRootedPolynomial
 from finitefree.hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from finitefree.utils.conversion import sympy_to_fmpq
+from tests._cases import case
 
 
-@pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64, np.longdouble])
-@pytest.mark.parametrize("sign", [-1, 1])
-def test_numpy_scalar_conversion_preserves_the_supplied_dyadic_value(
-    dtype: Any, sign: int
-) -> None:
-    exponent = min(np.finfo(dtype).nmant, 60)
-    value = dtype(sign) * (dtype(1) + np.ldexp(dtype(1), -exponent))
-    expected = flint.fmpq(sign * (2**exponent + 1), 2**exponent)
-    assert sympy_to_fmpq(value) == expected
+def test_numpy_scalar_conversion_preserves_the_supplied_dyadic_value() -> None:
+    dtype: Any
+    sign: int
+    for sign in [-1, 1]:
+        for dtype in [np.float16, np.float32, np.float64, np.longdouble]:
+            with case(dtype=dtype, sign=sign):
+                exponent = min(np.finfo(dtype).nmant, 60)
+                value = dtype(sign) * (dtype(1) + np.ldexp(dtype(1), -exponent))
+                expected = flint.fmpq(sign * (2**exponent + 1), 2**exponent)
+                assert sympy_to_fmpq(value) == expected
 
 
 def extended_value() -> tuple[Any, sp.Rational]:

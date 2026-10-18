@@ -10,55 +10,57 @@ import pytest
 import sympy as sp
 
 from finitefree.multivariate import MultivariatePolynomial
+from tests._cases import case
 
 
 def _exact(value: Any) -> sp.Rational:
     return sp.Rational(int(value.p), int(value.q))
 
 
-@pytest.mark.parametrize("expression", ["zero", "constant", "mixed"])
-def test_reorder_preserves_symbol_meanings_and_sparse_coefficients(
-    expression: str,
-) -> None:
-    x, y, z = sp.symbols("x y z")
-    expr = {"zero": 0, "constant": 7, "mixed": x**3 * y / 3 - 5 * z + x * y * z + 2}[
-        expression
-    ]
-    p = MultivariatePolynomial(expr, [x, y, z])
-    values = {x: Fraction(1, 2), y: -3, z: 4}
-    for order in itertools.permutations((x, y, z)):
-        q = p.reorder_variables(order)
-        assert q.variables == list(order)
-        assert q.expr == p.expr
-        expected = {
-            tuple(alpha[(x, y, z).index(v)] for v in order): c
-            for alpha, c in p.coefficients().items()
-        }
-        assert q.coefficients() == expected
-        assert q.to_fmpq_mpoly().context().names() == tuple(v.name for v in order)
-        assert q.evaluate([values[v] for v in order]) == p.evaluate(
-            list(values.values())
-        )
-        assert q is not p
+def test_reorder_preserves_symbol_meanings_and_sparse_coefficients() -> None:
+    expression: str
+    for expression in ["zero", "constant", "mixed"]:
+        with case(expression=expression):
+            x, y, z = sp.symbols("x y z")
+            expr = {
+                "zero": 0,
+                "constant": 7,
+                "mixed": x**3 * y / 3 - 5 * z + x * y * z + 2,
+            }[expression]
+            p = MultivariatePolynomial(expr, [x, y, z])
+            values = {x: Fraction(1, 2), y: -3, z: 4}
+            for order in itertools.permutations((x, y, z)):
+                q = p.reorder_variables(order)
+                assert q.variables == list(order)
+                assert q.expr == p.expr
+                expected = {
+                    tuple(alpha[(x, y, z).index(v)] for v in order): c
+                    for alpha, c in p.coefficients().items()
+                }
+                assert q.coefficients() == expected
+                assert q.to_fmpq_mpoly().context().names() == tuple(
+                    v.name for v in order
+                )
+                assert q.evaluate([values[v] for v in order]) == p.evaluate(
+                    list(values.values())
+                )
+                assert q is not p
 
 
-@pytest.mark.parametrize(
-    "variables",
-    [
+def test_reorder_rejects_renaming_dropped_symbols_and_changed_assumptions() -> None:
+    variables: Any
+    for variables in [
         [],
         ["y", "x"],
         [sp.Symbol("x")],
         [sp.Symbol("x"), sp.Symbol("x")],
         [sp.Symbol("x"), sp.Symbol("z")],
         [sp.Symbol("x", real=True), sp.Symbol("y")],
-    ],
-)
-def test_reorder_rejects_renaming_dropped_symbols_and_changed_assumptions(
-    variables: Any,
-) -> None:
-    x, y = sp.symbols("x y")
-    with pytest.raises(ValueError, match="Variables|Variable|permutation"):
-        MultivariatePolynomial(x + 2 * y, [x, y]).reorder_variables(variables)
+    ]:
+        with case(variables=variables):
+            x, y = sp.symbols("x y")
+            with pytest.raises(ValueError, match="Variables|Variable|permutation"):
+                MultivariatePolynomial(x + 2 * y, [x, y]).reorder_variables(variables)
 
 
 def test_reorder_and_substitution_own_inputs_exports_and_numeric_caches() -> None:
@@ -121,29 +123,28 @@ def test_explicit_target_context_supports_renaming_projection_and_embedding() ->
     assert p.substitute({x: 2, y: 3}).variables == [x, y]
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
+def test_substitution_scalars_keep_the_supplied_exact_value() -> None:
+    value: Any
+    for value in [
         Fraction(2, 3),
         sp.Rational(2, 3),
         flint.fmpq(2, 3),
         np.int64(7),
         0.1,
         np.float32(0.1),
-    ],
-)
-def test_substitution_scalars_keep_the_supplied_exact_value(value: Any) -> None:
-    x = sp.Symbol("x")
-    p = MultivariatePolynomial(x * x + 2 * x, [x])
-    if isinstance(value, (float, np.floating)):
-        expected = sp.Rational(*value.as_integer_ratio())
-    elif isinstance(value, flint.fmpq):
-        expected = _exact(value)
-    else:
-        expected = sp.Rational(value)
-    q = p.substitute({x: value})
-    assert q.expr == expected**2 + 2 * expected
-    assert q.variables == [x] and q.degree() == 0
+    ]:
+        with case(value=value):
+            x = sp.Symbol("x")
+            p = MultivariatePolynomial(x * x + 2 * x, [x])
+            if isinstance(value, (float, np.floating)):
+                expected = sp.Rational(*value.as_integer_ratio())
+            elif isinstance(value, flint.fmpq):
+                expected = _exact(value)
+            else:
+                expected = sp.Rational(value)
+            q = p.substitute({x: value})
+            assert q.expr == expected**2 + 2 * expected
+            assert q.variables == [x] and q.degree() == 0
 
 
 def test_substitution_preserves_extended_scalar_precision() -> None:
@@ -155,9 +156,9 @@ def test_substitution_preserves_extended_scalar_precision() -> None:
     assert q.expr == sp.Rational(2**60 + 1, 2**60)
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
+def test_substitution_rejects_nonrational_scalar_domains() -> None:
+    value: Any
+    for value in [
         True,
         np.bool_(False),
         "x",
@@ -172,31 +173,27 @@ def test_substitution_preserves_extended_scalar_precision() -> None:
         sp.sqrt(2),
         sp.I,
         sp.pi,
-    ],
-)
-def test_substitution_rejects_nonrational_scalar_domains(value: Any) -> None:
-    x = sp.Symbol("x")
-    with pytest.raises(ValueError, match="rational|finite"):
-        MultivariatePolynomial(x, [x]).substitute({x: value})
+    ]:
+        with case(value=value):
+            x = sp.Symbol("x")
+            with pytest.raises(ValueError, match="rational|finite"):
+                MultivariatePolynomial(x, [x]).substitute({x: value})
 
 
-@pytest.mark.parametrize(
-    "replacement",
-    [
+def test_substitution_rejects_unknown_symbols_and_nonpolynomial_domains() -> None:
+    replacement: sp.Expr
+    for replacement in [
         sp.Symbol("z"),
         sp.Symbol("x", real=True),
         sp.sin(sp.Symbol("x")),
         1 / sp.Symbol("x"),
         sp.sqrt(2) * sp.Symbol("x"),
         sp.I * sp.Symbol("x"),
-    ],
-)
-def test_substitution_rejects_unknown_symbols_and_nonpolynomial_domains(
-    replacement: sp.Expr,
-) -> None:
-    x, y = sp.symbols("x y")
-    with pytest.raises(ValueError, match="target|rational"):
-        MultivariatePolynomial(x + y, [x, y]).substitute({x: replacement})
+    ]:
+        with case(replacement=replacement):
+            x, y = sp.symbols("x y")
+            with pytest.raises(ValueError, match="target|rational"):
+                MultivariatePolynomial(x + y, [x, y]).substitute({x: replacement})
 
 
 def test_substitution_requires_explicit_matching_contexts_and_stored_keys() -> None:
@@ -217,85 +214,102 @@ def test_substitution_requires_explicit_matching_contexts_and_stored_keys() -> N
         p.substitute({x: 1, y: 2}, variables=[])
 
 
-@pytest.mark.parametrize("seed", range(4))
-def test_batch_derivatives_against_independent_symbolic_references(seed: int) -> None:
-    variables = sp.symbols("x y z")
-    rng = np.random.default_rng(seed)
-    expression = sp.expand(
-        sum(
-            sp.Rational(int(rng.integers(-4, 5)), int(rng.integers(1, 5)))
-            * sp.prod(v ** int(rng.integers(0, 4)) for v in variables)
-            for _ in range(10)
-        )
-    )
-    p = MultivariatePolynomial(expression, variables)
-    points = rng.uniform(-1, 1, (2, 3, 3))
-    expected_g, expected_h = [], []
-    for point in points.reshape(-1, 3):
-        mapping = dict(zip(variables, [sp.Rational(float(v)) for v in point]))
-        expected_g.append(
-            [float(sp.diff(expression, v).subs(mapping)) for v in variables]
-        )
-        expected_h.append(
-            [
-                [float(sp.diff(expression, v, w).subs(mapping)) for w in variables]
-                for v in variables
-            ]
-        )
-    gradient, hessian = p.gradient_float64(points), p.hessian_float64(points)
-    assert gradient.shape == (2, 3, 3) and hessian.shape == (2, 3, 3, 3)
-    assert gradient.dtype == hessian.dtype == np.float64
-    np.testing.assert_allclose(
-        gradient, np.array(expected_g).reshape(2, 3, 3), rtol=2e-13, atol=2e-13
-    )
-    np.testing.assert_allclose(
-        hessian, np.array(expected_h).reshape(2, 3, 3, 3), rtol=2e-13, atol=2e-13
-    )
-    np.testing.assert_array_equal(hessian, np.swapaxes(hessian, -1, -2))
+def test_batch_derivatives_against_independent_symbolic_references() -> None:
+    seed: int
+    for seed in range(4):
+        with case(seed=seed):
+            variables = sp.symbols("x y z")
+            rng = np.random.default_rng(seed)
+            expression = sp.expand(
+                sum(
+                    sp.Rational(int(rng.integers(-4, 5)), int(rng.integers(1, 5)))
+                    * sp.prod(v ** int(rng.integers(0, 4)) for v in variables)
+                    for _ in range(10)
+                )
+            )
+            p = MultivariatePolynomial(expression, variables)
+            points = rng.uniform(-1, 1, (2, 3, 3))
+            expected_g, expected_h = [], []
+            for point in points.reshape(-1, 3):
+                mapping = dict(zip(variables, [sp.Rational(float(v)) for v in point]))
+                expected_g.append(
+                    [float(sp.diff(expression, v).subs(mapping)) for v in variables]
+                )
+                expected_h.append(
+                    [
+                        [
+                            float(sp.diff(expression, v, w).subs(mapping))
+                            for w in variables
+                        ]
+                        for v in variables
+                    ]
+                )
+            gradient, hessian = p.gradient_float64(points), p.hessian_float64(points)
+            assert gradient.shape == (2, 3, 3) and hessian.shape == (2, 3, 3, 3)
+            assert gradient.dtype == hessian.dtype == np.float64
+            np.testing.assert_allclose(
+                gradient, np.array(expected_g).reshape(2, 3, 3), rtol=2e-13, atol=2e-13
+            )
+            np.testing.assert_allclose(
+                hessian,
+                np.array(expected_h).reshape(2, 3, 3, 3),
+                rtol=2e-13,
+                atol=2e-13,
+            )
+            np.testing.assert_array_equal(hessian, np.swapaxes(hessian, -1, -2))
+
+
+def test_derivative_batch_shapes_dtypes_broadcast_and_ownership() -> None:
+    dtype: Any
+    for dtype in [np.int64, np.float16, np.float32, np.float64, np.longdouble]:
+        with case(dtype=dtype):
+            x, y = sp.symbols("x y")
+            p = MultivariatePolynomial(x * x * y + y * y, [x, y])
+            point = np.array([2, 3], dtype=dtype)
+            points = np.broadcast_to(point, (2, 1, 4, 2))
+            gradient, hessian = p.gradient_float64(points), p.hessian_float64(points)
+            assert gradient.shape == (2, 1, 4, 2)
+            assert hessian.shape == (2, 1, 4, 2, 2)
+            assert gradient.dtype == hessian.dtype == np.float64
+            np.testing.assert_array_equal(
+                gradient, np.broadcast_to([12, 10], gradient.shape)
+            )
+            np.testing.assert_array_equal(
+                hessian, np.broadcast_to([[6, 4], [4, 2]], hessian.shape)
+            )
+            gradient[:] = 99
+            hessian[..., 0, 1] = 88
+            point[:] = 0
+            np.testing.assert_array_equal(p.gradient_float64([2, 3]), [12, 10])
+            np.testing.assert_array_equal(p.hessian_float64([2, 3]), [[6, 4], [4, 2]])
+            assert not np.shares_memory(gradient, points)
+            assert not np.shares_memory(hessian, points)
+
+
+def test_constant_zero_and_empty_derivative_batches() -> None:
+    expression: Any
+    shape: tuple[int, ...]
+    for shape in [(2,), (0, 2), (2, 0, 3, 2)]:
+        for expression in [0, 7, 10**500]:
+            with case(expression=expression, shape=shape):
+                x, y = sp.symbols("x y")
+                p = MultivariatePolynomial(expression, [x, y])
+                points = np.zeros(shape)
+                gradient, hessian = (
+                    p.gradient_float64(points),
+                    p.hessian_float64(points),
+                )
+                assert gradient.shape == shape and hessian.shape == (*shape, 2)
+                np.testing.assert_array_equal(gradient, np.zeros(shape))
+                np.testing.assert_array_equal(hessian, np.zeros((*shape, 2)))
 
 
 @pytest.mark.parametrize(
-    "dtype", [np.int64, np.float16, np.float32, np.float64, np.longdouble]
+    "method", ["evaluate_float64", "gradient_float64", "hessian_float64"]
 )
-def test_derivative_batch_shapes_dtypes_broadcast_and_ownership(dtype: Any) -> None:
-    x, y = sp.symbols("x y")
-    p = MultivariatePolynomial(x * x * y + y * y, [x, y])
-    point = np.array([2, 3], dtype=dtype)
-    points = np.broadcast_to(point, (2, 1, 4, 2))
-    gradient, hessian = p.gradient_float64(points), p.hessian_float64(points)
-    assert gradient.shape == (2, 1, 4, 2)
-    assert hessian.shape == (2, 1, 4, 2, 2)
-    assert gradient.dtype == hessian.dtype == np.float64
-    np.testing.assert_array_equal(gradient, np.broadcast_to([12, 10], gradient.shape))
-    np.testing.assert_array_equal(
-        hessian, np.broadcast_to([[6, 4], [4, 2]], hessian.shape)
-    )
-    gradient[:] = 99
-    hessian[..., 0, 1] = 88
-    point[:] = 0
-    np.testing.assert_array_equal(p.gradient_float64([2, 3]), [12, 10])
-    np.testing.assert_array_equal(p.hessian_float64([2, 3]), [[6, 4], [4, 2]])
-    assert not np.shares_memory(gradient, points)
-    assert not np.shares_memory(hessian, points)
-
-
-@pytest.mark.parametrize("expression", [0, 7, 10**500])
-@pytest.mark.parametrize("shape", [(2,), (0, 2), (2, 0, 3, 2)])
-def test_constant_zero_and_empty_derivative_batches(
-    expression: Any, shape: tuple[int, ...]
-) -> None:
-    x, y = sp.symbols("x y")
-    p = MultivariatePolynomial(expression, [x, y])
-    points = np.zeros(shape)
-    gradient, hessian = p.gradient_float64(points), p.hessian_float64(points)
-    assert gradient.shape == shape and hessian.shape == (*shape, 2)
-    np.testing.assert_array_equal(gradient, np.zeros(shape))
-    np.testing.assert_array_equal(hessian, np.zeros((*shape, 2)))
-
-
-@pytest.mark.parametrize(
-    "points",
-    [
+def test_derivative_batches_reject_invalid_coordinates(method: str) -> None:
+    points: Any
+    for points in [
         1,
         [1],
         [1, 2, 3],
@@ -305,17 +319,11 @@ def test_constant_zero_and_empty_derivative_batches(
         [1 + 0j, 2],
         np.array([1j, 2], dtype=object),
         [10**500, 0],
-    ],
-)
-@pytest.mark.parametrize(
-    "method", ["evaluate_float64", "gradient_float64", "hessian_float64"]
-)
-def test_derivative_batches_reject_invalid_coordinates(
-    points: Any, method: str
-) -> None:
-    x, y = sp.symbols("x y")
-    with pytest.raises(ValueError):
-        getattr(MultivariatePolynomial(x + y, [x, y]), method)(points)
+    ]:
+        with case(points=points):
+            x, y = sp.symbols("x y")
+            with pytest.raises(ValueError):
+                getattr(MultivariatePolynomial(x + y, [x, y]), method)(points)
 
 
 def test_single_variable_and_singular_points_need_no_coordinate_division() -> None:
@@ -331,14 +339,14 @@ def test_single_variable_and_singular_points_need_no_coordinate_division() -> No
     assert univariate.gradient_float64(np.empty((0, 1))).shape == (0, 1)
 
 
-@pytest.mark.parametrize(
-    "method", ["evaluate_float64", "gradient_float64", "hessian_float64"]
-)
-def test_object_arrays_cannot_hide_numpy_complex_coordinates(method: str) -> None:
-    x = sp.Symbol("x")
-    points = np.array([np.complex128(1j)], dtype=object)
-    with pytest.raises(ValueError, match="real"):
-        getattr(MultivariatePolynomial(x * x, [x]), method)(points)
+def test_object_arrays_cannot_hide_numpy_complex_coordinates() -> None:
+    method: str
+    for method in ["evaluate_float64", "gradient_float64", "hessian_float64"]:
+        with case(method=method):
+            x = sp.Symbol("x")
+            points = np.array([np.complex128(1j)], dtype=object)
+            with pytest.raises(ValueError, match="real"):
+                getattr(MultivariatePolynomial(x * x, [x]), method)(points)
 
 
 def test_many_distinct_powers_against_exact_derivative_sums() -> None:
@@ -374,27 +382,29 @@ def test_exact_differentiation_precedes_float_conversion_and_ignores_unused_cons
         p.evaluate_float64([3])
 
 
-@pytest.mark.parametrize(
-    "method, expression, point, match",
-    [
+def test_derivative_range_failures_are_explicit_and_do_not_poison_exact_algebra() -> (
+    None
+):
+    method: str
+    expression: Any
+    point: Any
+    match: str
+    for method, expression, point, match in [
         ("gradient_float64", 10**500 * sp.Symbol("x"), [0], "coefficients"),
         ("hessian_float64", 10**500 * sp.Symbol("x") ** 2, [0], "coefficients"),
         ("gradient_float64", sp.Symbol("x") ** 3, [1e200], "nonfinite"),
         ("hessian_float64", sp.Symbol("x") ** 4, [1e200], "nonfinite"),
         ("gradient_float64", 10**308 * sp.Symbol("x") ** 2, [1], "coefficients"),
-    ],
-)
-def test_derivative_range_failures_are_explicit_and_do_not_poison_exact_algebra(
-    method: str, expression: Any, point: Any, match: str
-) -> None:
-    x = sp.Symbol("x")
-    p = MultivariatePolynomial(expression, [x])
-    with pytest.raises(RuntimeError, match=match):
-        getattr(p, method)(point)
-    assert p.expr == expression
-    assert p.partial_derivative(x).expr == sp.diff(expression, x)
-    if match == "nonfinite":
-        assert np.all(np.isfinite(getattr(p, method)([0])))
+    ]:
+        with case(method=method, expression=expression, point=point, match=match):
+            x = sp.Symbol("x")
+            p = MultivariatePolynomial(expression, [x])
+            with pytest.raises(RuntimeError, match=match):
+                getattr(p, method)(point)
+            assert p.expr == expression
+            assert p.partial_derivative(x).expr == sp.diff(expression, x)
+            if match == "nonfinite":
+                assert np.all(np.isfinite(getattr(p, method)([0])))
 
 
 def test_derivatives_can_be_finite_when_value_overflows() -> None:

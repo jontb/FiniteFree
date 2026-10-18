@@ -17,6 +17,7 @@ from finitefree import (
     wishart_expected_poly,
 )
 from finitefree.convolutions import multiplicative, symmetric_additive
+from tests._cases import case
 
 
 def reference_roots(p: RealRootedPolynomial) -> Any:
@@ -47,17 +48,19 @@ def reference_roots(p: RealRootedPolynomial) -> Any:
         lambda n: wishart_expected_poly(n, 2 * n),
     ],
 )
-@pytest.mark.parametrize("degree", [2, 17, 64])
 def test_recurrence_roots_against_independent_arb(
-    factory: Callable[[int], RealRootedPolynomial], degree: int
+    factory: Callable[[int], RealRootedPolynomial],
 ) -> None:
-    p = factory(degree)
-    assert p._root_recurrence is not None
-    expected = reference_roots(p)
-    actual = p.evaluate_roots_float64(exact=False)
-    np.testing.assert_allclose(
-        actual, expected, atol=3e-14 * max(1, max(abs(expected))), rtol=3e-13
-    )
+    degree: int
+    for degree in [2, 17, 64]:
+        with case(degree=degree):
+            p = factory(degree)
+            assert p._root_recurrence is not None
+            expected = reference_roots(p)
+            actual = p.evaluate_roots_float64(exact=False)
+            np.testing.assert_allclose(
+                actual, expected, atol=3e-14 * max(1, max(abs(expected))), rtol=3e-13
+            )
 
 
 def test_laguerre_tiny_positive_hard_edge() -> None:
@@ -68,14 +71,16 @@ def test_laguerre_tiny_positive_hard_edge() -> None:
     assert abs(actual[0] / expected[0] - 1) < 2e-10
 
 
-@pytest.mark.parametrize("scale", [sp.Rational(1, 10**100), 10**100, -3])
-def test_affine_metadata_stays_consistent(scale: Any) -> None:
-    p = hermite_polynomial(17, False).dilation(scale).shift(scale / 7)
-    expected = reference_roots(p)
-    actual = p.evaluate_roots_float64(exact=False)
-    np.testing.assert_allclose(
-        actual / float(scale), expected / float(scale), atol=3e-13
-    )
+def test_affine_metadata_stays_consistent() -> None:
+    scale: Any
+    for scale in [sp.Rational(1, 10**100), 10**100, -3]:
+        with case(scale=scale):
+            p = hermite_polynomial(17, False).dilation(scale).shift(scale / 7)
+            expected = reference_roots(p)
+            actual = p.evaluate_roots_float64(exact=False)
+            np.testing.assert_allclose(
+                actual / float(scale), expected / float(scale), atol=3e-13
+            )
 
 
 def test_reference_request_does_not_reuse_numerical_cache(

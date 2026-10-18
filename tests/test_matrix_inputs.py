@@ -8,22 +8,25 @@ import sympy as sp
 
 from finitefree.hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from finitefree.multivariate import MultivariatePolynomial
+from tests._cases import case
 
 
 @pytest.mark.parametrize(
     "pencil_type", [SymmetricMatrixPencil, MultiplicativeMatrixPencil]
 )
-@pytest.mark.parametrize("third", [Fraction(1, 3), sp.Rational(1, 3), flint.fmpq(1, 3)])
-def test_original_integer_and_rational_inputs(pencil_type: Any, third: Any) -> None:
-    large = 2**53 + 1
-    source = np.array([[large, 0], [0, third]], dtype=object)
-    pencil = pencil_type([source])
-    source[0, 0] = 0  # Construction copies the input.
-    assert pencil.characteristic_polynomial([1]) == flint.fmpq_poly(
-        [flint.fmpq(large, 3), -flint.fmpq(3 * large + 1, 3), 1]
-    )
-    assert pencil.evaluate([1]).dtype == np.float64
-    assert pencil.evaluate([1])[0, 0] == float(large)
+def test_original_integer_and_rational_inputs(pencil_type: Any) -> None:
+    third: Any
+    for third in [Fraction(1, 3), sp.Rational(1, 3), flint.fmpq(1, 3)]:
+        with case(third=third):
+            large = 2**53 + 1
+            source = np.array([[large, 0], [0, third]], dtype=object)
+            pencil = pencil_type([source])
+            source[0, 0] = 0  # Construction copies the input.
+            assert pencil.characteristic_polynomial([1]) == flint.fmpq_poly(
+                [flint.fmpq(large, 3), -flint.fmpq(3 * large + 1, 3), 1]
+            )
+            assert pencil.evaluate([1]).dtype == np.float64
+            assert pencil.evaluate([1])[0, 0] == float(large)
 
 
 @pytest.mark.parametrize(
@@ -66,27 +69,28 @@ def test_exact_slp_uses_original_inputs(pencil_type: Any) -> None:
 
 
 @pytest.mark.parametrize("method", ["direct", "interpolated", "sparse"])
-@pytest.mark.parametrize("single_matrix", [False, True])
-@pytest.mark.parametrize("large", [2**53 + 1, 2**80 + 1])
-def test_multivariate_paths_preserve_original_entries(
-    method: str, single_matrix: bool, large: int
-) -> None:
-    matrices = [[[large, 0], [0, Fraction(1, 3)]]]
-    if not single_matrix:
-        matrices.append([[1, 0], [0, 1]])
-    pencil = SymmetricMatrixPencil(matrices)
-    factory = {
-        "direct": MultivariatePolynomial.from_symmetric_matrix_pencil,
-        "interpolated": MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated,
-        "sparse": MultivariatePolynomial.from_symmetric_matrix_pencil_sparse,
-    }[method]
-    result = factory(pencil)
-    x = result.variables[0]
-    expected = sp.Rational(large, 3) * x**2
-    if not single_matrix:
-        y = result.variables[1]
-        expected += (large + sp.Rational(1, 3)) * x * y + y**2
-    assert sp.expand(result.expr - expected) == 0
+def test_multivariate_paths_preserve_original_entries(method: str) -> None:
+    single_matrix: bool
+    large: int
+    for large in [2**53 + 1, 2**80 + 1]:
+        for single_matrix in [False, True]:
+            with case(single_matrix=single_matrix, large=large):
+                matrices = [[[large, 0], [0, Fraction(1, 3)]]]
+                if not single_matrix:
+                    matrices.append([[1, 0], [0, 1]])
+                pencil = SymmetricMatrixPencil(matrices)
+                factory = {
+                    "direct": MultivariatePolynomial.from_symmetric_matrix_pencil,
+                    "interpolated": MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated,
+                    "sparse": MultivariatePolynomial.from_symmetric_matrix_pencil_sparse,
+                }[method]
+                result = factory(pencil)
+                x = result.variables[0]
+                expected = sp.Rational(large, 3) * x**2
+                if not single_matrix:
+                    y = result.variables[1]
+                    expected += (large + sp.Rational(1, 3)) * x * y + y**2
+                assert sp.expand(result.expr - expected) == 0
 
 
 @pytest.mark.parametrize("large", [2**53 + 1, 2**80 + 1])
@@ -99,13 +103,19 @@ def test_diagonal_specialization_uses_original_entries(large: int) -> None:
 @pytest.mark.parametrize(
     "pencil_type", [SymmetricMatrixPencil, MultiplicativeMatrixPencil]
 )
-@pytest.mark.parametrize(
-    "matrices",
-    [[], [[[1, 2]]], [np.eye(2), np.eye(3)], [[[np.nan]]], [[[np.inf]]], [[[1j]]]],
-)
-def test_invalid_matrix_inputs(pencil_type: Any, matrices: Any) -> None:
-    with pytest.raises(ValueError):
-        pencil_type(matrices)
+def test_invalid_matrix_inputs(pencil_type: Any) -> None:
+    matrices: Any
+    for matrices in [
+        [],
+        [[[1, 2]]],
+        [np.eye(2), np.eye(3)],
+        [[[np.nan]]],
+        [[[np.inf]]],
+        [[[1j]]],
+    ]:
+        with case(matrices=matrices):
+            with pytest.raises(ValueError):
+                pencil_type(matrices)
 
 
 def test_symmetry_is_checked_before_float_rounding() -> None:

@@ -3,13 +3,16 @@ import pytest
 import sympy as sp
 
 from finitefree.core import RealRootedPolynomial
+from tests._cases import case
 
 
-@pytest.mark.parametrize("exponent, total", [(1, 3), (2, 7), (3, 18), (4, 47)])
-def test_integer_root_powers_are_exact(exponent: int, total: int) -> None:
-    # The roots of x^2-3x+1 are irrational, but their power sums are integers.
-    p = RealRootedPolynomial([1, -3, 1])
-    assert list(p.power(exponent).coeffs) == [1, -total, 1]
+def test_integer_root_powers_are_exact() -> None:
+    exponent: int
+    total: int
+    for exponent, total in [(1, 3), (2, 7), (3, 18), (4, 47)]:
+        with case(exponent=exponent, total=total):
+            p = RealRootedPolynomial([1, -3, 1])
+            assert list(p.power(exponent).coeffs) == [1, -total, 1]
 
 
 def test_integer_root_powers_with_multiplicity_and_rational_roots() -> None:

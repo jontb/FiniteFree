@@ -4,6 +4,7 @@ import pytest
 import sympy as sp
 
 from finitefree import PrecisionContext, RealRootedPolynomial
+from tests._cases import case
 
 
 def test_precision_context() -> None:
@@ -203,15 +204,18 @@ def test_derivative_non_monic() -> None:
     assert list(dp_non_monic.coeffs) == [2, -3]
 
 
-@pytest.mark.parametrize("degree", [2, 16, 35])
-def test_near_real_complex_roots_rejected(degree: int) -> None:
-    # The imaginary parts are small enough to pass the former float tolerance.
-    quadratic = flint.fmpq_poly([flint.fmpq(1, 10**10), 0, 1])
-    real_factor = RealRootedPolynomial.from_roots(range(1, degree - 1))._fmpq_poly
-    p = RealRootedPolynomial(quadratic * real_factor)
-    with pytest.raises(ValueError, match="not real-rooted"):
-        p.verify_real_rootedness()
-    assert not p._is_verified
+def test_near_real_complex_roots_rejected() -> None:
+    degree: int
+    for degree in [2, 16, 35]:
+        with case(degree=degree):
+            quadratic = flint.fmpq_poly([flint.fmpq(1, 10**10), 0, 1])
+            real_factor = RealRootedPolynomial.from_roots(
+                range(1, degree - 1)
+            )._fmpq_poly
+            p = RealRootedPolynomial(quadratic * real_factor)
+            with pytest.raises(ValueError, match="not real-rooted"):
+                p.verify_real_rootedness()
+            assert not p._is_verified
 
 
 def test_normalized_coefficients_do_not_certify_roots() -> None:
@@ -222,16 +226,20 @@ def test_normalized_coefficients_do_not_certify_roots() -> None:
         p.evaluate_roots_float64()
 
 
-@pytest.mark.parametrize("coeffs", [[], [0, 1], [2, 1, 1]])
-def test_normalized_coefficients_require_monic_normalization(coeffs: list[int]) -> None:
-    with pytest.raises(ValueError, match="e_0 = 1"):
-        RealRootedPolynomial.from_normalized_coeffs(coeffs)
+def test_normalized_coefficients_require_monic_normalization() -> None:
+    coeffs: list[int]
+    for coeffs in [[], [0, 1], [2, 1, 1]]:
+        with case(coeffs=coeffs):
+            with pytest.raises(ValueError, match="e_0 = 1"):
+                RealRootedPolynomial.from_normalized_coeffs(coeffs)
 
 
-@pytest.mark.parametrize("coeffs", [[0], [0, 0], flint.fmpq_poly([])])
-def test_zero_polynomial_rejected(coeffs: object) -> None:
-    with pytest.raises(ValueError, match="Zero polynomial"):
-        RealRootedPolynomial(coeffs)  # type: ignore[arg-type]
+def test_zero_polynomial_rejected() -> None:
+    coeffs: object
+    for coeffs in [[0], [0, 0], flint.fmpq_poly([])]:
+        with case(coeffs=coeffs):
+            with pytest.raises(ValueError, match="Zero polynomial"):
+                RealRootedPolynomial(coeffs)  # type: ignore[arg-type]
 
 
 def test_certified_high_degree_roots_with_multiplicities() -> None:
