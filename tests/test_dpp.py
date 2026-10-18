@@ -4,7 +4,12 @@ import flint
 import numpy as np
 import pytest
 
-from finitefree import DiscreteFiniteKernel, gap_probability_discrete, sample_discrete
+from finitefree import (
+    DiscreteFiniteKernel,
+    PreparedDiscreteDPP,
+    gap_probability_discrete,
+    sample_discrete,
+)
 
 
 @pytest.mark.parametrize("representation", [list, np.array, flint.fmpq_mat])
@@ -51,6 +56,45 @@ def test_sampling_roundoff_and_state_labels() -> None:
     assert sample_discrete(matrix, ["excluded", "included"]) == ["included"]
     with pytest.raises(ValueError, match="distinct"):
         sample_discrete(np.eye(2), [0, 0])
+
+
+@pytest.mark.parametrize("prepared", [False, True])
+@pytest.mark.parametrize("representation", ["array", "object", "callable"])
+@pytest.mark.parametrize("entry", [complex(0.5), complex(0.5, 0.25)])
+def test_complex_kernels_are_rejected_before_casting_or_random_draws(
+    prepared: bool,
+    representation: str,
+    entry: complex,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix = np.array([[entry]], dtype=object if representation == "object" else None)
+    kernel = DiscreteFiniteKernel(matrix) if representation == "callable" else matrix
+
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("Invalid kernel consumed randomness")
+
+    monkeypatch.setattr(np.random, "rand", unexpected)
+    with pytest.raises(ValueError, match="real symmetric"):
+        if prepared:
+            PreparedDiscreteDPP(kernel, [0])
+        else:
+            sample_discrete(kernel, [0])
+
+
+@pytest.mark.parametrize("representation", ["array", "object", "callable"])
+def test_real_kernel_representations_preserve_seeded_samples(
+    representation: str,
+) -> None:
+    matrix = np.array(
+        [[0.6, 0.2], [0.2, 0.4]], dtype=object if representation == "object" else None
+    )
+    kernel = DiscreteFiniteKernel(matrix) if representation == "callable" else matrix
+    expected = sample_discrete(
+        np.array(matrix, dtype=float), [0, 1], rng=np.random.default_rng(18)
+    )
+    assert sample_discrete(kernel, [0, 1], rng=np.random.default_rng(18)) == expected
+    prepared = PreparedDiscreteDPP(kernel, [0, 1])
+    assert prepared.sample(rng=np.random.default_rng(18)) == expected
 
 
 def test_nondiagonal_projection_inclusion_probabilities(
