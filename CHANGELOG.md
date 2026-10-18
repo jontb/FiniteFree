@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-No changes yet.
+- Diagonal matrix-pencil specialization now reconstructs until the CRT modulus
+  exceeds twice a proved coefficient bound. Repeated modular agreement can no
+  longer hide large nonzero coefficients.
+- Specialization weights and offsets preserve exact rational and supplied binary
+  floating values, including NumPy extended precision. Nonfinite, complex and
+  irrational parameters raise `ValueError` before modular evaluation.
+- Discrete DPP sampling rejects complex entries in callable kernels and object
+  arrays before float conversion or random draws, consistently with complex
+  numerical arrays. Valid real kernels retain the existing sampling algorithm.
+- Exclude local `wheelhouse/` artifacts from source distributions, preventing
+  stale wheels from being bundled in a new release archive.
 
 ## 0.2.0 — 2026-10-07
 
