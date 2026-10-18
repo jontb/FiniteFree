@@ -1,0 +1,27 @@
+name: Feature or mathematical proposal
+description: Discuss an API, mathematical extension, workflow improvement or larger refactor.
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Problem or use case
+      description: Explain who needs this and what the existing API or workflow cannot do.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Give a small example. For mathematical additions state definitions, normalization, domains and references.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and boundaries
+      description: Describe existing contracts to preserve, possible API changes, exact versus numerical behavior and alternatives.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation approach
+      description: Suggest independent identities, examples, regression tests or bounded benchmarks. Identify unresolved questions.
