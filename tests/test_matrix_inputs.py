@@ -112,6 +112,12 @@ def test_invalid_matrix_inputs(pencil_type: Any) -> None:
         [[[np.nan]]],
         [[[np.inf]]],
         [[[1j]]],
+        [[[0.5 + 0j]]],
+        [[[np.complex64(0.5)]]],
+        [[[np.complex128(0.5)]]],
+        [[[np.clongdouble(0.5)]]],
+        [np.array([[0.5]], dtype=np.complex64)],
+        [np.array([[1, 0], [0, 0.5 + 0j]], dtype=object)],
     ]:
         with case(matrices=matrices):
             with pytest.raises(ValueError):
