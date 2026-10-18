@@ -1,7 +1,11 @@
+from typing import Any, Iterator
+
 import numpy as np
+import pytest
 
 from finitefree import (
     EmpiricalComparison,
+    RealRootedPolynomial,
     gue_expected_poly,
     sample_goe,
     sample_gse,
@@ -12,278 +16,142 @@ from finitefree import (
     sample_wishart,
     wishart_expected_poly,
 )
+from finitefree.convolutions import symmetric_additive
+from tests._cases import case
 
 
-def test_gue_sampler() -> None:
-    d = 5
-    H = sample_gue(d)
-    assert H.shape == (d, d)
-    # Check Hermitian property
-    assert np.allclose(H, H.conj().T)
-    # Check that diagonal is real
-    assert np.allclose(np.imag(np.diag(H)), 0)
+@pytest.fixture(autouse=True)
+def preserve_numpy_rng() -> Iterator[None]:
+    state = np.random.get_state()
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
 
 
-def test_goe_sampler() -> None:
-    d = 5
-    H = sample_goe(d)
-    assert H.shape == (d, d)
-    # Check Symmetric property
-    assert np.allclose(H, H.T)
-    # Check that entries are real
-    assert np.isrealobj(H)
+def symplectic_form(d: int) -> Any:
+    return np.block([[np.zeros((d, d)), np.eye(d)], [-np.eye(d), np.zeros((d, d))]])
 
 
-def test_gse_sampler() -> None:
-    d = 4
-    H = sample_gse(d)
-    assert H.shape == (2 * d, 2 * d)
-    # Check Hermitian property
-    assert np.allclose(H, H.conj().T)
-
-    # Check Symplectic self-dual structure: J H.conj() J^T = H
-    J = np.zeros((2 * d, 2 * d))
-    J[:d, d:] = np.eye(d)
-    J[d:, :d] = -np.eye(d)
-    assert np.allclose(H, J @ H.conj() @ J.T)
-
-
-def test_wishart_sampler() -> None:
-    d, n = 3, 5
-    # beta=1 (LOE)
-    W1 = sample_wishart(d, n, beta=1)
-    assert W1.shape == (d, d)
-    assert np.allclose(W1, W1.T)
-    assert np.isrealobj(W1)
-
-    # beta=2 (LUE)
-    W2 = sample_wishart(d, n, beta=2)
-    assert W2.shape == (d, d)
-    assert np.allclose(W2, W2.conj().T)
-
-    # beta=4 (LSE)
-    W4 = sample_wishart(d, n, beta=4)
-    assert W4.shape == (2 * d, 2 * d)
-    assert np.allclose(W4, W4.conj().T)
+def assert_hermitian_structure(matrix: Any, d: int, beta: int) -> None:
+    size = 2 * d if beta == 4 else d
+    assert matrix.shape == (size, size)
+    assert np.isfinite(matrix).all()
+    np.testing.assert_allclose(matrix, matrix.conj().T, rtol=0, atol=1e-12)
+    if beta == 1:
+        assert np.isrealobj(matrix)
+    elif beta == 2:
+        np.testing.assert_array_equal(np.imag(np.diag(matrix)), 0)
+    else:
+        j = symplectic_form(d)
+        np.testing.assert_allclose(matrix, j @ matrix.conj() @ j.T, rtol=0, atol=1e-12)
 
 
-def test_haar_samplers() -> None:
-    d = 4
-    # Unitary
-    U = sample_haar_unitary(d)
-    assert np.allclose(U @ U.conj().T, np.eye(d))
-
-    # Orthogonal
-    orth_mat = sample_haar_orthogonal(d)
-    assert np.allclose(orth_mat @ orth_mat.T, np.eye(d))
-    assert np.isrealobj(orth_mat)
-
-    # Symplectic
-    S = sample_haar_symplectic(d)
-    assert np.allclose(S @ S.conj().T, np.eye(2 * d))
-    J = np.zeros((2 * d, 2 * d))
-    J[:d, d:] = np.eye(d)
-    J[d:, :d] = -np.eye(d)
-    # Symplectic matrix satisfies S^T J S = J
-    assert np.allclose(S.T @ J @ S, J)
+def assert_coefficient_law(samples: Any, expected: Any) -> None:
+    assert samples.ndim == 2 and samples.shape[1:] == expected.shape
+    assert np.isfinite(samples).all()
+    mean = samples.mean(axis=0)
+    sem = samples.std(axis=0, ddof=1) / np.sqrt(len(samples))
+    # Preserve the five-SEM check and also test deterministic coefficients.
+    tolerance = np.where(sem > 1e-10, 5 * sem, 1e-10)
+    np.testing.assert_array_less(np.abs(mean - expected), tolerance)
 
 
-def test_empirical_gue_expected_poly() -> None:
-    np.random.seed(42)
-    d = 4
-    samples = 1000
-    analytical_poly = gue_expected_poly(d)
-
-    # Check degree
-    assert analytical_poly.degree == d
-
-    # Compare with empirical samples
-    comp = EmpiricalComparison(
-        analytical_poly=analytical_poly,
-        samples=samples,
-        generator=lambda: sample_gue(d),
-    )
-
-    # Use a small nominal rejection probability for this seeded smoke test.
-    assert comp.verify_coefficients(alpha=1e-6)
+def test_gaussian_sampler_structure() -> None:
+    for beta, d, sampler in (
+        (1, 5, sample_goe),
+        (2, 5, sample_gue),
+        (4, 4, sample_gse),
+    ):
+        with case(beta=beta, dimension=d):
+            assert_hermitian_structure(sampler(d), d, beta)
 
 
-def test_empirical_wishart_expected_poly() -> None:
-    np.random.seed(42)
-    d = 3
-    n = 6
-    samples = 1000
-    analytical_poly = wishart_expected_poly(d, n, beta=2)
-
-    assert analytical_poly.degree == d
-
-    comp = EmpiricalComparison(
-        analytical_poly=analytical_poly,
-        samples=samples,
-        generator=lambda: sample_wishart(d, n, beta=2),
-    )
-
-    assert comp.verify_coefficients(alpha=1e-6)
-
-
-def test_empirical_unitary_validation_beta2() -> None:
-    """
-    Validates expected characteristic polynomial under GUE (beta=2) unitary conjugation.
-    E[chi(A + U B U^H)] = chi(A) \boxplus_d chi(B)
-    """
-    from finitefree.convolutions import symmetric_additive
-    from finitefree.core import RealRootedPolynomial
-
-    d = 4
-    N = 3000
-
-    roots_A = np.array([1.0, 2.0, 3.0, 4.0])
-    roots_B = np.array([-2.0, -1.0, 1.0, 2.0])
-
-    A = np.diag(roots_A)
-    B = np.diag(roots_B)
-
-    poly_A = RealRootedPolynomial(np.poly(roots_A), assume_real_rooted=True)
-    poly_B = RealRootedPolynomial(np.poly(roots_B), assume_real_rooted=True)
-
-    res_analytical = symmetric_additive(poly_A, poly_B, d)
-    expected_coeffs = np.array(res_analytical.coeffs, dtype=float)
-
-    all_coeffs = []
-    np.random.seed(42)
-
-    for _ in range(N):
-        U = sample_haar_unitary(d)
-        M = A + U @ B @ U.conj().T
-        coeffs = np.poly(M)
-        all_coeffs.append(np.real(coeffs))
-
-    all_coeffs_arr = np.array(all_coeffs)
-    empirical_coeffs = np.mean(all_coeffs_arr, axis=0)
-    empirical_std = np.std(all_coeffs_arr, axis=0, ddof=1)
-    sem = empirical_std / np.sqrt(N)
-
-    for i in range(len(expected_coeffs)):
-        if sem[i] > 1e-10:
-            diff = np.abs(empirical_coeffs[i] - expected_coeffs[i])
-            assert diff <= 5 * sem[i], (
-                f"GUE Coefficient {i} mismatch. Mean: {empirical_coeffs[i]}, "
-                f"Expected: {expected_coeffs[i]}, SEM: {sem[i]}"
-            )
-
-
-def test_empirical_orthogonal_validation_beta1() -> None:
-    """
-    Validates expected characteristic polynomial under GOE (beta=1)
-    orthogonal conjugation.
-    E[chi(A + Q B Q^T)] = chi(A) \boxplus_d chi(B)
-    """
-    from finitefree.convolutions import symmetric_additive
-    from finitefree.core import RealRootedPolynomial
-
-    d = 4
-    N = 3000
-
-    roots_A = np.array([1.0, 2.0, 3.0, 4.0])
-    roots_B = np.array([-2.0, -1.0, 1.0, 2.0])
-
-    A = np.diag(roots_A)
-    B = np.diag(roots_B)
-
-    poly_A = RealRootedPolynomial(np.poly(roots_A), assume_real_rooted=True)
-    poly_B = RealRootedPolynomial(np.poly(roots_B), assume_real_rooted=True)
-
-    res_analytical = symmetric_additive(poly_A, poly_B, d)
-    expected_coeffs = np.array(res_analytical.coeffs, dtype=float)
-
-    all_coeffs = []
-    np.random.seed(42)
-
-    for _ in range(N):
-        Q = sample_haar_orthogonal(d)
-        M = A + Q @ B @ Q.T
-        coeffs = np.poly(M)
-        all_coeffs.append(np.real(coeffs))
-
-    all_coeffs_arr = np.array(all_coeffs)
-    empirical_coeffs = np.mean(all_coeffs_arr, axis=0)
-    empirical_std = np.std(all_coeffs_arr, axis=0, ddof=1)
-    sem = empirical_std / np.sqrt(N)
-
-    for i in range(len(expected_coeffs)):
-        if sem[i] > 1e-10:
-            diff = np.abs(empirical_coeffs[i] - expected_coeffs[i])
-            assert diff <= 5 * sem[i], (
-                f"GOE Coefficient {i} mismatch. Mean: {empirical_coeffs[i]}, "
-                f"Expected: {expected_coeffs[i]}, SEM: {sem[i]}"
-            )
-
-
-def test_empirical_symplectic_validation_beta4() -> None:
-    """
-    Validates expected characteristic polynomial under GSE (beta=4)
-    symplectic conjugation.
-    E[chi_unique(A_2d + S B_2d S^H)] = chi(A) \boxplus_d chi(B)
-    """
-    from finitefree.convolutions import symmetric_additive
-    from finitefree.core import RealRootedPolynomial
-
-    d = 3
-    N = 2000
-
-    roots_A = np.array([1.5, 2.5, 3.5])
-    roots_B = np.array([-1.0, 0.0, 1.0])
-
-    A_2d = np.block(
-        [
-            [np.diag(roots_A), np.zeros((d, d))],
-            [np.zeros((d, d)), np.diag(roots_A)],
-        ]
-    )
-    B_2d = np.block(
-        [
-            [np.diag(roots_B), np.zeros((d, d))],
-            [np.zeros((d, d)), np.diag(roots_B)],
-        ]
-    )
-
-    poly_A = RealRootedPolynomial(np.poly(roots_A), assume_real_rooted=True)
-    poly_B = RealRootedPolynomial(np.poly(roots_B), assume_real_rooted=True)
-
-    res_analytical = symmetric_additive(poly_A, poly_B, d)
-    expected_coeffs = np.array(res_analytical.coeffs, dtype=float)
-
-    all_coeffs = []
-    np.random.seed(42)
-
-    for _ in range(N):
-        S = sample_haar_symplectic(d)
-        M = A_2d + S @ B_2d @ S.conj().T
-
-        roots = np.linalg.eigvalsh(M)
-        sorted_roots = np.sort(roots)
-        assert np.allclose(sorted_roots[::2], sorted_roots[1::2], atol=1e-5)
-
-        u_roots = sorted_roots[::2]
-        coeffs = np.poly(u_roots)
-        all_coeffs.append(np.real(coeffs))
-
-    all_coeffs_arr = np.array(all_coeffs)
-    empirical_coeffs = np.mean(all_coeffs_arr, axis=0)
-    empirical_std = np.std(all_coeffs_arr, axis=0, ddof=1)
-    sem = empirical_std / np.sqrt(N)
-
-    for i in range(len(expected_coeffs)):
-        if sem[i] > 1e-10:
-            diff = np.abs(empirical_coeffs[i] - expected_coeffs[i])
-            assert diff <= 5 * sem[i], (
-                f"GSE Coefficient {i} mismatch. Mean: {empirical_coeffs[i]}, "
-                f"Expected: {expected_coeffs[i]}, SEM: {sem[i]}"
-            )
-
-
-def test_wishart_sampler_invalid_beta() -> None:
-    import pytest
-
+def test_wishart_sampler_structure_and_beta_validation() -> None:
+    for beta in (1, 2, 4):
+        with case(beta=beta):
+            matrix = sample_wishart(3, 5, beta=beta)
+            assert_hermitian_structure(matrix, 3, beta)
+            assert np.linalg.eigvalsh(matrix).min() >= -1e-12
     with pytest.raises(ValueError, match="beta must be 1, 2, or 4"):
         sample_wishart(d=3, n=5, beta=3)
+
+
+def test_haar_sampler_structure() -> None:
+    for beta, sampler in (
+        (1, sample_haar_orthogonal),
+        (2, sample_haar_unitary),
+        (4, sample_haar_symplectic),
+    ):
+        with case(beta=beta):
+            matrix = sampler(4)
+            size = 8 if beta == 4 else 4
+            assert matrix.shape == (size, size)
+            np.testing.assert_allclose(
+                matrix @ matrix.conj().T, np.eye(size), atol=1e-12
+            )
+            if beta == 1:
+                assert np.isrealobj(matrix)
+            if beta == 4:
+                j = symplectic_form(4)
+                np.testing.assert_allclose(matrix.T @ j @ matrix, j, atol=1e-12)
+
+
+def test_empirical_expected_polynomials() -> None:
+    for name, d, polynomial, generator in (
+        ("gue", 4, gue_expected_poly(4), lambda: sample_gue(4)),
+        (
+            "wishart",
+            3,
+            wishart_expected_poly(3, 6, beta=2),
+            lambda: sample_wishart(3, 6, beta=2),
+        ),
+    ):
+        with case(ensemble=name):
+            np.random.seed(42)
+            assert polynomial.degree == d
+            comparison = EmpiricalComparison(polynomial, 1000, generator)
+            assert comparison.verify_coefficients(alpha=1e-6)
+
+
+def test_empirical_conjugation_coefficient_laws() -> None:
+    for beta, sampler in (
+        (2, sample_haar_unitary),
+        (1, sample_haar_orthogonal),
+        (4, sample_haar_symplectic),
+    ):
+        with case(beta=beta):
+            np.random.seed(42)
+            if beta == 4:
+                a, b, trials = (
+                    np.array([1.5, 2.5, 3.5]),
+                    np.array([-1.0, 0.0, 1.0]),
+                    2000,
+                )
+            else:
+                a, b, trials = (
+                    np.array([1.0, 2.0, 3.0, 4.0]),
+                    np.array([-2.0, -1.0, 1.0, 2.0]),
+                    3000,
+                )
+            d = len(a)
+            p, q = (
+                RealRootedPolynomial(np.poly(roots), assume_real_rooted=True)
+                for roots in (a, b)
+            )
+            expected = np.asarray(symmetric_additive(p, q, d).coeffs, dtype=float)
+            left, right = np.diag(a), np.diag(b)
+            if beta == 4:
+                left, right = np.kron(np.eye(2), left), np.kron(np.eye(2), right)
+            coefficients = []
+            for _ in range(trials):
+                unitary = sampler(d)
+                matrix = left + unitary @ right @ unitary.conj().T
+                if beta == 4:
+                    roots = np.sort(np.linalg.eigvalsh(matrix))
+                    np.testing.assert_allclose(roots[::2], roots[1::2], atol=1e-5)
+                    sample = np.poly(roots[::2])
+                else:
+                    sample = np.poly(matrix)
+                coefficients.append(np.real(sample))
+            assert_coefficient_law(np.asarray(coefficients), expected)

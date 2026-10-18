@@ -12,6 +12,7 @@ from finitefree.hyperbolic import (
     SymmetricMatrixPencil,
 )
 from finitefree.multivariate import MultivariatePolynomial
+from tests._cases import case
 
 
 def coefficients() -> Any:
@@ -101,18 +102,20 @@ def test_singular_near_singular_and_polynomial_preservation() -> None:
     np.testing.assert_allclose(huge.slogdet()[1], 400 * np.log(10))
 
 
-@pytest.mark.parametrize("shape", [(2,), (3, 2), (2, 3, 2), (0, 2), (2, 0, 2)])
-def test_shapes_empty_and_strides(shape: tuple[int, ...]) -> None:
-    p = PreparedMatrixPencil(coefficients())
-    x = np.empty((*shape[:-1], 4))[..., ::2]
-    x[..., 0] = 2.0
-    x[..., 1] = 0.0
-    f = p.factor(x)
-    assert p.evaluate(x).shape == (*shape[:-1], 2, 2)
-    assert f.slogdet()[0].shape == shape[:-1]
-    assert f.logabsdet_gradient().shape == shape
-    assert f.logabsdet_hvp(np.ones(2)).shape == shape
-    assert f.logabsdet_hvp(np.ones(shape)).shape == shape
+def test_shapes_empty_and_strides() -> None:
+    shape: tuple[int, ...]
+    for shape in [(2,), (3, 2), (2, 3, 2), (0, 2), (2, 0, 2)]:
+        with case(shape=shape):
+            p = PreparedMatrixPencil(coefficients())
+            x = np.empty((*shape[:-1], 4))[..., ::2]
+            x[..., 0] = 2.0
+            x[..., 1] = 0.0
+            f = p.factor(x)
+            assert p.evaluate(x).shape == (*shape[:-1], 2, 2)
+            assert f.slogdet()[0].shape == shape[:-1]
+            assert f.logabsdet_gradient().shape == shape
+            assert f.logabsdet_hvp(np.ones(2)).shape == shape
+            assert f.logabsdet_hvp(np.ones(shape)).shape == shape
 
 
 def test_validation() -> None:

@@ -7,6 +7,7 @@ from typing import Optional
 import pytest
 
 from scripts.sync_docs import convert_readme, sync
+from tests._cases import case
 
 
 @pytest.mark.parametrize("fence", ["```", "~~~~"])
@@ -22,12 +23,12 @@ def test_fenced_examples_preserve_html_lists_and_documentation_links(
     assert convert_readme(literal) == literal
 
 
-@pytest.mark.parametrize("closing", ["~~~", "```", "````python"])
-def test_short_wrong_or_annotated_fences_do_not_close_a_code_example(
-    closing: str,
-) -> None:
-    literal = f"````text\n{closing}\n<details>\n[API](docs/api.md)\n`````\n"
-    assert convert_readme(literal) == literal
+def test_short_wrong_or_annotated_fences_do_not_close_a_code_example() -> None:
+    closing: str
+    for closing in ["~~~", "```", "````python"]:
+        with case(closing=closing):
+            literal = f"````text\n{closing}\n<details>\n[API](docs/api.md)\n`````\n"
+            assert convert_readme(literal) == literal
 
 
 def test_code_inside_details_retains_literal_content_and_list_spacing() -> None:
@@ -59,9 +60,10 @@ def test_details_lists_tables_links_and_blank_summary_lines() -> None:
     assert convert_readme(source) == expected
 
 
-@pytest.mark.parametrize(
-    "source, error",
-    [
+def test_malformed_details_fail_with_useful_locations() -> None:
+    source: str
+    error: str
+    for source, error in [
         ("<details>\n", "Missing <summary> after line 1"),
         ("<details>\n\n", "Missing <summary> after line 1"),
         ("<details>\nBody\n</details>\n", "Missing <summary> after line 1"),
@@ -78,12 +80,11 @@ def test_details_lists_tables_links_and_blank_summary_lines() -> None:
             "<details><summary>Title</summary>\n",
             "<details> must occupy its own line at 1",
         ),
-    ],
-)
-def test_malformed_details_fail_with_useful_locations(source: str, error: str) -> None:
-    with pytest.raises(ValueError) as failure:
-        convert_readme(source)
-    assert str(failure.value) == error
+    ]:
+        with case(source=source, error=error):
+            with pytest.raises(ValueError) as failure:
+                convert_readme(source)
+            assert str(failure.value) == error
 
 
 @pytest.mark.parametrize(
@@ -141,9 +142,9 @@ def test_current_readme_reproduces_the_committed_index() -> None:
     assert convert_readme(readme) == expected
 
 
-@pytest.mark.parametrize(
-    "dashboard",
-    [
+def test_dashboard_links_open_generated_html_outside_code_fences() -> None:
+    dashboard: str
+    for dashboard in [
         "ensemble-convergence",
         "finite-transforms",
         "convolution-interlacing",
@@ -151,15 +152,12 @@ def test_current_readme_reproduces_the_committed_index() -> None:
         "unitary-root-flow",
         "hyperbolicity-cone",
         "moving-line-roots",
-    ],
-)
-def test_dashboard_links_open_generated_html_outside_code_fences(
-    dashboard: str,
-) -> None:
-    link = f"[Open dashboard](docs/development.md#{dashboard})"
-    source = f"{link}\n\n```text\n{link}\n```\n"
-    expected = (
-        f"[Open dashboard](visuals/interactive/{dashboard}.html)\n\n"
-        f"```text\n{link}\n```\n"
-    )
-    assert convert_readme(source) == expected
+    ]:
+        with case(dashboard=dashboard):
+            link = f"[Open dashboard](docs/development.md#{dashboard})"
+            source = f"{link}\n\n```text\n{link}\n```\n"
+            expected = (
+                f"[Open dashboard](visuals/interactive/{dashboard}.html)\n\n"
+                f"```text\n{link}\n```\n"
+            )
+            assert convert_readme(source) == expected

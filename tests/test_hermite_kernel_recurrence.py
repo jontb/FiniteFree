@@ -10,6 +10,7 @@ from finitefree import (
     RealRootedPolynomial,
     hermite_polynomial,
 )
+from tests._cases import case
 
 
 def kernel(n: int) -> OrthogonalPolynomialKernel:
@@ -19,25 +20,24 @@ def kernel(n: int) -> OrthogonalPolynomialKernel:
     )
 
 
-@pytest.mark.parametrize("n", [1, 2, 20, 40, 80])
-@pytest.mark.parametrize(
-    "points", [(2.0, 2.000000001), (0.5, 0.5), (-2.0, -1.999999999), (0.3, 1.2)]
-)
-def test_verified_hermite_sum_against_independent_exact_basis(
-    n: int, points: tuple[float, float]
-) -> None:
-    x, y = points
-    symbol = sp.Symbol("z")
-    reference = sum(
-        sp.Poly(sp.hermite_prob(j, symbol), symbol).eval(sp.Rational(x))
-        * sp.Poly(sp.hermite_prob(j, symbol), symbol).eval(sp.Rational(y))
-        / math.factorial(j)
-        for j in range(n)
-    )
-    result = kernel(n)
-    expected = float(reference)
-    assert abs(result(x, y) - expected) / max(1, abs(expected)) < 3e-14
-    assert result(x, y) == result(y, x)
+def test_verified_hermite_sum_against_independent_exact_basis() -> None:
+    n: int
+    points: tuple[float, float]
+    for points in [(2.0, 2.000000001), (0.5, 0.5), (-2.0, -1.999999999), (0.3, 1.2)]:
+        for n in [1, 2, 20, 40, 80]:
+            with case(n=n, points=points):
+                x, y = points
+                symbol = sp.Symbol("z")
+                reference = sum(
+                    sp.Poly(sp.hermite_prob(j, symbol), symbol).eval(sp.Rational(x))
+                    * sp.Poly(sp.hermite_prob(j, symbol), symbol).eval(sp.Rational(y))
+                    / math.factorial(j)
+                    for j in range(n)
+                )
+                result = kernel(n)
+                expected = float(reference)
+                assert abs(result(x, y) - expected) / max(1, abs(expected)) < 3e-14
+                assert result(x, y) == result(y, x)
 
 
 def test_kernel_owns_input_basis_norms_and_exports() -> None:
@@ -85,10 +85,12 @@ def test_changed_basis_is_not_classified_by_provenance() -> None:
     assert k(x, y) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("points", [(np.nan, 0.0), (np.inf, 0.0), (0.0, -np.inf)])
-def test_numerical_coordinates_must_be_finite(points: tuple[float, float]) -> None:
-    with pytest.raises(ValueError, match="finite"):
-        kernel(4)(*points)
+def test_numerical_coordinates_must_be_finite() -> None:
+    points: tuple[float, float]
+    for points in [(np.nan, 0.0), (np.inf, 0.0), (0.0, -np.inf)]:
+        with case(points=points):
+            with pytest.raises(ValueError, match="finite"):
+                kernel(4)(*points)
 
 
 def test_numerical_range_error_retains_exact_evaluation() -> None:

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from finitefree import EmpiricalComparison, RealRootedPolynomial
+from tests._cases import case
 
 
 def comparison_from_scalars(target: float, values: list[float]) -> EmpiricalComparison:
@@ -20,35 +21,33 @@ def test_deterministic_mismatch_is_not_skipped() -> None:
     assert not comparison.verify_coefficients()
 
 
-@pytest.mark.parametrize("scale", [1e-250, 1.0, 1e250])
-def test_deterministic_and_low_variance_comparisons_preserve_scale(
-    scale: float,
-) -> None:
-    assert comparison_from_scalars(scale, [scale] * 3).verify_coefficients()
-    assert not comparison_from_scalars(0, [scale] * 3).verify_coefficients()
-    assert not comparison_from_scalars(
-        0, [scale * (1 + 1e-6 * k) for k in [-1, 0, 1]]
-    ).verify_coefficients()
+def test_deterministic_and_low_variance_comparisons_preserve_scale() -> None:
+    scale: float
+    for scale in [1e-250, 1.0, 1e250]:
+        with case(scale=scale):
+            assert comparison_from_scalars(scale, [scale] * 3).verify_coefficients()
+            assert not comparison_from_scalars(0, [scale] * 3).verify_coefficients()
+            assert not comparison_from_scalars(
+                0, [scale * (1 + 1e-6 * k) for k in [-1, 0, 1]]
+            ).verify_coefficients()
 
 
-@pytest.mark.parametrize("scale", [1e-250, 1.0, 1e250])
-@pytest.mark.parametrize("alpha", [0.05, 0.2])
-def test_t_band_matches_closed_form_two_degree_reference(
-    scale: float, alpha: float
-) -> None:
-    # For samples [-1, 0, 1], SEM=1/sqrt(3), df=2. Integrating the
-    # t_2 density gives sf(t)=(1-t/sqrt(t*t+2))/2, so its inverse is
-    # (1-2u)/sqrt(2u(1-u)). Two polynomial coefficients share alpha.
-    u = alpha / 4
-    critical = (1 - 2 * u) / math.sqrt(2 * u * (1 - u))
-    width = critical / math.sqrt(3)
-    values = [-scale, 0, scale]
-    assert comparison_from_scalars(0.99 * width * scale, values).verify_coefficients(
-        alpha=alpha, rtol=0
-    )
-    assert not comparison_from_scalars(
-        1.01 * width * scale, values
-    ).verify_coefficients(alpha=alpha, rtol=0)
+def test_t_band_matches_closed_form_two_degree_reference() -> None:
+    scale: float
+    alpha: float
+    for alpha in [0.05, 0.2]:
+        for scale in [1e-250, 1.0, 1e250]:
+            with case(scale=scale, alpha=alpha):
+                u = alpha / 4
+                critical = (1 - 2 * u) / math.sqrt(2 * u * (1 - u))
+                width = critical / math.sqrt(3)
+                values = [-scale, 0, scale]
+                assert comparison_from_scalars(
+                    0.99 * width * scale, values
+                ).verify_coefficients(alpha=alpha, rtol=0)
+                assert not comparison_from_scalars(
+                    1.01 * width * scale, values
+                ).verify_coefficients(alpha=alpha, rtol=0)
 
 
 def test_alpha_and_roundoff_tolerances_affect_comparison() -> None:
@@ -63,20 +62,24 @@ def test_alpha_and_roundoff_tolerances_affect_comparison() -> None:
     assert not nearby.verify_coefficients(rtol=0)
 
 
-@pytest.mark.parametrize("samples", [0, 1, -1, 2.5, True])
-def test_sample_count_rejected_before_generator_runs(samples: Any) -> None:
-    def unexpected_generator() -> Any:
-        raise AssertionError("invalid sample count reached generator")
+def test_sample_count_rejected_before_generator_runs() -> None:
+    samples: Any
+    for samples in [0, 1, -1, 2.5, True]:
+        with case(samples=samples):
 
-    with pytest.raises(ValueError, match="integer of at least 2"):
-        EmpiricalComparison(
-            RealRootedPolynomial.from_roots([1]), samples, unexpected_generator
-        )
+            def unexpected_generator() -> Any:
+                raise AssertionError("invalid sample count reached generator")
+
+            with pytest.raises(ValueError, match="integer of at least 2"):
+                EmpiricalComparison(
+                    RealRootedPolynomial.from_roots([1]), samples, unexpected_generator
+                )
 
 
-@pytest.mark.parametrize(
-    "matrix, message",
-    [
+def test_invalid_samples_are_rejected() -> None:
+    matrix: Any
+    message: str
+    for matrix, message in [
         (np.eye(3), "shape"),
         (np.zeros((2, 3)), "shape"),
         (np.array([[0, 1], [0, 0]]), "Hermitian"),
@@ -86,11 +89,14 @@ def test_sample_count_rejected_before_generator_runs(samples: Any) -> None:
         (np.diag([1, 2, 3, 4]), "paired eigenvalues"),
         (np.diag([1, 2, 3, 4]) * 1e-250, "paired eigenvalues"),
         (np.eye(2) * 1e200, "coefficients must be finite"),
-    ],
-)
-def test_invalid_samples_are_rejected(matrix: Any, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        EmpiricalComparison(RealRootedPolynomial.from_roots([1, 2]), 3, lambda: matrix)
+    ]:
+        with case(matrix=matrix, message=message):
+
+            def sample(matrix: Any = matrix) -> Any:
+                return matrix
+
+            with pytest.raises(ValueError, match=message):
+                EmpiricalComparison(RealRootedPolynomial.from_roots([1, 2]), 3, sample)
 
 
 @pytest.mark.parametrize("doubled", [False, True])
@@ -113,18 +119,23 @@ def test_degree_zero_comparison_has_one_coefficient() -> None:
     assert comparison.verify_coefficients()
 
 
-@pytest.mark.parametrize("alpha", [0, 1, -0.1, np.nan, np.inf, 5e-324])
-def test_invalid_alpha_is_rejected(alpha: float) -> None:
-    comparison = comparison_from_scalars(1, [1] * 3)
-    with pytest.raises(ValueError, match="alpha"):
-        comparison.verify_coefficients(alpha=alpha)
+def test_invalid_alpha_is_rejected() -> None:
+    alpha: float
+    for alpha in [0, 1, -0.1, np.nan, np.inf, 5e-324]:
+        with case(alpha=alpha):
+            comparison = comparison_from_scalars(1, [1] * 3)
+            with pytest.raises(ValueError, match="alpha"):
+                comparison.verify_coefficients(alpha=alpha)
 
 
-@pytest.mark.parametrize("tolerances", [{"rtol": -1}, {"atol": -1}, {"rtol": np.inf}])
-def test_invalid_tolerances_are_rejected(tolerances: dict[str, float]) -> None:
-    comparison = comparison_from_scalars(1, [1] * 3)
-    with pytest.raises(ValueError, match="rtol and atol"):
-        comparison.verify_coefficients(**tolerances)
+def test_invalid_tolerances_are_rejected() -> None:
+    tolerances: dict[str, float]
+    candidates: list[dict[str, float]] = [{"rtol": -1}, {"atol": -1}, {"rtol": np.inf}]
+    for tolerances in candidates:
+        with case(tolerances=tolerances):
+            comparison = comparison_from_scalars(1, [1] * 3)
+            with pytest.raises(ValueError, match="rtol and atol"):
+                comparison.verify_coefficients(**tolerances)
 
 
 def test_nonfinite_analytical_coefficients_are_rejected() -> None:

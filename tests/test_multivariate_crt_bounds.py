@@ -10,6 +10,7 @@ from finitefree.multivariate import (
     _determinant_coefficient_bound,
 )
 from finitefree.utils.modular import prime_generator
+from tests._cases import case
 
 
 @pytest.mark.parametrize("method", ["interpolated", "sparse"])
@@ -52,17 +53,20 @@ def test_large_rational_and_negative_coefficients_reconstruct(
     assert result.expr == sp.expand((x * matrices[0] + y * matrices[1]).det())
 
 
-@pytest.mark.parametrize("n,m", [(1, 2), (2, 2), (3, 2), (2, 3)])
-def test_bound_covers_independently_expanded_coefficients(n: int, m: int) -> None:
-    variables = sp.symbols(f"x0:{m}")
-    matrices = [
-        [[(r * 3 + c * 2 + j * 5) % 9 - 4 for c in range(n)] for r in range(n)]
-        for j in range(m)
-    ]
-    symbolic = sum(
-        (x * sp.Matrix(A) for x, A in zip(variables, matrices)), sp.zeros(n)
-    ).det()
-    coefficients = sp.Poly(symbolic, *variables).coeffs()
-    bound = _determinant_coefficient_bound(matrices)
-    assert all(abs(c) <= bound for c in coefficients)
-    assert _determinant_coefficient_bound([[[0] * n for _ in range(n)]]) == 0
+def test_bound_covers_independently_expanded_coefficients() -> None:
+    n: int
+    m: int
+    for n, m in [(1, 2), (2, 2), (3, 2), (2, 3)]:
+        with case(n=n, m=m):
+            variables = sp.symbols(f"x0:{m}")
+            matrices = [
+                [[(r * 3 + c * 2 + j * 5) % 9 - 4 for c in range(n)] for r in range(n)]
+                for j in range(m)
+            ]
+            symbolic = sum(
+                (x * sp.Matrix(A) for x, A in zip(variables, matrices)), sp.zeros(n)
+            ).det()
+            coefficients = sp.Poly(symbolic, *variables).coeffs()
+            bound = _determinant_coefficient_bound(matrices)
+            assert all(abs(c) <= bound for c in coefficients)
+            assert _determinant_coefficient_bound([[[0] * n for _ in range(n)]]) == 0

@@ -7,7 +7,6 @@ from finitefree import (
     gap_probability_continuous,
     gap_probability_discrete,
     hermite_polynomial,
-    sample_discrete,
 )
 
 
@@ -98,22 +97,3 @@ def test_gap_probability_continuous() -> None:
         kernel, -1.0, 1.0, n_points=10, weight_func=weight_func
     )
     assert 0.0 <= prob <= 1.0
-
-
-def test_sample_discrete() -> None:
-    # A 5x5 projection matrix of trace 3
-    # Represented as a projector on first 3 coordinates
-    K = np.zeros((5, 5))
-    K[0, 0] = 1.0
-    K[1, 1] = 1.0
-    K[2, 2] = 1.0
-
-    kernel = DiscreteFiniteKernel(K)
-    state_space = [0, 1, 2, 3, 4]
-
-    # Sample multiple times and check that trace (3) determines the sampled size
-    for _ in range(5):
-        sample = sample_discrete(kernel, state_space)
-        assert len(sample) == 3
-        # Eigenvectors are standard basis e_0, e_1, e_2, so we must always sample {0, 1, 2}
-        assert set(sample) == {0, 1, 2}

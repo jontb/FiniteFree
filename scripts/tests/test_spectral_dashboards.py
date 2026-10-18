@@ -21,6 +21,7 @@ from finitefree import (
     hermite_polynomial,
 )
 from finitefree.ensembles import wishart_expected_poly
+from tests._cases import case
 
 MODULE = Path(__file__).resolve().parents[2] / "examples" / "spectral_dashboards.py"
 spec = importlib.util.spec_from_file_location("spectral_dashboards", MODULE)
@@ -176,51 +177,56 @@ def test_edge_probability_full_grid_refinement_and_tail_trace() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "kind,gamma",
-    [
+def test_limit_cdf_includes_full_mass() -> None:
+    kind: str
+    gamma: float
+    for kind, gamma in [
         ("semicircle", 1),
         ("arcsine", 1),
         ("mp", 0.25),
         ("mp", 0.5),
         ("mp", 1),
         ("mp", 2),
-    ],
-)
-def test_limit_cdf_includes_full_mass(kind: str, gamma: float) -> None:
-    law = dashboards.limit_measure(kind, gamma)
-    cdf = np.array(law["cdf"])
-    assert np.all(np.diff(cdf) >= -1e-14)
-    assert cdf[0] == pytest.approx(law["atom"])
-    assert cdf[-1] == pytest.approx(1)
-    if kind == "mp":
-        assert law["atom"] == max(0, 1 - 1 / gamma)
-        # Independent Lebesgue-Stieltjes quadrature includes atom contribution.
-        x = np.array(law["x"])
-        midpoints = (x[:-1] + x[1:]) / 2
-        assert np.sum(midpoints * np.diff(cdf)) == pytest.approx(1, abs=2e-6)
-        assert np.sum(midpoints**2 * np.diff(cdf)) == pytest.approx(1 + gamma, abs=5e-6)
+    ]:
+        with case(kind=kind, gamma=gamma):
+            law = dashboards.limit_measure(kind, gamma)
+            cdf = np.array(law["cdf"])
+            assert np.all(np.diff(cdf) >= -1e-14)
+            assert cdf[0] == pytest.approx(law["atom"])
+            assert cdf[-1] == pytest.approx(1)
+            if kind == "mp":
+                assert law["atom"] == max(0, 1 - 1 / gamma)
+                # Independent Lebesgue-Stieltjes quadrature includes atom contribution.
+                x = np.array(law["x"])
+                midpoints = (x[:-1] + x[1:]) / 2
+                assert np.sum(midpoints * np.diff(cdf)) == pytest.approx(1, abs=2e-6)
+                assert np.sum(midpoints**2 * np.diff(cdf)) == pytest.approx(
+                    1 + gamma, abs=5e-6
+                )
 
 
-@pytest.mark.parametrize("d,n", [(4, 16), (8, 16), (8, 8), (8, 4), (16, 8)])
-def test_wishart_root_scaling_and_nullity(d: int, n: int) -> None:
-    roots = np.array(dashboards.wishart_roots(d, n))
-    r = min(d, n)
-    reference = roots_genlaguerre(r, abs(n - d))[0] / n
-    assert len(roots) == d
-    assert np.count_nonzero(roots == 0) == max(0, d - n)
-    np.testing.assert_allclose(roots[-r:], reference, atol=1e-12)
-    assert np.mean(roots) == pytest.approx(1)
-    # The exact coefficient identity is independent of any root recurrence.
-    p = wishart_expected_poly(d, n)
-    coefficients = [
-        (-1) ** k
-        * math.comb(d, k)
-        * math.prod(range(n - k + 1, n + 1))
-        * sp.Rational(1, n**k)
-        for k in range(d + 1)
-    ]
-    assert list(p.coeffs) == coefficients
+def test_wishart_root_scaling_and_nullity() -> None:
+    d: int
+    n: int
+    for d, n in [(4, 16), (8, 16), (8, 8), (8, 4), (16, 8)]:
+        with case(d=d, n=n):
+            roots = np.array(dashboards.wishart_roots(d, n))
+            r = min(d, n)
+            reference = roots_genlaguerre(r, abs(n - d))[0] / n
+            assert len(roots) == d
+            assert np.count_nonzero(roots == 0) == max(0, d - n)
+            np.testing.assert_allclose(roots[-r:], reference, atol=1e-12)
+            assert np.mean(roots) == pytest.approx(1)
+            # The exact coefficient identity is independent of any root recurrence.
+            p = wishart_expected_poly(d, n)
+            coefficients = [
+                (-1) ** k
+                * math.comb(d, k)
+                * math.prod(range(n - k + 1, n + 1))
+                * sp.Rational(1, n**k)
+                for k in range(d + 1)
+            ]
+            assert list(p.coeffs) == coefficients
 
 
 def test_recorded_samples_preserve_rng_and_dimensions() -> None:
@@ -264,35 +270,40 @@ def test_bounded_wigner_coordinate_normalization(distribution: str) -> None:
             np.testing.assert_allclose(np.abs(diagonal), 1)
 
 
-@pytest.mark.parametrize("distribution", ["rademacher", "uniform"])
-@pytest.mark.parametrize("beta", [1, 2, 4])
-def test_bounded_covariance_gram_normalization(distribution: str, beta: int) -> None:
-    np.random.seed(419)
-    d, n = 128, 256
-    matrix = dashboards.sample_entries(d, n, f"wishart{beta}", distribution)
-    eigenvalues = np.linalg.eigvalsh(matrix)
-    assert eigenvalues[0] > 0
-    assert np.mean(eigenvalues) == pytest.approx(1, abs=0.015)
-    assert np.mean(eigenvalues**2) == pytest.approx(1.5, abs=0.04)
-    if beta == 4:
-        np.testing.assert_allclose(eigenvalues[::2], eigenvalues[1::2], atol=1e-12)
+def test_bounded_covariance_gram_normalization() -> None:
+    distribution: str
+    beta: int
+    for beta in [1, 2, 4]:
+        for distribution in ["rademacher", "uniform"]:
+            with case(distribution=distribution, beta=beta):
+                np.random.seed(419)
+                d, n = 128, 256
+                matrix = dashboards.sample_entries(d, n, f"wishart{beta}", distribution)
+                eigenvalues = np.linalg.eigvalsh(matrix)
+                assert eigenvalues[0] > 0
+                assert np.mean(eigenvalues) == pytest.approx(1, abs=0.015)
+                assert np.mean(eigenvalues**2) == pytest.approx(1.5, abs=0.04)
+                if beta == 4:
+                    np.testing.assert_allclose(
+                        eigenvalues[::2], eigenvalues[1::2], atol=1e-12
+                    )
 
 
-@pytest.mark.parametrize(
-    "gamma", [sp.Rational(1, 4), sp.Rational(1, 2), sp.Integer(1), sp.Integer(2)]
-)
-def test_t_steps_and_right_continuous_jumps(gamma: Any) -> None:
-    d, n = 8, int(8 / gamma)
-    transform = FiniteTTransform(wishart_expected_poly(d, n))
-    for k in range(d):
-        expected = max(0, 1 - sp.Rational(d, n) + sp.Rational(k + 1, n))
-        assert transform(sp.Rational(2 * k + 1, 2 * d)) == expected
-        if k:
-            assert transform(sp.Rational(k, d)) == expected
-    with pytest.raises(ValueError):
-        transform(0)
-    with pytest.raises(ValueError):
-        transform(1)
+def test_t_steps_and_right_continuous_jumps() -> None:
+    gamma: Any
+    for gamma in [sp.Rational(1, 4), sp.Rational(1, 2), sp.Integer(1), sp.Integer(2)]:
+        with case(gamma=gamma):
+            d, n = 8, int(8 / gamma)
+            transform = FiniteTTransform(wishart_expected_poly(d, n))
+            for k in range(d):
+                expected = max(0, 1 - sp.Rational(d, n) + sp.Rational(k + 1, n))
+                assert transform(sp.Rational(2 * k + 1, 2 * d)) == expected
+                if k:
+                    assert transform(sp.Rational(k, d)) == expected
+            with pytest.raises(ValueError):
+                transform(0)
+            with pytest.raises(ValueError):
+                transform(1)
 
 
 def test_clt_variance_and_symmetry_are_exact() -> None:

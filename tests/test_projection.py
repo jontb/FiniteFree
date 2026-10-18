@@ -6,29 +6,33 @@ import pytest
 import sympy as sp
 
 from finitefree import (
-    FiniteRTransform,
     RealRootedPolynomial,
     gue_expected_poly,
     hermite_polynomial,
 )
+from tests._cases import case
+from tests._cumulants import assert_cumulants
 
 
-@pytest.mark.parametrize("dimension", range(6))
-@pytest.mark.parametrize("leading", [1, flint.fmpq(7, 3)])
-def test_projection_matches_independent_symbolic_derivative(
-    dimension: int, leading: Any
-) -> None:
-    source = RealRootedPolynomial.from_roots([sp.Rational(-2, 3), 0, 1, 2, 4])
-    p = RealRootedPolynomial(source._fmpq_poly * leading, monic=False)
-    x = sp.Symbol("x")
-    symbolic = sp.Poly.from_list(list(p.coeffs), x)
-    projected = p.projection(dimension)
-    if dimension == p.degree:
-        assert projected is p
-        expected = symbolic
-    else:
-        expected = symbolic.diff((x, p.degree - dimension)).monic()
-    assert list(projected.coeffs) == expected.all_coeffs()
+def test_projection_matches_independent_symbolic_derivative() -> None:
+    dimension: int
+    leading: Any
+    for leading in [1, flint.fmpq(7, 3)]:
+        for dimension in range(6):
+            with case(dimension=dimension, leading=leading):
+                source = RealRootedPolynomial.from_roots(
+                    [sp.Rational(-2, 3), 0, 1, 2, 4]
+                )
+                p = RealRootedPolynomial(source._fmpq_poly * leading, monic=False)
+                x = sp.Symbol("x")
+                symbolic = sp.Poly.from_list(list(p.coeffs), x)
+                projected = p.projection(dimension)
+                if dimension == p.degree:
+                    assert projected is p
+                    expected = symbolic
+                else:
+                    expected = symbolic.diff((x, p.degree - dimension)).monic()
+                assert list(projected.coeffs) == expected.all_coeffs()
 
 
 def test_projection_composes_and_preserves_normalized_prefix() -> None:
@@ -42,16 +46,22 @@ def test_projection_composes_and_preserves_normalized_prefix() -> None:
     assert list(p.normalized_coeffs()) == cached
 
 
-def test_projection_preserves_finite_cumulant_scaling_law() -> None:
-    p = RealRootedPolynomial.from_roots([-3, -1, 0, 0, 1, 2, 4, 5])
-    dimension = 4
-    source = FiniteRTransform(p, order=dimension)
-    projected = FiniteRTransform(p.projection(dimension), order=dimension)
-    expected = [
-        value * sp.Rational(dimension, p.degree) ** (n - 1)
-        for n, value in enumerate(source, start=1)
-    ]
-    assert projected == expected
+def test_projection_cumulants_follow_scaling_and_convolution_power_laws() -> None:
+    for roots, dimension in (([-3, -1, 0, 0, 1, 2, 4, 5], 4), ([1, 2, 3, 4], 3)):
+        with case(roots=roots, dimension=dimension):
+            p = RealRootedPolynomial.from_roots(roots)
+            source = assert_cumulants(p, dimension)
+            expected = [
+                value * sp.Rational(dimension, p.degree) ** (n - 1)
+                for n, value in enumerate(source, start=1)
+            ]
+            projection = p.projection(dimension)
+            rhs = p.dilation(sp.Rational(dimension, p.degree)).additive_power(
+                sp.Rational(p.degree, dimension)
+            )
+            for order in range(1, dimension + 1):
+                assert_cumulants(projection, order, expected=expected[:order])
+                assert_cumulants(rhs, order, expected=expected[:order])
 
 
 def test_projection_commutes_with_exact_affine_transforms() -> None:
@@ -123,11 +133,13 @@ def test_projection_avoids_intermediate_derivatives(
     assert list(p.projection(0).coeffs) == [1]
 
 
-@pytest.mark.parametrize("dimension", [-1, 5, 2.5, None])
-def test_projection_requires_an_integer_in_range(dimension: Any) -> None:
-    p = RealRootedPolynomial.from_roots([1, 2, 3, 4])
-    with pytest.raises(ValueError, match="integer between 0 and degree"):
-        p.projection(dimension)
+def test_projection_requires_an_integer_in_range() -> None:
+    dimension: Any
+    for dimension in [-1, 5, 2.5, None]:
+        with case(dimension=dimension):
+            p = RealRootedPolynomial.from_roots([1, 2, 3, 4])
+            with pytest.raises(ValueError, match="integer between 0 and degree"):
+                p.projection(dimension)
 
 
 def test_projection_accepts_numpy_integer_and_preserves_identity_boundary() -> None:
