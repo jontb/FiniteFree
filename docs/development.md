@@ -4,6 +4,10 @@ These instructions describe the current `develop` source checkout, including unr
 
 ## Branch workflow
 
+The [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md)
+describes issue/PR expectations and the zero-required-approvals maintainer policy.
+The [code map](code-map.md) identifies implementation and validation boundaries.
+
 `main` contains the functional API of the latest published PyPI release. Its README and the public MkDocs site describe that release. Documentation and workflow maintenance may reach `main` between releases when it preserves that functional API and accurately describes the published package.
 
 Start feature and maintenance branches from `develop`, and open their pull requests against `develop`. CI runs on these pull requests and on pushes to `develop`. Keep API changes, their tests and documentation together there; unreleased features must not enter `main` or its published documentation.
@@ -32,6 +36,14 @@ python -c "from setuptools import setup, Extension; from Cython.Build import cyt
 Source builds require a C compiler. Building python-flint itself additionally requires FLINT/GMP/MPFR headers and libraries; compatible python-flint wheels avoid that build. Editable installation is useful during development, but installed-wheel verification below requires a **standard** installation without the checkout on the import path.
 
 ## Checks
+
+After installing the development dependencies, Cython and `setuptools<77`, run
+`python scripts/check.py` for lint, formatting, typing, an in-place extension
+build and source/tooling tests. Add `--full` for the fallback suite, examples,
+README/index consistency and strict MkDocs build (install its dependencies below).
+Add `--installed-wheel` after a standard installation of the current candidate
+to validate it away from the source tree. The runner uses the active interpreter
+and stops at the first failure; the individual commands remain available below.
 
 Run these commands from the repository root in Bash (including Git Bash on Windows):
 
