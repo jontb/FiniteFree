@@ -133,6 +133,9 @@ For managed browsers that disallow `file://`, serve only the generated directory
 
 ## Spectral dashboards on develop
 
+For an end-to-end example connecting existing samplers, expected polynomials,
+DPP mean density and empirical comparisons, see the [GUE spectral workflow](gue-workflow.md).
+
 Five dashboards consolidate the existing spectral visualization families into shared controls and paired plots:
 
 ```bash

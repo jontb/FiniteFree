@@ -1,6 +1,7 @@
 import abc
 import math
 import operator
+from decimal import Decimal, localcontext
 from typing import Any, List, Optional, Sequence, Union
 
 import flint
@@ -63,9 +64,9 @@ class DiscreteFiniteKernel(BaseKernel):
 class OrthogonalPolynomialKernel(BaseKernel):
     """Orthogonal-polynomial kernel with exact Christoffel-Darboux evaluation.
 
-    Owns its basis and exact norms. A monic probabilists' Hermite basis with
-    norms j! and leading coefficients 1 is verified by exact coefficient
-    recurrence, then evaluated numerically by a normalized three-term sum.
+    Owns its basis and exact norms. A scaled/shifted Hermite basis is verified
+    by exact monic recurrence and norm ratios before numerical evaluation by a
+    normalized three-term sum. Basis scaling and measure mass are preserved.
     Other families use Christoffel-Darboux, with a finite basis sum at nearby
     distinct floats. Consistent generic polynomials and norms are assumed.
     """
@@ -102,15 +103,28 @@ class OrthogonalPolynomialKernel(BaseKernel):
         if len(coefficients) < self.n + 1:
             raise ValueError("leading_coeffs must contain k_0 through k_n")
         self._leading_coeffs = tuple(coefficients)
-        self._standard_hermite = self._verify_standard_hermite_basis()
-        self._hermite_steps = (
-            tuple(
-                (1 / math.sqrt(j + 1), math.sqrt(j / (j + 1)))
-                for j in range(self.n - 1)
-            )
-            if self._standard_hermite
-            else ()
-        )
+        self._hermite_parameters = self._verify_hermite_basis()
+        self._hermite_steps: tuple[tuple[float, float], ...] = ()
+        self._hermite_center = 0.0
+        self._hermite_initial = 1.0
+        self._hermite_range_error = False
+        if self._hermite_parameters is not None:
+            center, variance, mass = self._hermite_parameters
+            from .utils.conversion import flint_to_float
+
+            try:
+                self._hermite_center = flint_to_float(center)
+                self._hermite_initial = self._positive_sqrt_float64(1 / mass)
+                self._hermite_steps = tuple(
+                    (
+                        self._positive_sqrt_float64(1 / ((j + 1) * variance)),
+                        math.sqrt(j / (j + 1)),
+                    )
+                    for j in range(self.n - 1)
+                )
+                self._hermite_range_error = not math.isfinite(self._hermite_center)
+            except (OverflowError, ValueError):
+                self._hermite_range_error = True
 
         # Precompute derivative objects to avoid dynamic instantiation overhead
         self._pn = self._polys[self.n]
@@ -147,27 +161,70 @@ class OrthogonalPolynomialKernel(BaseKernel):
         """Return a caller-owned list of the leading coefficients."""
         return list(self._leading_coeffs)
 
-    def _verify_standard_hermite_basis(self) -> bool:
-        if (
-            self.n == 0
-            or any(self._norms[j] != math.factorial(j) for j in range(self.n))
-            or any(self._leading_coeffs[j] != 1 for j in range(self.n + 1))
-        ):
-            return False
+    @staticmethod
+    def _positive_sqrt_float64(value: Any) -> float:
+        # Convert AFTER square root: tiny/huge rational ratios can have a
+        # representable root even when the ratio itself over/underflows.
+        with localcontext() as context:
+            context.prec = 40
+            result = float((Decimal(int(value.p)) / Decimal(int(value.q))).sqrt())
+        if not math.isfinite(result) or result <= 0:
+            raise ValueError("Hermite normalization exceeds float64 range")
+        return result
+
+    def _verify_hermite_basis(self) -> Any:
+        """Infer and verify (center, variance, measure mass) from owned data.
+
+        No provenance/root metadata is trusted: it does not encode measure mass
+        and caller-supplied polynomials, norms or leading coefficients may differ.
+        All normalization and recurrence comparisons precede float conversion.
+        """
+        if self.n == 0:
+            return None
+        monic = []
+        norms = []
+        for j, p in enumerate(self._polys[: self.n + 1]):
+            if not p._is_flint or p.degree != j:
+                return None
+            leading = p._fmpq_poly[j]
+            if self._leading_coeffs[j] != leading:
+                return None
+            monic.append(p._fmpq_poly / leading)
+            if j < self.n:
+                norm = self._norms[j]
+                if not isinstance(norm, flint.fmpq) or norm <= 0:
+                    return None
+                norms.append(norm / leading**2)
+        center = -monic[1][0]
+        # A rank-one constant kernel needs no variance parameter.
+        variance = norms[1] / norms[0] if self.n > 1 else flint.fmpq(1)
+        shifted_x = flint.fmpq_poly([-center, 1])
         previous = flint.fmpq_poly([])
         expected = flint.fmpq_poly([1])
-        x = flint.fmpq_poly([0, 1])
-        for j, p in enumerate(self._polys[: self.n + 1]):
-            if not p._is_flint or p._fmpq_poly != expected:
-                return False
-            previous, expected = expected, x * expected - j * previous
-        return True
+        expected_norm = norms[0]
+        for j, polynomial in enumerate(monic):
+            if polynomial != expected:
+                return None
+            if j < self.n:
+                if norms[j] != expected_norm:
+                    return None
+                expected_norm *= (j + 1) * variance
+            previous, expected = (
+                expected,
+                shifted_x * expected - j * variance * previous,
+            )
+        return center, variance, norms[0]
 
     def _hermite_sum_float64(self, x: float, y: float) -> float:
+        if self._hermite_range_error:
+            raise RuntimeError("Hermite kernel exceeds finite float64 range")
+        x -= self._hermite_center
+        y -= self._hermite_center
+
         def terms() -> Any:
             previous_x = previous_y = 0.0
-            current_x = current_y = 1.0
-            yield 1.0
+            current_x = current_y = self._hermite_initial
+            yield current_x * current_y
             for inverse_sqrt, ratio in self._hermite_steps:
                 previous_x, current_x = (
                     current_x,
@@ -198,7 +255,7 @@ class OrthogonalPolynomialKernel(BaseKernel):
             y_f = float(y)
             if not math.isfinite(x_f) or not math.isfinite(y_f):
                 raise ValueError("Numerical kernel coordinates must be finite")
-            if self._standard_hermite:
+            if self._hermite_parameters is not None:
                 return self._hermite_sum_float64(x_f, y_f)
             separation = abs(x_f - y_f)
             close_scale = max(1.0, abs(x_f), abs(y_f))
