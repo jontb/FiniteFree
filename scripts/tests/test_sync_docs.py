@@ -139,3 +139,27 @@ def test_current_readme_reproduces_the_committed_index() -> None:
     readme = (root / "README.md").read_text(encoding="utf-8")
     expected = (root / "docs" / "index.md").read_text(encoding="utf-8")
     assert convert_readme(readme) == expected
+
+
+@pytest.mark.parametrize(
+    "dashboard",
+    [
+        "ensemble-convergence",
+        "finite-transforms",
+        "convolution-interlacing",
+        "hermite-kernels",
+        "unitary-root-flow",
+        "hyperbolicity-cone",
+        "moving-line-roots",
+    ],
+)
+def test_dashboard_links_open_generated_html_outside_code_fences(
+    dashboard: str,
+) -> None:
+    link = f"[Open dashboard](docs/development.md#{dashboard})"
+    source = f"{link}\n\n```text\n{link}\n```\n"
+    expected = (
+        f"[Open dashboard](visuals/interactive/{dashboard}.html)\n\n"
+        f"```text\n{link}\n```\n"
+    )
+    assert convert_readme(source) == expected

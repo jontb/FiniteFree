@@ -5,6 +5,16 @@ const assert = require("node:assert/strict"),
   { pathToFileURL } = require("node:url"),
   { execFileSync } = require("node:child_process");
 const { chromium } = require("playwright-core");
+// Optional loopback transport for managed browsers that prohibit file://.
+const baseURL = process.env.FINITEFREE_BASE_URL;
+if (baseURL) {
+  const url = new URL(baseURL);
+  assert.ok(
+    url.protocol === "http:" &&
+      ["localhost", "127.0.0.1"].includes(url.hostname),
+    "Browser check base URL must be loopback HTTP",
+  );
+}
 const directory = path.resolve(process.argv[2] || "visuals/generated"),
   output = path.resolve(process.argv[3] || "visuals/generated/screenshots");
 fs.mkdirSync(output, { recursive: true });
@@ -43,7 +53,15 @@ async function run() {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => {
-    if (/^https?:/.test(r.url())) external.push(r.url());
+    if (
+      /^https?:/.test(r.url()) &&
+      !(
+        baseURL &&
+        r.isNavigationRequest() &&
+        new URL(r.url()).origin === new URL(baseURL).origin
+      )
+    )
+      external.push(r.url());
   });
   const state = () => page.evaluate(() => window.explorerState);
   const slider = async (id, value) => {
@@ -60,7 +78,11 @@ async function run() {
     });
   };
   for (const name of ["hyperbolicity-cone", "moving-line-roots"]) {
-    await page.goto(pathToFileURL(path.join(directory, name + ".html")).href);
+    await page.goto(
+      baseURL
+        ? new URL(name + ".html", baseURL).href
+        : pathToFileURL(path.join(directory, name + ".html")).href,
+    );
     await page.waitForFunction(() => window.explorerState);
     const beforeExplanation = await state();
     assert.ok(await page.locator("#overview").isVisible());

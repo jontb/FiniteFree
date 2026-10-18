@@ -87,7 +87,5 @@ scratch/
 
 # MkDocs output
 site/
-
-
-
-
+# Standalone dashboards generated for MkDocs
+docs/visuals/interactive/
