@@ -41,7 +41,8 @@ def assert_hermitian_structure(matrix: Any, d: int, beta: int) -> None:
     if beta == 1:
         assert np.isrealobj(matrix)
     elif beta == 2:
-        np.testing.assert_array_equal(np.imag(np.diag(matrix)), 0)
+        tolerance = 8 * size * np.finfo(float).eps * np.max(np.abs(matrix))
+        np.testing.assert_allclose(np.imag(np.diag(matrix)), 0, rtol=0, atol=tolerance)
     else:
         j = symplectic_form(d)
         np.testing.assert_allclose(matrix, j @ matrix.conj() @ j.T, rtol=0, atol=1e-12)
@@ -68,6 +69,13 @@ def test_gaussian_sampler_structure() -> None:
 
 
 def test_wishart_sampler_structure_and_beta_validation() -> None:
+    # Complex GEMM can leave a roundoff-sized imaginary diagonal across BLAS builds.
+    rounded = np.diag(np.array([1 + 1.8e-17j, 2 - 1.2e-17j, 3 + 5e-19j]))
+    assert_hermitian_structure(rounded, 3, 2)
+    corrupted = rounded.copy()
+    corrupted[0, 0] += 1e-13j
+    with pytest.raises(AssertionError):
+        assert_hermitian_structure(corrupted, 3, 2)
     for beta in (1, 2, 4):
         with case(beta=beta):
             matrix = sample_wishart(3, 5, beta=beta)
