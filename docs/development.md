@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions describe the current `develop` source checkout, including unreleased development examples. For the published package, use the [v0.2.0 source](https://github.com/jontb/FiniteFree/tree/v0.2.0) and install its matching [PyPI release](https://pypi.org/project/finitefree/0.2.0/) with `python -m pip install finitefree==0.2.0`. A local build alone does not establish production publication. Record the Git commit when reproducing results.
+These instructions describe the 0.3.0 source and release candidate on `develop`. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and follow the [release process](release.md) to distinguish a validated candidate from a production upload. Record the Git commit when reproducing results.
 
 ## Branch workflow
 
@@ -217,14 +217,17 @@ The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison
 
 ## Release validation
 
-The 0.2.0 release includes the compatible symmetric S convention and [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md). Follow the [release review checklist](release.md) to inspect artifacts and checks on the final commit. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+The 0.3.0 candidate retains the 0.2.0 compatibility floors and symmetric S conventions; see the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md). Follow the [release review checklist](release.md) to inspect artifacts and checks on the final versioned commit, including consolidated tests. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
 
 ## Prepared pencil validation checklist
 
-Cloud inspection on 2026-10-09: AMD EPYC 9V45, x86_64; 5 visible CPU threads,
-4-core cgroup quota, 16 GiB memory limit. No NVIDIA/DRI device nodes, no
-`nvidia-smi`, and no CuPy installation. This environment supports CPU verification;
-real GPU validation is **pending**, not inferred from CPU parity or mocks.
+The initial cloud inspection on 2026-10-09 found no GPU and supported only CPU
+verification. Subsequent genuine-device correctness validation on 2026-10-18
+passed on an NVIDIA RTX 3050 (8 GiB), Python 3.12.15, CuPy 14.2.0 and CUDA runtime
+13.2. The float64 tests cover determinant/gradient/HVP parity, empty batches,
+residency, zero/rank-deficient matrices and mixed batches. The original prepared
+suite passed all 18 tests with warnings treated as errors. Consolidated contracts
+retain those cases; mocks are labeled separately and do not supply GPU evidence.
 
 - [x] Prepared float64 coefficients, batch evaluation, reusable pivoted LU,
   slogdet, log-absolute-determinant gradient and HVP.
@@ -232,10 +235,11 @@ real GPU validation is **pending**, not inferred from CPU parity or mocks.
   cases, zero coordinates, empty/strided arrays, ownership and backend absence.
 - [x] Benchmark harness separates setup, transfers, synchronized execution,
   reuse, partial memory measurements, errors and failures.
-- [ ] Obtain access to an already authorized real **cloud** GPU. No local-computer
-  execution, paid compute or external GPU provisioning is authorized.
-- [ ] Record device model, driver/runtime/CuPy versions and actual float64
-  precision; run GPU tests, including CPU parity and singular handling.
+- [x] Record genuine-device metadata and float64 correctness tests, including
+  CPU parity and singular handling, on the local RTX 3050 configuration above.
+
+The following performance and expansion milestones are deferred beyond the
+0.3.0 correctness scope:
 - [ ] Measure cold startup and warm latency, all transfer costs and total peak
   device/native memory; retain individual samples and failure records.
 - [ ] Measure crossover batch sizes for matching matrix/variable sizes and
@@ -253,9 +257,9 @@ preserve generic fallbacks and public signatures. Include a runnable workflow an
 exact integration checks. The finite-size mean ESD differs from the zero measure
 of the expected characteristic polynomial. No new mathematical APIs are implied.
 
-- [ ] Subsequent concentration showcase: use a normalized spectral statistic
-  across increasing GUE matrix sizes, compare observed fluctuations with an
-  applicable variance/concentration result, and separately quantify Monte Carlo
-  estimation uncertainty. Exercise the same ensemble/polynomial/kernel workflow;
-  increasing sample count is not increasing concentration in matrix size. Keep
-  the simulation bounded and add it after the current integration is reviewed.
+- [x] Bounded concentration showcase: `examples/gue_concentration.py` compares
+  normalized interval counts across GUE matrix sizes with numerical count laws
+  and separately reported Monte Carlo uncertainty. The [GUE workflow](gue-workflow.md)
+  records seeds, sample sizes, refinement checks and unresolved tail probabilities.
+  Increasing sample count is not increasing concentration in matrix size;
+  rigorous quadrature enclosures remain deferred research.

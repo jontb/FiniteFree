@@ -5,7 +5,7 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe **FiniteFree 0.2.0**, distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release process](release.md) for compatibility changes and validation.
+This README and the API reference describe **FiniteFree 0.3.0**. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md) for compatibility changes, and the [release process](release.md) for candidate validation and publication.
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](development.md#branch-workflow) for development and release promotion.
 
@@ -19,7 +19,7 @@ To prevent numerical floating-point drift and avoid the computational complexity
 
 The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
 
-On `develop`, interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](development.md#documentation). They are development examples, not additions to the published 0.2.0 API.
+Interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](development.md#documentation). These bounded examples are included in the 0.3.0 source.
 
 ??? "1. Limiting Distributions of Free Convolutions"
 
@@ -150,6 +150,7 @@ On `develop`, interactive companions are linked beside their related figures. In
     - **`MultivariatePolynomial`**: Sparse rational polynomials with exact evaluation, rational algebra, explicit variable reordering, simultaneous scalar/polynomial substitution, exact gradient/Hessian polynomials and line restriction. Target symbols and their order are explicit; operations do not certify stability or hyperbolicity. Homogeneous multinomial normalization requires a homogeneous input. See [multivariate workflows](multivariate.md).
     - **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64`, `gradient_float64` and `hessian_float64` evaluate real batches with explicit float64 rounding/range limits. Numerical derivatives work at zero coordinates and singular determinant points. Numerical work uses bounded point blocks; Hessian output still requires batch size times variable count squared storage. Native inputs, context changes and exports own their data. Costs depend on monomial count, degree, variable count, batch size and coefficient sizes.
     - **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
+    - **Prepared Numerical Pencils**: Retain an owned float64 snapshot and reuse batched LU factors for slogdet, log-absolute-determinant gradients and Hessian-vector products. NumPy is the default; CuPy is explicitly selected for resident GPU arrays. See the [prepared API contract](api.md#prepared-numerical-pencils) and its memory and singular-domain limits.
     - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
     - **Zippel Sparse Interpolation**: Uses randomized finite-field discovery followed by deterministic coefficient/support verification for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`). An exact balanced-base fallback repairs incomplete discovery. A configurable integer-size limit bounds verification feasibility. See [the construction limits](multivariate.md#homogeneous-normalization-and-matrix-pencils).
     - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
@@ -167,6 +168,7 @@ On `develop`, interactive companions are linked beside their related figures. In
 
     - **Matrix Samplers**: Dense random matrices for GOE (orthogonal invariance, $\beta=1$), GUE (unitary invariance, $\beta=2$), and GSE (symplectic invariance, $\beta=4$). Here $O(d)$ denotes the orthogonal group, not a runtime bound.
     - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
+    - **Integrated GUE Workflows**: Connect sampling, expected polynomials, scaled Hermite kernels and interval-count concentration with reproducible examples and explicit finite-sample uncertainty. See the [GUE workflow](gue-workflow.md).
     - **`EmpiricalComparison`**: Compares all sampled characteristic coefficients, including deterministic ones, with Bonferroni-adjusted two-sided Student-t bands. `alpha` controls the nominal family significance level; coefficient scaling prevents variance overflow/underflow. Samples must be finite Hermitian matrices of the matching size, with verified eigenvalue pairs for doubled-size representations. See the [API reference](api.md#empirical-coefficient-comparison) for sample assumptions and numerical tolerances.
 
 
@@ -179,7 +181,7 @@ On `develop`, interactive companions are linked beside their related figures. In
 
 ## Installation
 
-Install this release with `python -m pip install finitefree==0.2.0`. The package and the API contracts described here require Python 3.10 or later.
+For a published 0.3.0 release, install with `python -m pip install finitefree==0.3.0`. Before publication, use the source or built candidate wheel as described below. The package and API contracts require Python 3.10 or later.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 
@@ -211,7 +213,7 @@ Source installations use `hatchling` and `hatch-cython` to compile `modular_fast
      python -m pip install -e ".[dev]"
      ```
 
-See [development instructions](development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. CuPy is only attempted by the parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)`; these paths can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
+See [development instructions](development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. Prepared pencils use CuPy only when `backend="cupy"` is explicitly selected; that backend requires compatible CuPy and CUDA and has no automatic CPU fallback. The separate parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)` can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
 
 *Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.9.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
 

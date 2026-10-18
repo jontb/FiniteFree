@@ -134,5 +134,6 @@ numerical consistency on the measured cases, not certification of tiny tails.
 - [x] CPU pilot, bounded simulation, deterministic identities and smoke test.
 - [x] Reproducible report and inspected variance/tail plots.
 - [ ] Rigorous quadrature enclosures or substantially rarer-tail validation.
-- [ ] Real cloud GPU validation remains pending on the prepared-pencil track;
-  this CPU mathematical showcase supplies no GPU evidence.
+- [x] Genuine-device prepared-pencil correctness is recorded separately in the
+  [development validation checklist](development.md#prepared-pencil-validation-checklist).
+  This CPU showcase supplies no GPU evidence; performance studies remain deferred.
