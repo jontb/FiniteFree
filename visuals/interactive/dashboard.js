@@ -14,7 +14,7 @@ const descriptions = {
       "<strong>CDF.</strong> The staircase retains all mass, including zeros. The distance compares this finite measure with the limiting CDF; recorded samples fluctuate, so it need not decrease at every size.",
     ],
     notes:
-      "<p>Wigner models use off-diagonal variance 1/d and the semicircle law on [−2,2]. Gaussian entries give GOE/GUE; bounded coordinates give real or Hermitian Wigner matrices. Coordinates are independent, centered and variance one: Gaussian, Rademacher ±1, or uniform on [−√3,√3]. Complex entries combine two coordinates with factor 1/√2. GSE uses a 2d × 2d complex representation; one value from each Kramers pair receives weight 1/d. Wishart samplers use XX*/n (XX*/(2n) for the quaternionic representation), γ = d/n, support [(1−√γ)²,(1+√γ)²] and zero atom max(0,1−1/γ).</p><p>Hermite and Laguerre views show roots of the expected characteristic polynomial, not an average ESD or a random realization. Laguerre uses covariance duality when n &lt; d. Legendre root measures converge to the arcsine law on [−1,1]; this view does not sample a Jacobi matrix ensemble. Each recorded matrix sample uses the displayed seed independently at each size. Float64 eigensolvers and recurrence root extraction supply numerical values.</p>",
+      "<p>Wigner models use off-diagonal variance 1/d and the semicircle law on [−2,2]. Gaussian entries give GOE/GUE; bounded coordinates give real or Hermitian Wigner matrices. Coordinates are independent, centered and variance one: Gaussian, Rademacher ±1, or uniform on [−√3,√3]. Complex entries combine two coordinates with factor 1/√2. GSE uses a 2d × 2d complex representation; one value from each Kramers pair receives weight 1/d. Wishart samplers use XX*/n (XX*/(2n) for the quaternionic representation), γ = d/n, support [(1−√γ)²,(1+√γ)²] and zero atom max(0,1−1/γ).</p><p>Hermite and Laguerre views show roots of the expected characteristic polynomial, not an average ESD or a random realization. Laguerre uses covariance duality when n &lt; d. Legendre root measures converge to the arcsine law on [−1,1]; this view does not sample a Jacobi matrix ensemble. Compound Wishart uses d multiplicative factors of q_d with n = d² and exact normalized coefficients e_k(q_d)^d. Recorded degrees 8,16,32,64 use scoped 192-bit root isolation; Float64 rendering is not an interval certificate. The mean-one free-lognormal reference has S(w) = exp(−w), support [0.0757393,4.8571781], and moments 1,1,2,5.5 (orders 0–3). For w = a−ib, bracket b cot(b)−b² = a(a+1) in (0,π/2), a ∈ [(−1−√5)/2,(−1+√5)/2], then x = (1+w)exp(w)/w and ρ(x) = b/(πx). The integrated density/CDF is normalized by its raw quadrature mass, displayed in this view. Each recorded matrix sample uses the displayed seed independently at each size. Float64 eigensolvers and recurrence root extraction supply numerical values.</p>",
     families: [
       ["gue", "Hermitian Wigner / GUE · ESD"],
       ["goe", "Real Wigner / GOE · ESD"],
@@ -25,6 +25,7 @@ const descriptions = {
       ["hermite", "Hermite · expected-poly roots"],
       ["laguerre", "Laguerre · expected-poly roots"],
       ["legendre", "Legendre · root measure"],
+      ["compound", "Compound Wishart · free lognormal"],
     ],
   },
   "finite-transforms": {
@@ -64,10 +65,10 @@ const descriptions = {
     ],
   },
   "hermite-kernels": {
-    title: "Bulk and edge kernel scaling.",
+    title: "Hermite kernels and edge distributions.",
     eyebrow: "Hermite projection kernel",
     nav: "06 · Kernel limits",
-    lead: "Move the rank slider to compare normalized Hermite kernel sections K_d(x,0) with the sine kernel in the bulk and the Airy kernel at the soft edge.",
+    lead: "Compare bulk/sine and soft-edge/Airy kernel sections, or follow the finite-rank largest-eigenvalue CDF toward Tracy–Widom β = 2. The rank slider retains the chosen rescaled window.",
     left: "Rescaled kernel section",
     right: "Finite minus limiting kernel",
     context: [
@@ -75,10 +76,11 @@ const descriptions = {
       "<strong>Edge.</strong> At a_d = √(2d) and s_d = 1/(√2 d^(1/6)), plot s_d K_d(a_d+s_d u,a_d) against K_Ai(u,0). The residual is measured on the displayed u-grid.",
     ],
     notes:
-      "<p>K_d(x,y) = Σ_{k=0}^{d−1} φ_k(x)φ_k(y), with φ₀ = π^(−1/4)e^(−x²/2), φ₁ = √2 x φ₀ and the normalized Hermite three-term recurrence. The sum representation evaluates the diagonal directly. The Airy section uses (Ai(u)Ai′(0)−Ai′(u)Ai(0))/u and Ai′(0)² at u = 0.</p><p>These are deterministic weighted projection-kernel sections, not sampled ESDs. Float64 recurrence and SciPy Airy evaluation provide the curves; the finite-grid residual is a diagnostic, not a uniform error bound or universality proof.</p>",
+      "<p>K_d(x,y) = Σ_{k=0}^{d−1} φ_k(x)φ_k(y), with φ₀ = π^(−1/4)e^(−x²/2), φ₁ = √2 x φ₀ and the normalized Hermite three-term recurrence. The sum representation evaluates the diagonal directly. The Airy section uses (Ai(u)Ai′(0)−Ai′(u)Ai(0))/u and Ai′(0)² at u = 0.</p><p>These are deterministic weighted projection-kernel sections, not sampled ESDs. Float64 recurrence and SciPy Airy evaluation provide the curves; the finite-grid residual is a diagnostic, not a uniform error bound or universality proof.</p><p>The edge-CDF view uses det(I − √W K √W) with 64 Gauss–Legendre nodes on [s,10] in edge coordinates. For the reference, K is the Airy kernel, whose diagonal is Ai′(u)²−u Ai(u)²; finite ranks use the rescaled Hermite kernel. Refinement to 96 nodes and extension to cutoff 14 are checked on every stored threshold. Both are approximate half-line CDFs; tiny sensitivity differences are empirical diagnostics, not certified tail bounds. The finite-rank curve is not itself Tracy–Widom.</p>",
     families: [
       ["bulk", "Bulk · sine kernel"],
       ["edge", "Soft edge · Airy kernel"],
+      ["gap", "Continuous gap · edge CDF"],
     ],
   },
   "unitary-root-flow": {
@@ -258,13 +260,28 @@ function cdfDistance(values, limit, kind) {
 }
 function ensemble() {
   const family = $("family").value,
+    compound = family === "compound",
+    d = size(compound ? MODEL.compound_degrees : MODEL.degrees),
     di = +$("size").value,
     ri = +$("ratio").value,
     si = +$("sample").value,
-    d = size(MODEL.degrees),
     wishart = family.startsWith("wishart") || family === "laguerre",
-    roots = ["hermite", "laguerre", "legendre"].includes(family),
-    kind = wishart ? "mp" : family === "legendre" ? "arcsine" : "semicircle";
+    roots = ["hermite", "laguerre", "legendre", "compound"].includes(family),
+    kind = compound
+      ? "lognormal"
+      : wishart
+        ? "mp"
+        : family === "legendre"
+          ? "arcsine"
+          : "semicircle";
+  $("context-left").innerHTML = compound
+    ? "<strong>Compound roots.</strong> p_d = q_d ⊠_d ⋯ ⊠_d q_d (d factors), with q_d the mean-one Wishart expected polynomial at n = d². Each root carries mass 1/d; τ = d²/n = 1 stays fixed."
+    : D.context[0];
+  $("context-right").innerHTML = compound
+    ? "<strong>Free-lognormal reference.</strong> S(w) = exp(−w), mean 1 and second moment 2. The dashed CDF integrates a bracketed boundary branch on its full compact support; its numerical distance is a diagnostic."
+    : D.context[1];
+  for (const id of ["entries", "ratio", "sample"]) hide(id, compound);
+  $("size-label").textContent = compound ? "Degree / factors d" : "Dimension d";
   $("entries").disabled = roots || family === "gse";
   if ($("entries").disabled) $("entries").value = "gaussian";
   for (const [key, gaussian, bounded] of [
@@ -302,7 +319,10 @@ function ensemble() {
         counts[Math.min(bins - 1, Math.max(0, Math.floor((x - lo) / dx)))]++,
     );
   const density = counts.map((c) => c / (d * dx)),
-    ymax = Math.max(0.5, Math.max(...density) * 1.25),
+    ymax = Math.max(
+      0.5,
+      Math.max(...density, ...(compound ? limit.density : [])) * 1.25,
+    ),
     plot = linePlot(
       "left",
       limit.x,
@@ -365,11 +385,13 @@ function ensemble() {
   );
   const distance = cdfDistance(values, limit, kind),
     mean = values.reduce((a, b) => a + b, 0) / d;
-  $("formula").textContent = wishart
-    ? `W = XX*/${family === "wishart4" ? "(2n)" : "n"} · γ = ${fmt(gamma)} · n = ${row.n}`
-    : kind === "arcsine"
-      ? "Legendre roots · μ∞(dx) = dx / (π√(1−x²))"
-      : "Variance scale 1/d · ρ∞(x) = √(4−x²)/(2π)";
+  $("formula").textContent = compound
+    ? `p_d = q_d ⊠_d ⋯ ⊠_d q_d · ${d} factors · n = ${row.n} · τ = 1 · S∞(w) = exp(−w)`
+    : wishart
+      ? `W = XX*/${family === "wishart4" ? "(2n)" : "n"} · γ = ${fmt(gamma)} · n = ${row.n}`
+      : kind === "arcsine"
+        ? "Legendre roots · μ∞(dx) = dx / (π√(1−x²))"
+        : "Variance scale 1/d · ρ∞(x) = √(4−x²)/(2π)";
   $("left-caption").textContent =
     (roots
       ? "Deterministic root measure"
@@ -416,8 +438,29 @@ function ensemble() {
       family === "gse" || family === "wishart4" ? "2d, one per pair" : "d",
     ],
   ]);
-  $("control-note").textContent =
-    "Sample selection uses three recorded realizations. Size changes select independently generated matrices; they are not nested minors.";
+  $("control-note").textContent = compound
+    ? "Recorded degrees 8,16,32,64 · 192-bit scoped root isolation, rendered as Float64. Size changes degree, factor count and n = d² together; entry, ratio and sample controls do not apply."
+    : "Sample selection uses three recorded realizations. Size changes select independently generated matrices; they are not nested minors.";
+  if (compound) {
+    $("left-caption").textContent =
+      "Deterministic root measure · 24 probability-density bins · full reference density";
+    metric(
+      3,
+      "Second moment",
+      fmt(values.reduce((a, v) => a + v * v, 0) / d),
+      "Mean-one limit: m₂ = 2",
+    );
+    $("right-caption").textContent =
+      "Root CDF vs integrated free-lognormal reference · numerical approximation";
+    readout([
+      ["Degree / factors", d],
+      ["n", row.n],
+      ["Mean", fmt(mean)],
+      ["Reference mass", fmt(limit.moments[0], 8)],
+      ["Branch residual", errorFormat(limit.branch_residual)],
+      ["Support of limit", limit.support.map((x) => fmt(x)).join(" … ")],
+    ]);
+  }
   window.explorerState = {
     kind: KIND,
     family,
@@ -690,6 +733,13 @@ function interlacing() {
   };
 }
 function kernels() {
+  const gap = $("family").value === "gap";
+  hide("parameter", !gap);
+  if (gap) return edgeDistribution();
+  $("left-title").textContent = D.left;
+  $("right-title").textContent = D.right;
+  $("context-left").innerHTML = D.context[0];
+  $("context-right").innerHTML = D.context[1];
   const d = size(MODEL.degrees),
     row = MODEL.rows[$("family").value],
     values = row.curves[+$("size").value],
@@ -766,6 +816,110 @@ function kernels() {
     error,
     scale,
     center,
+  };
+}
+function edgeDistribution() {
+  const d = size(MODEL.degrees),
+    di = +$("size").value,
+    row = MODEL.gap,
+    values = row.curves[di];
+  $("parameter").min = 0;
+  $("parameter").max = row.x.length - 1;
+  const si = +$("parameter").value,
+    s = row.x[si],
+    residual = values.map((v, i) => v - row.limit[i]),
+    error = Math.max(...residual.map(Math.abs)),
+    scale = 1 / (Math.sqrt(2) * d ** (1 / 6)),
+    center = Math.sqrt(2 * d),
+    diagnostic = row.diagnostics[di],
+    reference = row.reference_diagnostic;
+  $("left-title").textContent = "Largest-eigenvalue CDF";
+  $("right-title").textContent = "Finite rank minus Tracy–Widom β = 2";
+  $("context-left").innerHTML =
+    "<strong>Continuous gap.</strong> F_d(s) = det(I − K_d) on (a_d + s_d s,∞), for the Hermite process with weight e^(−x²). The selected s marks the threshold for λ_max; the curve uses continuous quadrature, without a sampled spatial grid.";
+  $("context-right").innerHTML =
+    "<strong>Edge reference.</strong> F₂(s) = det(I − K_Ai) on (s,∞). Both curves approximate half-line probabilities using a finite cutoff and Gauss–Legendre Nyström quadrature. The signed residual measures finite-rank deviation; sensitivity readouts are not error certificates.";
+  const plot = linePlot(
+    "left",
+    row.x,
+    [
+      [values, COLORS[0]],
+      [row.limit, COLORS[2], [5, 3]],
+    ],
+    [-4, 3, 0, 1.05],
+    "edge threshold s",
+    "P((λ_max − a_d)/s_d ≤ s)",
+  );
+  curve(
+    plot.ctx,
+    [
+      [plot.X(s), plot.Y(0)],
+      [plot.X(s), plot.Y(1)],
+    ],
+    "#688394",
+    1,
+    [4, 4],
+  );
+  marker(plot.ctx, plot.X(s), plot.Y(values[si]), COLORS[0]);
+  const bound = Math.max(error * 1.1, 0.001);
+  linePlot(
+    "right",
+    row.x,
+    [[residual, COLORS[3]]],
+    [-4, 3, -bound, bound],
+    "edge threshold s",
+    "F_d(s) − F₂(s)",
+  );
+  parameter("Edge threshold s", "−4", "3 · step 0.1", fmt(s));
+  $("formula").textContent =
+    "a_d = √(2d) · s_d = 1/(√2 d^(1/6)) · F_d(s) → F₂(s) = det(I − K_Ai)";
+  $("left-caption").textContent =
+    "Continuous finite-rank gap vs Airy determinant · 64 nodes, rescaled cutoff 10";
+  $("right-caption").textContent =
+    "Signed CDF difference on 71 thresholds · both references are numerical";
+  metric(1, "Finite-rank CDF", fmt(values[si], 6), `d = ${d} · s = ${fmt(s)}`);
+  metric(
+    2,
+    "Tracy–Widom β = 2",
+    fmt(row.limit[si], 6),
+    "Airy-kernel determinant approximation",
+  );
+  metric(
+    3,
+    "Grid max CDF difference",
+    errorFormat(error),
+    "max |F_d − F₂| on [−4,3]",
+  );
+  readout([
+    ["Physical threshold", fmt(center + scale * s)],
+    ["Center / scale", `${fmt(center)} / ${fmt(scale)}`],
+    [
+      "64 → 96 nodes",
+      errorFormat(Math.max(diagnostic.quadrature, reference.quadrature)),
+    ],
+    ["Cutoff 10 → 14", errorFormat(Math.max(diagnostic.tail, reference.tail))],
+  ]);
+  legend("left", [
+    [COLORS[0], "Finite-rank Hermite CDF"],
+    [COLORS[2], "Tracy–Widom β = 2 (Airy)"],
+  ]);
+  legend("right", [[COLORS[3], "Signed CDF difference"]]);
+  $("control-note").textContent =
+    "Rank selects a recorded curve; s selects its threshold. Readouts show maximum sensitivity across all thresholds for this rank and the Airy reference. No determinant is computed in the browser.";
+  window.explorerState = {
+    kind: KIND,
+    region: "gap",
+    d,
+    s,
+    x: row.x,
+    values,
+    limit: row.limit,
+    error,
+    scale,
+    center,
+    selected: values[si],
+    reference: row.limit[si],
+    diagnostic,
   };
 }
 function complexValue(coeffs, x, y) {

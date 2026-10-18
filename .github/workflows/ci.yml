@@ -89,6 +89,8 @@ jobs:
       if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
       run: |
         python -m pip install mkdocs-material "mkdocstrings[python]"
+        PYTHONPATH=. python examples/interactive_geometry.py --output docs/visuals/interactive
+        OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python examples/spectral_dashboards.py --output docs/visuals/interactive
         python scripts/sync_docs.py
         git diff --exit-code -- docs/index.md
         python -m mkdocs build --strict
