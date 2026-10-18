@@ -341,13 +341,16 @@ def _validated_discrete_eigensystem(
     if isinstance(kernel, np.ndarray):
         K_mat = kernel
     else:
-        K_mat = np.array(
-            [[float(kernel(x, y)) for y in state_space] for x in state_space]
-        )
+        K_mat = np.array([[kernel(x, y) for y in state_space] for x in state_space])
 
-    if np.iscomplexobj(K_mat):
+    if np.iscomplexobj(K_mat) or (
+        K_mat.dtype == object and any(np.iscomplexobj(value) for value in K_mat.flat)
+    ):
         raise ValueError("Kernel must be real symmetric.")
-    K_mat = np.asarray(K_mat, dtype=np.float64)
+    try:
+        K_mat = np.asarray(K_mat, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("Kernel entries must be finite real values.") from error
     if K_mat.shape != (M, M):
         raise ValueError("Kernel shape must match state_space.")
     if not np.all(np.isfinite(K_mat)):
