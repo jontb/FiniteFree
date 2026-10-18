@@ -161,6 +161,10 @@ class SymmetricMatrixPencil:
                 f"Weights and bias lengths must match pencil variables ({self.m})."
             )
 
+        message = "Weights and biases must contain finite real rational values"
+        # SymPy can erase a zero imaginary part while converting complex scalars.
+        if any(np.iscomplexobj(value) for values in (w, b) for value in values):
+            raise ValueError(message)
         try:
             exact_A_coeffs = [
                 sp.Rational(int(q.p), int(q.q)) for q in map(sympy_to_fmpq, w)
@@ -169,9 +173,7 @@ class SymmetricMatrixPencil:
                 sp.Rational(int(q.p), int(q.q)) for q in map(sympy_to_fmpq, b)
             ]
         except (TypeError, ValueError, OverflowError) as error:
-            raise ValueError(
-                "Weights and biases must contain finite real rational values"
-            ) from error
+            raise ValueError(message) from error
 
         exact_matrices = self._get_matrices_sympy()
 

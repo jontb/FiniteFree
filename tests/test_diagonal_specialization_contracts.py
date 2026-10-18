@@ -59,7 +59,18 @@ def test_specialization_preserves_extended_precision_offset() -> None:
     assert list(actual.coeffs) == [1, sp.Rational(2**60 + 1, 2**60)]
 
 
-@pytest.mark.parametrize("invalid", [np.nan, np.inf, 1j, sp.sqrt(2)])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        np.nan,
+        np.inf,
+        1j,
+        complex(0.5),
+        np.complex64(0.5),
+        np.complex128(0.5),
+        sp.sqrt(2),
+    ],
+)
 @pytest.mark.parametrize("parameter", ["weight", "bias"])
 def test_specialization_rejects_nonrational_parameters(
     invalid: Any, parameter: str
