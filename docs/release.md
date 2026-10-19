@@ -1,6 +1,8 @@
 # Release process
 
-**FiniteFree 0.4.0 is published** on [PyPI](https://pypi.org/project/finitefree/0.4.0/) and [GitHub Releases](https://github.com/jontb/FiniteFree/releases/tag/v0.4.0). The [successful production workflow](https://github.com/jontb/FiniteFree/actions/runs/39194310960) built and tested 16 wheels and one source archive; their published hashes and fresh installations were verified. Install with `python -m pip install finitefree==0.4.0`.
+**FiniteFree 0.4.1 corrects the PyPI descriptions and project links.** It changes package metadata and documentation only; runtime source, defaults and dependency floors match 0.4.0. Production versions and files are listed on [PyPI](https://pypi.org/project/finitefree/); verify a new version there using the process below.
+
+For the preceding 0.4.0 release, the [successful production workflow](https://github.com/jontb/FiniteFree/actions/runs/39194310960) built and tested 16 wheels and one source archive; their published hashes and fresh installations were verified.
 
 The checklist below also governs future releases. A candidate build and a static version entry do not establish production publication: verify the approved tag, publishing workflow and PyPI files before promotion.
 
@@ -19,7 +21,7 @@ probability error bounds.
 
 Routine feature and maintenance pull requests target `develop`. `main` and its public documentation continue to describe the latest production PyPI release while the next release is prepared.
 
-1. Prepare the intended version, changelog, migration notes and README/API documentation on `develop`. The version in `pyproject.toml` is static: a tag never changes it. Use a new version and confirm neither its tag nor its PyPI files already exist.
+1. Prepare the intended version, changelog, migration notes and README/API documentation on `develop`. The package summary and `PYPI_README.md` supply the PyPI page; keep their links absolute and check the rendered description. PyPI cannot edit existing release metadata in place, so correcting it requires a new version. The version in `pyproject.toml` is static: a tag never changes it. Use a new version and confirm neither its tag nor its PyPI files already exist.
 2. Validate the exact integrated candidate with CI and the artifact matrix below. A `release-review/**` branch can point to that candidate without publishing it. Record its commit, package hashes and completed checks, and obtain approval for that specific production release.
 3. Create the approved stable `vX.Y.Z` tag at the validated candidate and let the existing publishing workflow complete. Inspect its production upload, PyPI metadata and file hashes. Install from production PyPI in a fresh environment outside the checkout, verify the native extension and mathematical smoke cases, and run `pip check`.
 4. After production verification succeeds, open a `develop` → `main` pull request promoting the released source and its matching documentation. Wait for CI on the integrated pull request and main commit, and verify the public documentation deployment. Functional source on `main` must match the published tag; routine GitHub release notes should link that tag and package.
@@ -39,7 +41,7 @@ Before publishing:
 
 - Record the final release-candidate commit on `develop` and confirm CI on that exact commit. Require the 12 supported OS/Python combinations, pinned Python 3.10 runtime job and artifact-build job; checks on individual predecessor PRs do not validate the integrated tree.
 - Confirm compiled and flag-fallback source suites, installed-wheel tests outside the checkout, Ruff/mypy, independent documentation examples and strict MkDocs. Record skips and platform-specific limits rather than treating configured jobs as passed.
-- Build a wheel and sdist from the reviewed source with `python -m build`. Confirm both contain the intended static version, the reviewed Python and runtime dependency floors, README metadata and the intended source files. Verify the wheel includes its compiled modular extension and can be installed and tested outside the checkout.
+- Build a wheel and sdist from the reviewed source with `python -m build`. Confirm both contain the intended static version, the reviewed Python and runtime dependency floors, the summary, `PYPI_README.md` description, project URLs and intended source files. Verify the wheel includes its compiled modular extension and can be installed and tested outside the checkout.
 - Run `Build Release Artifacts Only` on the final commit and inspect all cibuildwheel jobs and uploaded wheels. It shares the publishing action and package policy, including the installed-wheel regression command. Ordinary source CI's Linux wheel/sdist build does not cover the production wheel matrix.
 - Preserve archive SHA-256 hashes with the commit and validation logs. A local Linux wheel is a candidate, not the complete cross-platform PyPI wheel set.
 - Review the published-package contents and migration notes, then approve the release action separately.
