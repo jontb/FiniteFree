@@ -6,6 +6,7 @@ import pytest
 import sympy as sp
 
 from finitefree.multivariate import MultivariatePolynomial
+from tests._cases import case
 
 
 def _rational(value: Any) -> sp.Rational:
@@ -58,29 +59,31 @@ def test_normalized_coefficients_require_homogeneity() -> None:
         p.normalized_coefficients()
 
 
-@pytest.mark.parametrize(
-    "variables",
-    [
+def test_invalid_variable_contexts() -> None:
+    variables: list[Any]
+    contexts: list[list[Any]] = [
         [],
         ["x"],
         [1],
         [sp.Symbol("x"), sp.Symbol("x")],
         [sp.Symbol("x"), sp.Symbol("x", real=True)],
-    ],
-)
-def test_invalid_variable_contexts(variables: list[Any]) -> None:
-    with pytest.raises(ValueError, match="Variables|Variable"):
-        MultivariatePolynomial(0, variables)
+    ]
+    for variables in contexts:
+        with case(variables=variables):
+            with pytest.raises(ValueError, match="Variables|Variable"):
+                MultivariatePolynomial(0, variables)
 
 
-@pytest.mark.parametrize("order", [-1, 0.5, True, np.bool_(True)])
-def test_invalid_derivative_counts(order: Any) -> None:
-    x, y = sp.symbols("x y")
-    p = MultivariatePolynomial(x**2 + y, [x, y])
-    with pytest.raises((ValueError, TypeError)):
-        p.mixed_partial_derivative([order, 0])
-    with pytest.raises((ValueError, TypeError)):
-        p.partial_derivative(x, order)
+def test_invalid_derivative_counts() -> None:
+    order: Any
+    for order in [-1, 0.5, True, np.bool_(True)]:
+        with case(order=order):
+            x, y = sp.symbols("x y")
+            p = MultivariatePolynomial(x**2 + y, [x, y])
+            with pytest.raises((ValueError, TypeError)):
+                p.mixed_partial_derivative([order, 0])
+            with pytest.raises((ValueError, TypeError)):
+                p.partial_derivative(x, order)
 
 
 def test_derivatives_and_euler_identity() -> None:
@@ -110,41 +113,43 @@ def test_derivatives_and_euler_identity() -> None:
     )
 
 
-@pytest.mark.parametrize("seed", range(8))
-def test_rational_ring_identities_against_sympy(seed: int) -> None:
-    x, y = sp.symbols("x y")
-    rng = np.random.default_rng(seed)
+def test_rational_ring_identities_against_sympy() -> None:
+    seed: int
+    for seed in range(8):
+        with case(seed=seed):
+            x, y = sp.symbols("x y")
+            rng = np.random.default_rng(seed)
 
-    def expression() -> sp.Expr:
-        return sp.expand(
-            sum(
-                sp.Rational(int(rng.integers(-5, 6)), int(rng.integers(1, 6)))
-                * x ** int(rng.integers(0, 4))
-                * y ** int(rng.integers(0, 4))
-                for _ in range(6)
-            )
-        )
+            def expression(rng: Any = rng, x: Any = x, y: Any = y) -> sp.Expr:
+                return sp.expand(
+                    sum(
+                        sp.Rational(int(rng.integers(-5, 6)), int(rng.integers(1, 6)))
+                        * x ** int(rng.integers(0, 4))
+                        * y ** int(rng.integers(0, 4))
+                        for _ in range(6)
+                    )
+                )
 
-    a, b = expression(), expression()
-    p, q = MultivariatePolynomial(a, [x, y]), MultivariatePolynomial(b, [x, y])
-    for actual, expected in (
-        (p + q, a + b),
-        (p - q, a - b),
-        (p * q, a * b),
-        (p ** np.int64(2), a**2),
-        (-p, -a),
-        (sp.Rational(2, 3) + p, sp.Rational(2, 3) + a),
-        (sp.Rational(2, 3) - p, sp.Rational(2, 3) - a),
-        (sp.Rational(2, 3) * p, sp.Rational(2, 3) * a),
-    ):
-        assert actual.expr == sp.expand(expected)
-        point = [sp.Rational(1, 3), sp.Rational(-2, 5)]
-        assert _rational(actual.evaluate(point)) == expected.subs(
-            dict(zip((x, y), point))
-        )
-    assert ((p + q) * p).expr == (p * p + q * p).expr
-    assert (p * 0).expr == 0 and (p * 0).degree() == -1
-    assert (p**0).expr == 1
+            a, b = expression(), expression()
+            p, q = MultivariatePolynomial(a, [x, y]), MultivariatePolynomial(b, [x, y])
+            for actual, expected in (
+                (p + q, a + b),
+                (p - q, a - b),
+                (p * q, a * b),
+                (p ** np.int64(2), a**2),
+                (-p, -a),
+                (sp.Rational(2, 3) + p, sp.Rational(2, 3) + a),
+                (sp.Rational(2, 3) - p, sp.Rational(2, 3) - a),
+                (sp.Rational(2, 3) * p, sp.Rational(2, 3) * a),
+            ):
+                assert actual.expr == sp.expand(expected)
+                point = [sp.Rational(1, 3), sp.Rational(-2, 5)]
+                assert _rational(actual.evaluate(point)) == expected.subs(
+                    dict(zip((x, y), point))
+                )
+            assert ((p + q) * p).expr == (p * p + q * p).expr
+            assert (p * 0).expr == 0 and (p * 0).degree() == -1
+            assert (p**0).expr == 1
 
 
 def test_algebra_rejects_implicit_variable_reordering() -> None:
@@ -208,9 +213,9 @@ def test_batched_float_evaluation_against_exact_reference() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "point",
-    [
+def test_invalid_float_points() -> None:
+    point: object
+    for point in [
         1,
         [1],
         [1, 2, 3],
@@ -218,12 +223,11 @@ def test_batched_float_evaluation_against_exact_reference() -> None:
         [float("nan"), 1],
         [1 + 1j, 2],
         [10**500, 1],
-    ],
-)
-def test_invalid_float_points(point: object) -> None:
-    x, y = sp.symbols("x y")
-    with pytest.raises(ValueError):
-        MultivariatePolynomial(x + y, [x, y]).evaluate_float64(point)
+    ]:
+        with case(point=point):
+            x, y = sp.symbols("x y")
+            with pytest.raises(ValueError):
+                MultivariatePolynomial(x + y, [x, y]).evaluate_float64(point)
 
 
 def test_numerical_range_and_zero_constants() -> None:
@@ -303,24 +307,25 @@ def test_polynomial_derivatives_work_at_singular_determinant_point() -> None:
     ]
 
 
-@pytest.mark.parametrize("method", ["direct", "interpolated", "sparse"])
-def test_public_evaluation_of_matrix_polynomials_matches_exact_determinant(
-    method: str,
-) -> None:
-    from finitefree.hyperbolic import SymmetricMatrixPencil
+def test_public_evaluation_of_matrix_polynomials_matches_exact_determinant() -> None:
+    method: str
+    for method in ["direct", "interpolated", "sparse"]:
+        with case(method=method):
+            from finitefree.hyperbolic import SymmetricMatrixPencil
 
-    matrices = [
-        sp.Matrix([[sp.Rational(1, 3), 2], [2, -1]]),
-        sp.Matrix([[3, sp.Rational(-1, 2)], [sp.Rational(-1, 2), 1]]),
-    ]
-    pencil = SymmetricMatrixPencil([m.tolist() for m in matrices])
-    factories = {
-        "direct": MultivariatePolynomial.from_symmetric_matrix_pencil,
-        "interpolated": MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated,
-        "sparse": MultivariatePolynomial.from_symmetric_matrix_pencil_sparse,
-    }
-    p = factories[method](pencil)
-    for a, b in ((1, 2), (sp.Rational(1, 3), sp.Rational(-2, 5)), (0, 0)):
-        assert (
-            _rational(p.evaluate([a, b])) == (a * matrices[0] + b * matrices[1]).det()
-        )
+            matrices = [
+                sp.Matrix([[sp.Rational(1, 3), 2], [2, -1]]),
+                sp.Matrix([[3, sp.Rational(-1, 2)], [sp.Rational(-1, 2), 1]]),
+            ]
+            pencil = SymmetricMatrixPencil([m.tolist() for m in matrices])
+            factories = {
+                "direct": MultivariatePolynomial.from_symmetric_matrix_pencil,
+                "interpolated": MultivariatePolynomial.from_symmetric_matrix_pencil_interpolated,
+                "sparse": MultivariatePolynomial.from_symmetric_matrix_pencil_sparse,
+            }
+            p = factories[method](pencil)
+            for a, b in ((1, 2), (sp.Rational(1, 3), sp.Rational(-2, 5)), (0, 0)):
+                assert (
+                    _rational(p.evaluate([a, b]))
+                    == (a * matrices[0] + b * matrices[1]).det()
+                )

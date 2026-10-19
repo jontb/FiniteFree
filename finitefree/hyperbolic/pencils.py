@@ -1,5 +1,5 @@
 import math
-from typing import Any, List, Sequence
+from typing import TYPE_CHECKING, Any, List, Sequence
 
 import flint
 import numpy as np
@@ -8,11 +8,14 @@ from numpy.typing import NDArray
 
 from ..core import RealRootedPolynomial
 from ..utils.conversion import flint_to_float, sympy_to_fmpq
-from ..utils.modular import crt, prime_generator
+from ..utils.modular import _determinant_coefficient_bound, crt, prime_generator
 from ..utils.parallel import (
     ParallelScheduler,
     _eval_diagonal_specialization_prime_worker,
 )
+
+if TYPE_CHECKING:
+    from .prepared import PreparedMatrixPencil
 
 
 def _prepare_matrices(
@@ -37,6 +40,8 @@ def _prepare_matrices(
         try:
             for r in range(n):
                 for c in range(n):
+                    if np.iscomplexobj(values[r, c]):
+                        raise ValueError("Complex matrix entries are not supported")
                     rational[r, c] = sympy_to_fmpq(values[r, c])
                     floats[r, c] = flint_to_float(rational[r, c])
         except (TypeError, ValueError, OverflowError) as error:
@@ -73,6 +78,37 @@ class SymmetricMatrixPencil:
         self.matrices, self._matrices_exact = _prepare_matrices(matrices, True)
         self.m = len(self.matrices)
         self.n = self.matrices[0].shape[0]
+
+    def prepare_numeric(
+        self,
+        *,
+        backend: str = "numpy",
+        point_block_size: int = 64,
+        coefficient_block_size: int = 16,
+    ) -> "PreparedMatrixPencil":
+        """Copy the numerical view once; CuPy explicitly transfers it to the GPU.
+
+        Retain the returned object for repeated resident float64 batch queries.
+        Subsequent edits to this pencil's matrices do not change that snapshot.
+        Exact coefficients and existing polynomial/SLP methods are unaffected.
+        """
+        from .prepared import PreparedMatrixPencil
+
+        matrices = np.stack(self.matrices)
+        if backend == "cupy":
+            import importlib
+
+            try:
+                cp = importlib.import_module("cupy")
+            except ImportError as error:
+                raise ImportError("backend='cupy' requires CuPy") from error
+            matrices = cp.asarray(matrices)
+        return PreparedMatrixPencil(
+            matrices,
+            backend=backend,
+            point_block_size=point_block_size,
+            coefficient_block_size=coefficient_block_size,
+        )
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         r"""
@@ -152,7 +188,8 @@ class SymmetricMatrixPencil:
         Computes the univariate polynomial
         $P(w_1 z + b_1, \dots, w_m z + b_m) = \det(z A + B)$
         exactly where $A = \sum w_i A_i$ and $B = \sum b_i A_i$.
-        Returns a RealRootedPolynomial.
+        Rational parameters retain their supplied values, including binary floats.
+        Returns a monic-normalized RealRootedPolynomial, with lazy root validation.
         """
 
         if len(w) != self.m or len(b) != self.m:
@@ -160,8 +197,19 @@ class SymmetricMatrixPencil:
                 f"Weights and bias lengths must match pencil variables ({self.m})."
             )
 
-        exact_A_coeffs = [sp.sympify(wi) for wi in w]
-        exact_b_coeffs = [sp.sympify(bi) for bi in b]
+        message = "Weights and biases must contain finite real rational values"
+        # SymPy can erase a zero imaginary part while converting complex scalars.
+        if any(np.iscomplexobj(value) for values in (w, b) for value in values):
+            raise ValueError(message)
+        try:
+            exact_A_coeffs = [
+                sp.Rational(int(q.p), int(q.q)) for q in map(sympy_to_fmpq, w)
+            ]
+            exact_b_coeffs = [
+                sp.Rational(int(q.p), int(q.q)) for q in map(sympy_to_fmpq, b)
+            ]
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(message) from error
 
         exact_matrices = self._get_matrices_sympy()
 
@@ -194,6 +242,8 @@ class SymmetricMatrixPencil:
         B_int = [[int(B_exact[r][c] * D) for c in range(self.n)] for r in range(self.n)]
 
         primes_gen = prime_generator(1000000007)
+        coefficient_bound = _determinant_coefficient_bound([A_int, B_int])
+        modulus = 1
         reconstructed = None
         primes_used = []
         coeffs_by_prime = []
@@ -220,20 +270,17 @@ class SymmetricMatrixPencil:
                     if c_p is not None:
                         coeffs_by_prime.append(c_p)
                         primes_used.append(p_res)
+                        modulus *= p_res
 
-                if len(primes_used) >= 2:
+                if primes_used:
                     current_reconstruction = []
                     for i in range(deg + 1):
                         vals = [coeffs_by_prime[k][i] for k in range(len(primes_used))]
                         current_reconstruction.append(crt(vals, primes_used))
 
-                    if (
-                        reconstructed is not None
-                        and current_reconstruction == reconstructed
-                    ):
-                        reconstructed = current_reconstruction
-                        break
                     reconstructed = current_reconstruction
+                    if modulus > 2 * coefficient_bound:
+                        break
 
         c_coeffs = []
         denom_scale = D**self.n
@@ -303,6 +350,37 @@ class MultiplicativeMatrixPencil:
         self.matrices, self._matrices_exact = _prepare_matrices(matrices, False)
         self.m = len(self.matrices)
         self.n = self.matrices[0].shape[0]
+
+    def prepare_numeric(
+        self,
+        *,
+        backend: str = "numpy",
+        point_block_size: int = 64,
+        coefficient_block_size: int = 16,
+    ) -> "PreparedMatrixPencil":
+        """Copy the numerical view once; CuPy explicitly transfers it to the GPU.
+
+        Retain the returned object for repeated resident float64 batch queries.
+        Subsequent edits to this pencil's matrices do not change that snapshot.
+        Exact coefficients and existing polynomial/SLP methods are unaffected.
+        """
+        from .prepared import PreparedMatrixPencil
+
+        matrices = np.stack(self.matrices)
+        if backend == "cupy":
+            import importlib
+
+            try:
+                cp = importlib.import_module("cupy")
+            except ImportError as error:
+                raise ImportError("backend='cupy' requires CuPy") from error
+            matrices = cp.asarray(matrices)
+        return PreparedMatrixPencil(
+            matrices,
+            backend=backend,
+            point_block_size=point_block_size,
+            coefficient_block_size=coefficient_block_size,
+        )
 
     def evaluate(self, x: Sequence[float]) -> NDArray[np.float64]:
         if len(x) != self.m:

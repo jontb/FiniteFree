@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FiniteFree · Spectral dashboard</title>
+    <style>
+      <!--STYLE-->
+    </style>
+  </head>
+  <body data-dashboard="<!--NAME-->">
+    <nav>
+      <strong>FINITEFREE <span>/ Spectral lab</span></strong
+      ><span id="nav-label"></span>
+    </nav>
+    <main class="wrap">
+      <div class="eyebrow" id="eyebrow"></div>
+      <h1 id="title"></h1>
+      <p class="lead" id="lead"></p>
+      <div class="formula" id="formula"></div>
+      <section class="explainer" aria-label="Plot context">
+        <div class="explainer-grid">
+          <p id="context-left"></p>
+          <p id="context-right"></p>
+        </div>
+      </section>
+      <div class="layout">
+        <section>
+          <div class="plots">
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2 id="left-title"></h2>
+                  <p class="caption" id="left-caption"></p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="left"
+                  role="img"
+                  aria-label="Finite spectral data and comparison"
+                ></canvas>
+              </div>
+              <div class="legend" id="left-legend"></div>
+            </article>
+            <article class="panel">
+              <div class="panelhead">
+                <div>
+                  <h2 id="right-title"></h2>
+                  <p class="caption" id="right-caption"></p>
+                </div>
+              </div>
+              <div class="chart">
+                <canvas
+                  id="right"
+                  role="img"
+                  aria-label="Complementary spectral diagnostic"
+                ></canvas>
+              </div>
+              <div class="legend" id="right-legend"></div>
+            </article>
+          </div>
+          <div class="panel metrics" aria-live="polite">
+            <div class="metric">
+              <div class="metric-label" id="metric-label-1"></div>
+              <div class="metric-value" id="metric-1"></div>
+              <div class="metric-sub" id="metric-sub-1"></div>
+            </div>
+            <div class="metric">
+              <div class="metric-label" id="metric-label-2"></div>
+              <div class="metric-value" id="metric-2"></div>
+              <div class="metric-sub" id="metric-sub-2"></div>
+            </div>
+            <div class="metric">
+              <div class="metric-label" id="metric-label-3"></div>
+              <div class="metric-value" id="metric-3"></div>
+              <div class="metric-sub" id="metric-sub-3"></div>
+            </div>
+          </div>
+        </section>
+        <aside class="panel controls">
+          <h3 id="controls-title">Parameters</h3>
+          <div class="control" id="family-control">
+            <label for="family">Family / view</label
+            ><select id="family"></select>
+          </div>
+          <div class="control" id="entries-control">
+            <label for="entries">Entry coordinates</label>
+            <select id="entries">
+              <option value="gaussian">Gaussian · variance 1</option>
+              <option value="rademacher">Rademacher · ±1</option>
+              <option value="uniform">Uniform · [−√3,√3]</option>
+            </select>
+          </div>
+          <div class="control" id="size-control">
+            <label for="size"
+              ><span id="size-label">Dimension d</span
+              ><output id="size-value"></output></label
+            ><input id="size" type="range" min="0" max="5" step="1" value="2" />
+            <div class="limits">
+              <span id="size-min"></span><span id="size-max"></span>
+            </div>
+          </div>
+          <div class="control" id="ratio-control">
+            <label for="ratio">Aspect ratio γ = d/n</label
+            ><select id="ratio">
+              <option value="0">¼</option>
+              <option value="1" selected>½</option>
+              <option value="2">1</option>
+              <option value="3">2</option>
+            </select>
+          </div>
+          <div class="control" id="sample-control">
+            <label for="sample">Recorded sample</label
+            ><select id="sample">
+              <option value="0">Sample 1</option>
+              <option value="1">Sample 2</option>
+              <option value="2">Sample 3</option>
+            </select>
+          </div>
+          <div class="control" id="parameter-control">
+            <label for="parameter"
+              ><span id="parameter-label"></span
+              ><output id="parameter-value"></output></label
+            ><input
+              id="parameter"
+              type="range"
+              min="1"
+              max="99"
+              step="1"
+              value="50"
+            />
+            <div class="limits">
+              <span id="parameter-min"></span><span id="parameter-max"></span>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="reset" class="primary">Reset</button
+            ><button id="sweep">Sweep size</button>
+          </div>
+          <p class="hint" id="control-note"></p>
+          <div class="readout">
+            <h3>Selected data</h3>
+            <dl id="readout"></dl>
+          </div>
+        </aside>
+      </div>
+      <details class="notes">
+        <summary>Model & normalization</summary>
+        <div id="notes"></div>
+      </details>
+      <footer>
+        <span
+          >FiniteFree · public polynomial APIs and recorded numerical data</span
+        ><span>Offline · no external requests</span>
+      </footer>
+    </main>
+    <script id="model" type="application/json">
+      <!--DATA-->
+    </script>
+    <script>
+      <!--COMMON-->
+    </script>
+    <script>
+      <!--APP-->
+    </script>
+  </body>
+</html>

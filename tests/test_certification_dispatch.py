@@ -5,36 +5,39 @@ import numpy as np
 import pytest
 
 from finitefree import PrecisionContext, RealRootedPolynomial
+from tests._cases import case
 
 
-@pytest.mark.parametrize("degree", [15, 16, 20, 30])
-def test_medium_squarefree_factors_reuse_a_certified_arb_root_cache(
-    degree: int,
-) -> None:
-    expected = np.arange(-degree // 2, -degree // 2 + degree, dtype=float)
-    coefficients = RealRootedPolynomial.from_roots(expected)._fmpq_poly
-    p = RealRootedPolynomial(coefficients)
-    with PrecisionContext(degree=degree, prec=128):
-        initial_precision = flint.ctx.prec
-        assert p.verify_real_rootedness()
-        assert flint.ctx.prec == initial_precision
-        assert p._roots_cached_exact
-        assert p._roots_cached_prec == initial_precision
-        roots = p.evaluate_roots_float64()
-        np.testing.assert_array_equal(roots, expected)
-        assert not roots.flags.writeable
+def test_medium_squarefree_factors_reuse_a_certified_arb_root_cache() -> None:
+    degree: int
+    for degree in [15, 16, 20, 30]:
+        with case(degree=degree):
+            expected = np.arange(-degree // 2, -degree // 2 + degree, dtype=float)
+            coefficients = RealRootedPolynomial.from_roots(expected)._fmpq_poly
+            p = RealRootedPolynomial(coefficients)
+            with PrecisionContext(degree=degree, prec=128):
+                initial_precision = flint.ctx.prec
+                assert p.verify_real_rootedness()
+                assert flint.ctx.prec == initial_precision
+                assert p._roots_cached_exact
+                assert p._roots_cached_prec == initial_precision
+                roots = p.evaluate_roots_float64()
+                np.testing.assert_array_equal(roots, expected)
+                assert not roots.flags.writeable
 
 
-@pytest.mark.parametrize("degree", [15, 16, 20, 30])
-def test_medium_degree_nearly_real_conjugate_pairs_are_rejected(degree: int) -> None:
-    real = RealRootedPolynomial.from_roots(range(1, degree - 1))._fmpq_poly
-    # The imaginary parts are 10^-40, much smaller than a float tolerance.
-    coefficients = real * flint.fmpq_poly([flint.fmpq(1, 10**80), 0, 1])
-    p = RealRootedPolynomial(coefficients)
-    with pytest.raises(ValueError, match="not real-rooted"):
-        p.verify_real_rootedness()
-    assert not p._is_verified
-    assert p._roots_cached is None
+def test_medium_degree_nearly_real_conjugate_pairs_are_rejected() -> None:
+    degree: int
+    for degree in [15, 16, 20, 30]:
+        with case(degree=degree):
+            real = RealRootedPolynomial.from_roots(range(1, degree - 1))._fmpq_poly
+            # The imaginary parts are 10^-40, much smaller than a float tolerance.
+            coefficients = real * flint.fmpq_poly([flint.fmpq(1, 10**80), 0, 1])
+            p = RealRootedPolynomial(coefficients)
+            with pytest.raises(ValueError, match="not real-rooted"):
+                p.verify_real_rootedness()
+            assert not p._is_verified
+            assert p._roots_cached is None
 
 
 @pytest.mark.parametrize("complex_pair", [False, True])

@@ -1,8 +1,58 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
-No changes yet.
+### Prepared numerical pencils and spectral workflows
+
+- Add `PreparedMatrixPencil`, `PencilFactorization` and
+  `SymmetricMatrixPencil.prepare_numeric()` for owned float64 coefficient
+  snapshots, batched evaluation, reusable pivoted LU factors, slogdet,
+  log-absolute-determinant gradients and Hessian-vector products. NumPy is the
+  default; the optional CuPy backend uses explicit resident device arrays.
+  Exact FLINT, polynomial and SLP methods retain their existing behavior.
+- Verify shifted/scaled Hermite bases and their norm ratios before using a
+  normalized numerical recurrence. Preserve measure mass, signed basis scales,
+  generic fallbacks and public kernel signatures.
+- Add integrated GUE spectral and interval-count concentration examples with
+  exact deterministic references, recorded Monte Carlo uncertainty and retained
+  discrepancies. Quadrature refinements are numerical diagnostics, not certified
+  rare-tail bounds.
+- Add standalone interactive geometry and spectral dashboards, including bounded
+  compound-Wishart/free-lognormal and continuous-gap comparisons. Precompute the
+  data outside the browser and exercise controls and responsive layouts in CI.
+
+### Correctness and compatibility
+
+- Matrix-pencil constructors reject complex entries before rational conversion,
+  including Python/NumPy complex scalars with zero imaginary part. Callers with
+  mathematically real complex arrays must explicitly validate and extract their
+  real values. Valid real/rational inputs retain their supplied-value semantics.
+
+- Diagonal matrix-pencil specialization now reconstructs until the CRT modulus
+  exceeds twice a proved coefficient bound. Repeated modular agreement can no
+  longer hide large nonzero coefficients.
+- Specialization weights and offsets preserve exact rational and supplied binary
+  floating values, including NumPy extended precision. Nonfinite, complex and
+  irrational parameters raise `ValueError` before modular evaluation.
+- Discrete DPP sampling rejects complex entries in callable kernels and object
+  arrays before float conversion or random draws, consistently with complex
+  numerical arrays. Valid real kernels retain the existing sampling algorithm.
+- Exclude local `wheelhouse/` artifacts from source distributions, preventing
+  stale wheels from being bundled in a new release archive.
+
+### Tests and contributor tooling
+
+- Integrate adversarial test consolidation with the complete GUE workflow:
+  965 collected tests become 419 on the local Python 3.12 configuration, with
+  identical executed runtime lines and branches in compiled and fallback modes.
+  All eight representative injected faults are detected, including stale HVP
+  directions and a deterministic Haar sampler missed by the original suite.
+  This preserves input cases; it does not imply proportional runtime savings.
+- Add a portable contributor check runner, contribution/issue/PR guidance and a
+  code map. Python 3.10 and the existing runtime dependency floors are unchanged.
+- Genuine RTX 3050/CuPy correctness tests cover singular and mixed batches.
+  GPU latency, total device memory and crossover benchmarks remain unmeasured;
+  no GPU speed claim is made.
 
 ## 0.2.0 — 2026-10-07
 

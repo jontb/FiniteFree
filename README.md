@@ -5,9 +5,11 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe **FiniteFree 0.2.0**, distributed on [PyPI](https://pypi.org/project/finitefree/0.2.0/) from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0). See the [migration notes](https://github.com/jontb/FiniteFree/blob/main/CHANGELOG.md) and [release process](docs/release.md) for compatibility changes and validation.
+This README and the API reference describe **FiniteFree 0.3.0**. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md) for compatibility changes, and the [release process](docs/release.md) for candidate validation and publication.
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](docs/development.md#branch-workflow) for development and release promotion.
+
+Contributing? Start with the [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md), the [code map](docs/code-map.md) and `python scripts/check.py` for routine checks. New contributors and reproducible bug reports are welcome.
 
 FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
 
@@ -16,6 +18,8 @@ To prevent numerical floating-point drift and avoid the computational complexity
 ## Visual Showcase
 
 The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
+
+Interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](docs/development.md#documentation). These bounded examples are included in the 0.3.0 source.
 
 <details>
 <summary><b>1. Limiting Distributions of Free Convolutions</b></summary>
@@ -31,9 +35,13 @@ Animates the convergence of root distributions of expectation polynomials toward
 | :---: | :---: |
 | ![Wigner Semicircle Convergence](visuals/assets/wigner_semicircle_convergence.gif) | ![Marchenko-Pastur Convergence](visuals/assets/marchenko_pastur_convergence.gif) |
 
+Interactive companion: [Open ensemble convergence](docs/development.md#ensemble-convergence) to compare sampled spectra and Hermite/Laguerre/Legendre root measures with their limiting laws.
+
 | Free Jacobi Arcsine Convergence (Legendre as $d \to 300$) | Free Log-Normal Convergence (Wishart as $m=d \to 300$) |
 | :---: | :---: |
 | ![Free Jacobi Arcsine Convergence](visuals/assets/free_jacobi_arcsine_convergence.gif) | ![Free Log-Normal Convergence](visuals/assets/free_lognormal_convergence.gif) |
+
+Interactive companion: [Open ensemble convergence](docs/development.md#ensemble-convergence) and select Legendre roots for the arcsine comparison or compound Wishart for a bounded-degree, mean-one free-lognormal comparison (τ = 1).
 
 </details>
 
@@ -44,16 +52,20 @@ Animates the convergence of root distributions of expectation polynomials toward
 Showcases GUE spectral universality and eigenvalue spacing statistics:
 - **CD Bulk Scaling Limit**: Christoffel-Darboux kernel bulk scaling limit convergence to the infinite Sine kernel.
 - **CD Edge Scaling Limit**: Christoffel-Darboux kernel edge scaling limit convergence to the infinite Airy kernel.
-- **Tracy-Widom Edge Convergence**: Empirical max eigenvalue CDF from HKPV samples converging to the Tracy-Widom (Fredholm determinant) distribution.
+- **Tracy-Widom Edge Convergence**: The batch illustration compares HKPV max-eigenvalue samples with a finite-rank continuous Hermite determinant. The interactive companion separately compares finite-rank Hermite CDFs with an Airy-kernel approximation to Tracy–Widom β = 2.
 - **Nearest-Neighbor Level Repulsion**: GUE bulk eigenvalue spacing statistics matching the analytical Wigner Surmise.
 
 | CD Bulk Scaling Limit (Sine Kernel) | CD Edge Scaling Limit (Airy Kernel) |
 | :---: | :---: |
 | ![Asymptotic Bulk Scaling](visuals/assets/asymptotic_kernel_bulk.gif) | ![Asymptotic Edge Scaling](visuals/assets/asymptotic_kernel_edge.gif) |
 
+Interactive companion: [Open Hermite kernels](docs/development.md#hermite-kernels) to switch between bulk/sine and soft-edge/Airy sections and vary the projection rank.
+
 | Tracy-Widom Edge Convergence ($d=100$) | Nearest-Neighbor Level Repulsion (Bulk Spacings vs Wigner Surmise) |
 | :---: | :---: |
 | ![Tracy-Widom Convergence](visuals/assets/tracy_widom_convergence.png) | ![Level Repulsion Spacing](visuals/assets/level_repulsion.png) |
+
+Interactive companion: [Open Hermite kernels](docs/development.md#hermite-kernels) and select continuous gap / edge CDF. Vary rank and threshold; inspect quadrature and tail-cutoff sensitivity beside the finite-rank and Tracy–Widom β = 2 curves.
 
 </details>
 
@@ -70,9 +82,13 @@ Illustrates exact algebraic properties, root interlacing constraints, and geomet
 | :---: | :---: | :---: |
 | ![Original Roots](visuals/assets/root_interlacing_original.png) | ![Additive Interlacing](visuals/assets/root_interlacing_additive.png) | ![Multiplicative Interlacing](visuals/assets/root_interlacing_multiplicative.png) |
 
+Interactive companions: [Open convolution interlacing](docs/development.md#convolution-interlacing) for additive/multiplicative examples, or [Open moving line roots](docs/development.md#moving-line-roots) for matrix-pencil restrictions and derivative interlacing.
+
 | Hyperbolic Matrix Pencil Eigencones & Topography | Unitary Hermite Eigenvalue Repulsion Trajectories |
 | :---: | :---: |
 | ![Hyperbolic Cones](visuals/assets/hyperbolic_cones.png) | ![Unitary Trajectories](visuals/assets/unitary_trajectories.gif) |
+
+Interactive companions: [Open the hyperbolicity cone explorer](docs/development.md#hyperbolicity-cone) for linked cone sections, or [Open unitary root flow](docs/development.md#unitary-root-flow) to vary degree and time.
 
 </details>
 
@@ -89,6 +105,8 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 | Fujie-Ueda T-Transform Convergence | Asymptotic Decay of Cumulants |
 | :---: | :---: |
 | ![T-Transform Convergence](visuals/assets/t_transform_convergence.gif) | ![Cumulant Decay](visuals/assets/cumulant_decay.gif) |
+
+Interactive companion: [Open finite transforms](docs/development.md#finite-transforms) for the Wishart T-transform and additive-CLT cumulants. The S-transform and Cauchy-domain animations remain separate batch illustrations.
 
 | S-Transform Convergence | Cauchy Transform Convergence |
 | :---: | :---: |
@@ -154,6 +172,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 - **`MultivariatePolynomial`**: Sparse rational polynomials with exact evaluation, rational algebra, explicit variable reordering, simultaneous scalar/polynomial substitution, exact gradient/Hessian polynomials and line restriction. Target symbols and their order are explicit; operations do not certify stability or hyperbolicity. Homogeneous multinomial normalization requires a homogeneous input. See [multivariate workflows](docs/multivariate.md).
 - **Sparse Evaluation and Ownership**: `evaluate` uses exact rational coordinates; `evaluate_float64`, `gradient_float64` and `hessian_float64` evaluate real batches with explicit float64 rounding/range limits. Numerical derivatives work at zero coordinates and singular determinant points. Numerical work uses bounded point blocks; Hessian output still requires batch size times variable count squared storage. Native inputs, context changes and exports own their data. Costs depend on monomial count, degree, variable count, batch size and coefficient sizes.
 - **Jacobi SLP & Reverse AD**: Generic straight-line programs support reverse-mode gradients. Determinant pencils instead use matrix determinant/inverse and trace identities for gradients and Hessians; exact derivatives require a nonsingular evaluated matrix.
+- **Prepared Numerical Pencils**: Retain an owned float64 snapshot and reuse batched LU factors for slogdet, log-absolute-determinant gradients and Hessian-vector products. NumPy is the default; CuPy is explicitly selected for resident GPU arrays. See the [prepared API contract](docs/api.md#prepared-numerical-pencils) and its memory and singular-domain limits.
 - **Product-Grid Modular Interpolation (CRT)**: Evaluates exact determinant polynomials and pencil characteristic polynomials (bypassing symbolic expansion bottlenecks via exact rational interpolation over $\mathbb{Q}[t]$) using C-level `nmod_mat` solvers and the Chinese Remainder Theorem.
 - **Zippel Sparse Interpolation**: Uses randomized finite-field discovery followed by deterministic coefficient/support verification for sparse determinant evaluations (`from_symmetric_matrix_pencil_sparse`). An exact balanced-base fallback repairs incomplete discovery. A configurable integer-size limit bounds verification feasibility. See [the construction limits](docs/multivariate.md#homogeneous-normalization-and-matrix-pencils).
 - **Multiplicative Pencils & Diagonal Specialization**: Extends exact matrix pencil geometries to generalized asymmetric forms (`MultiplicativeMatrixPencil`) and computes univariate characteristic projections via optimized 1D Chinese Remainder Theorem loops.
@@ -177,6 +196,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 - **Matrix Samplers**: Dense random matrices for GOE (orthogonal invariance, $\beta=1$), GUE (unitary invariance, $\beta=2$), and GSE (symplectic invariance, $\beta=4$). Here $O(d)$ denotes the orthogonal group, not a runtime bound.
 - **Empirical Validations**: Computes theoretical expected characteristic polynomials $\mathbb{E}[\det(xI - M)]$ matching explicit orthogonal sequences.
+- **Integrated GUE Workflows**: Connect sampling, expected polynomials, scaled Hermite kernels and interval-count concentration with reproducible examples and explicit finite-sample uncertainty. See the [GUE workflow](docs/gue-workflow.md).
 - **`EmpiricalComparison`**: Compares all sampled characteristic coefficients, including deterministic ones, with Bonferroni-adjusted two-sided Student-t bands. `alpha` controls the nominal family significance level; coefficient scaling prevents variance overflow/underflow. Samples must be finite Hermitian matrices of the matching size, with verified eigenvalue pairs for doubled-size representations. See the [API reference](docs/api.md#empirical-coefficient-comparison) for sample assumptions and numerical tolerances.
 
 </details>
@@ -193,7 +213,7 @@ Visualizes the convergence of exact finite free transforms to their continuous f
 
 ## Installation
 
-Install this release with `python -m pip install finitefree==0.2.0`. The package and the API contracts described here require Python 3.10 or later.
+For a published 0.3.0 release, install with `python -m pip install finitefree==0.3.0`. Before publication, use the source or built candidate wheel as described below. The package and API contracts require Python 3.10 or later.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 
@@ -222,7 +242,7 @@ Source installations use `hatchling` and `hatch-cython` to compile `modular_fast
      python -m pip install -e ".[dev]"
      ```
 
-See [development instructions](docs/development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. CuPy is only attempted by the parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)`; these paths can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
+See [development instructions](docs/development.md) for the in-place Cython build, compiled/fallback tests, installed-wheel checks and documentation dependencies. Optional Matplotlib/Pillow enable plotting and visual generation. Prepared pencils use CuPy only when `backend="cupy"` is explicitly selected; that backend requires compatible CuPy and CUDA and has no automatic CPU fallback. The separate parallel generic root path and `UnitaryPolynomial(...).evaluate_roots_float64(gpu=True)` can fall back to CPU and do not promise GPU acceleration for recurrence-based roots.
 
 *Note on Arbitrary-Precision Dependency*: While `python-flint >= 0.9.0` acts as the primary computational engine for strict real and complex root isolation, the user API does not require passing `flint.fmpq_poly` or specialized objects directly. Standard Python lists and NumPy arrays are automatically cast internally to arbitrary-precision environments where necessary.
 

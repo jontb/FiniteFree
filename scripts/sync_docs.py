@@ -109,6 +109,21 @@ def convert_readme(content: str) -> str:
             i += 1
             continue
 
+        # GitHub readers get generation instructions; built docs open the HTML.
+        for dashboard in (
+            "ensemble-convergence",
+            "finite-transforms",
+            "convolution-interlacing",
+            "hermite-kernels",
+            "unitary-root-flow",
+            "hyperbolicity-cone",
+            "moving-line-roots",
+        ):
+            line = line.replace(
+                f"](docs/development.md#{dashboard})",
+                f"](visuals/interactive/{dashboard}.html)",
+            )
+
         # README documentation links are relative to the repository root.
         line = line.replace("](docs/", "](")
         if in_details:

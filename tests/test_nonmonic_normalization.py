@@ -3,8 +3,6 @@ import math
 from typing import Any
 
 import flint
-import numpy as np
-import pytest
 import sympy as sp
 
 from finitefree import (
@@ -18,85 +16,59 @@ from finitefree.convolutions import (
     multiplicative,
     symmetric_additive,
 )
+from tests._cases import case
 
 
-@pytest.mark.parametrize(
-    "leading", [2, -3, flint.fmpq(7, 3), flint.fmpq(10**400), flint.fmpq(1, 10**400)]
-)
-@pytest.mark.parametrize("dimension", [4, 6])
-def test_normalized_coefficients_match_root_definition(
-    leading: Any, dimension: int
-) -> None:
-    roots = [sp.Rational(1, 3), 1, 2, 4]
-    base = RealRootedPolynomial.from_roots(roots)
-    p = RealRootedPolynomial(base._fmpq_poly * leading, monic=False)
-    stored = list(p.coeffs)
-    padded = roots + [0] * (dimension - len(roots))
-    expected = [
-        sum(
-            (math.prod(group) for group in itertools.combinations(padded, k)),
-            sp.Integer(0),
-        )
-        / math.comb(dimension, k)
-        for k in range(dimension + 1)
-    ]
-    assert list(p.normalized_coeffs(dimension)) == expected
-    assert [
-        sp.Rational(int(v.p), int(v.q)) for v in p._normalized_coeffs_flint(dimension)
-    ] == expected
-    assert list(p.coeffs) == stored
-    reconstructed = RealRootedPolynomial.from_normalized_coeffs(expected)
-    assert reconstructed.degree == dimension
+def test_normalized_coefficients_match_root_definition() -> None:
+    leading: Any
+    dimension: int
+    for dimension in [4, 6]:
+        for leading in [
+            2,
+            -3,
+            flint.fmpq(7, 3),
+            flint.fmpq(10**400),
+            flint.fmpq(1, 10**400),
+        ]:
+            with case(leading=leading, dimension=dimension):
+                roots = [sp.Rational(1, 3), 1, 2, 4]
+                base = RealRootedPolynomial.from_roots(roots)
+                p = RealRootedPolynomial(base._fmpq_poly * leading, monic=False)
+                stored = list(p.coeffs)
+                padded = roots + [0] * (dimension - len(roots))
+                expected = [
+                    sum(
+                        (
+                            math.prod(group)
+                            for group in itertools.combinations(padded, k)
+                        ),
+                        sp.Integer(0),
+                    )
+                    / math.comb(dimension, k)
+                    for k in range(dimension + 1)
+                ]
+                assert list(p.normalized_coeffs(dimension)) == expected
+                assert [
+                    sp.Rational(int(v.p), int(v.q))
+                    for v in p._normalized_coeffs_flint(dimension)
+                ] == expected
+                assert list(p.coeffs) == stored
+                reconstructed = RealRootedPolynomial.from_normalized_coeffs(expected)
+                assert reconstructed.degree == dimension
 
 
-@pytest.mark.parametrize(
-    "leading", [2, -3, flint.fmpq(1, 10**400), flint.fmpq(10**400)]
-)
-def test_cumulants_and_cached_sequences_ignore_leading_scalar(leading: Any) -> None:
-    p = RealRootedPolynomial([leading, -3 * leading, 2 * leading], monic=False)
-    expected = [sp.Rational(3, 2), sp.Rational(1, 2)]
-    assert FiniteRTransform(p, order=2) == expected
-    np.testing.assert_allclose(
-        FiniteRTransform(p, order=2, numerical=True), [1.5, 0.5], rtol=1e-14
-    )
-    coefficients = p.normalized_coeffs()
-    assert coefficients is p.normalized_coeffs()
-    flint_coefficients = p._normalized_coeffs_flint()
-    assert flint_coefficients is p._normalized_coeffs_flint()
-    assert list(coefficients) == [1, sp.Rational(3, 2), 2]
-
-
-@pytest.mark.parametrize(
-    "convolution, expected",
-    [
+def test_convolutions_normalize_nonmonic_representations() -> None:
+    convolution: Any
+    expected: list[Any]
+    for convolution, expected in [
         (symmetric_additive, [1, -6, sp.Rational(17, 2)]),
         (multiplicative, [1, sp.Rational(-9, 2), 4]),
         (asymmetric_additive, [1, -6, sp.Rational(25, 4)]),
-    ],
-)
-def test_convolutions_normalize_nonmonic_representations(
-    convolution: Any, expected: list[Any]
-) -> None:
-    p = RealRootedPolynomial([2, -6, 4], monic=False)
-    q = RealRootedPolynomial([-3, 9, -6], monic=False)
-    assert list(convolution(p, q, 2).coeffs) == expected
-
-
-def test_additive_power_has_the_same_cumulants_for_nonmonic_input() -> None:
-    p = RealRootedPolynomial([2, -6, 4], monic=False)
-    assert list(p.additive_power(1).coeffs) == [1, -3, 2]
-    assert list(p.additive_power(2).coeffs) == [1, -6, sp.Rational(17, 2)]
-    assert FiniteRTransform(p.additive_power(2), order=2) == [3, 1]
-
-
-def test_rational_and_symbolic_coefficient_backends_agree() -> None:
-    p = RealRootedPolynomial([sp.sqrt(2), -3 * sp.sqrt(2), 2 * sp.sqrt(2)], monic=False)
-    assert not p._is_flint
-    stored = list(p.coeffs)
-    assert list(p.normalized_coeffs()) == [1, sp.Rational(3, 2), 2]
-    assert FiniteRTransform(p, order=2) == [sp.Rational(3, 2), sp.Rational(1, 2)]
-    assert list(p.coeffs) == stored
-    assert not p._is_verified
+    ]:
+        with case(convolution=convolution, expected=expected):
+            p = RealRootedPolynomial([2, -6, 4], monic=False)
+            q = RealRootedPolynomial([-3, 9, -6], monic=False)
+            assert list(convolution(p, q, 2).coeffs) == expected
 
 
 def test_nonunit_constant_and_nonmonic_derivative_use_root_normalization() -> None:

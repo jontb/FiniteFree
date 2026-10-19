@@ -14,31 +14,31 @@ from finitefree import (
     gue_expected_poly,
     wishart_expected_poly,
 )
+from tests._cases import case
 
 
-@pytest.mark.parametrize("degree", [8, 60, 150])
-@pytest.mark.parametrize("shift", [10**50, -(10**50)])
-def test_numerical_cumulants_preserve_shifted_semicircle_contract(
-    degree: int, shift: int
-) -> None:
-    # Scaled Hermite has finite cumulants (0, 1, 0, ...), at every degree.
-    p = gue_expected_poly(degree).shift(shift)
-    expected = [float(shift), 1.0] + [0.0] * 10
-    actual = FiniteRTransform(p, order=12, numerical=True, prec=128)
-    assert actual[0] == expected[0]
-    np.testing.assert_allclose(actual[1:], expected[1:], rtol=0, atol=1e-28)
+def test_numerical_cumulants_preserve_shifted_semicircle_contract() -> None:
+    degree: int
+    shift: int
+    for shift in [10**50, -(10**50)]:
+        for degree in [8, 60, 150]:
+            with case(degree=degree, shift=shift):
+                p = gue_expected_poly(degree).shift(shift)
+                expected = [float(shift), 1.0] + [0.0] * 10
+                actual = FiniteRTransform(p, order=12, numerical=True, prec=128)
+                assert actual[0] == expected[0]
+                np.testing.assert_allclose(actual[1:], expected[1:], rtol=0, atol=1e-28)
 
 
-@pytest.mark.parametrize("degree", [20, 60, 150, 300])
-def test_numerical_cumulants_preserve_shifted_free_poisson_contract(
-    degree: int,
-) -> None:
-    # With n=2d, the finite cumulants are exactly (1, 1/2, 1/4, ...).
-    p = wishart_expected_poly(degree, 2 * degree).shift(10**50)
-    expected = [1e50] + [2.0**-k for k in range(1, 12)]
-    actual = FiniteRTransform(p, order=12, numerical=True, prec=128)
-    assert actual[0] == expected[0]
-    np.testing.assert_allclose(actual[1:], expected[1:], rtol=1e-14, atol=0)
+def test_numerical_cumulants_preserve_shifted_free_poisson_contract() -> None:
+    degree: int
+    for degree in [20, 60, 150, 300]:
+        with case(degree=degree):
+            p = wishart_expected_poly(degree, 2 * degree).shift(10**50)
+            expected = [1e50] + [2.0**-k for k in range(1, 12)]
+            actual = FiniteRTransform(p, order=12, numerical=True, prec=128)
+            assert actual[0] == expected[0]
+            np.testing.assert_allclose(actual[1:], expected[1:], rtol=1e-14, atol=0)
 
 
 def test_centering_uses_ambient_dimension_and_preserves_cached_coefficients() -> None:
@@ -77,13 +77,12 @@ def test_numerical_cumulants_restore_precision_after_conversion_failure(
     assert flint.ctx.prec == old_precision
 
 
-@pytest.mark.parametrize(
-    "t",
-    [sp.Rational(1, 10**400), Fraction(1, 10**400), flint.fmpq(1, 10**400)],
-)
-def test_t_transform_keeps_valid_rational_values_near_zero(t: Any) -> None:
-    p = RealRootedPolynomial.from_roots([1, 2, 3, 4, 5])
-    assert FiniteTTransform(p)(t) == sp.Rational(300, 137)
+def test_t_transform_keeps_valid_rational_values_near_zero() -> None:
+    t: Any
+    for t in [sp.Rational(1, 10**400), Fraction(1, 10**400), flint.fmpq(1, 10**400)]:
+        with case(t=t):
+            p = RealRootedPolynomial.from_roots([1, 2, 3, 4, 5])
+            assert FiniteTTransform(p)(t) == sp.Rational(300, 137)
 
 
 @pytest.mark.parametrize(
@@ -117,36 +116,44 @@ def test_t_transform_preserves_zero_atom_boundary() -> None:
     assert transform(sp.Rational(3, 5)) == sp.Rational(1, 3)
 
 
-@pytest.mark.parametrize(
-    "t", [np.float32("0.6"), np.float64("0.6"), np.longdouble("0.6000000000000000001")]
-)
-def test_t_transform_preserves_numpy_float_storage_precision(t: Any) -> None:
-    transform = FiniteTTransform(RealRootedPolynomial.from_roots([1, 2, 3, 4, 5]))
-    value = Fraction(*t.as_integer_ratio())
-    # longdouble can be float64 on some platforms, so use the value actually
-    # represented by that platform rather than assuming its mantissa width.
-    expected = sp.Rational(45, 17) if value < Fraction(3, 5) else sp.Rational(17, 6)
-    assert transform(t) == expected
+def test_t_transform_preserves_numpy_float_storage_precision() -> None:
+    t: Any
+    for t in [
+        np.float32("0.6"),
+        np.float64("0.6"),
+        np.longdouble("0.6000000000000000001"),
+    ]:
+        with case(t=t):
+            transform = FiniteTTransform(
+                RealRootedPolynomial.from_roots([1, 2, 3, 4, 5])
+            )
+            value = Fraction(*t.as_integer_ratio())
+            # longdouble can be float64 on some platforms, so use the value actually
+            # represented by that platform rather than assuming its mantissa width.
+            expected = (
+                sp.Rational(45, 17) if value < Fraction(3, 5) else sp.Rational(17, 6)
+            )
+            assert transform(t) == expected
 
 
-@pytest.mark.parametrize("degree", [20, 60, 150])
-def test_t_transform_matches_marchenko_pastur_diagonal_limit(degree: int) -> None:
-    # For n=2d, the limiting T(t) is 1/2+t/2. At a grid point the
-    # finite scaled-Laguerre ratio has the explicit correction 1/n.
-    n = 2 * degree
-    t = sp.Rational(3, 5)
-    transform = FiniteTTransform(wishart_expected_poly(degree, n))
-    limit = sp.Rational(1, 2) + t / 2
-    assert transform(t) - limit == sp.Rational(1, n)
+def test_t_transform_matches_marchenko_pastur_diagonal_limit() -> None:
+    degree: int
+    for degree in [20, 60, 150]:
+        with case(degree=degree):
+            n = 2 * degree
+            t = sp.Rational(3, 5)
+            transform = FiniteTTransform(wishart_expected_poly(degree, n))
+            limit = sp.Rational(1, 2) + t / 2
+            assert transform(t) - limit == sp.Rational(1, n)
 
 
-@pytest.mark.parametrize(
-    "t", [0, 1, -1, float("nan"), float("inf"), 1j, sp.Symbol("t"), None]
-)
-def test_t_transform_rejects_invalid_domain_values(t: Any) -> None:
-    p = RealRootedPolynomial.from_roots([1, 2])
-    with pytest.raises(ValueError, match="open interval"):
-        FiniteTTransform(p)(t)
+def test_t_transform_rejects_invalid_domain_values() -> None:
+    t: Any
+    for t in [0, 1, -1, float("nan"), float("inf"), 1j, sp.Symbol("t"), None]:
+        with case(t=t):
+            p = RealRootedPolynomial.from_roots([1, 2])
+            with pytest.raises(ValueError, match="open interval"):
+                FiniteTTransform(p)(t)
 
 
 def test_t_transform_rejects_degree_zero() -> None:

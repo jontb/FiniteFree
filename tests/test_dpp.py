@@ -1,24 +1,35 @@
+import itertools
+import math
 from typing import Any
 
 import flint
 import numpy as np
 import pytest
+import sympy as sp
 
-from finitefree import DiscreteFiniteKernel, gap_probability_discrete, sample_discrete
+from finitefree import (
+    DiscreteFiniteKernel,
+    PreparedDiscreteDPP,
+    gap_probability_discrete,
+    sample_discrete,
+)
+from tests._cases import case
 
 
-@pytest.mark.parametrize("representation", [list, np.array, flint.fmpq_mat])
-def test_exact_kernel_representations(representation: Any) -> None:
-    matrix = [
-        [flint.fmpq(1, 2), flint.fmpq(1, 4)],
-        [flint.fmpq(1, 4), flint.fmpq(1, 2)],
-    ]
-    kernel = DiscreteFiniteKernel(representation(matrix))
-    assert kernel(np.int64(0), 1) == flint.fmpq(1, 4)
-    assert kernel.k_point_correlation([0, 1]) == flint.fmpq(3, 16)
-    assert gap_probability_discrete(kernel, [0, 1]) == flint.fmpq(3, 16)
-    with pytest.raises(TypeError):
-        kernel(0.5, 1)
+def test_exact_kernel_representations() -> None:
+    representation: Any
+    for representation in [list, np.array, flint.fmpq_mat]:
+        with case(representation=representation):
+            matrix = [
+                [flint.fmpq(1, 2), flint.fmpq(1, 4)],
+                [flint.fmpq(1, 4), flint.fmpq(1, 2)],
+            ]
+            kernel = DiscreteFiniteKernel(representation(matrix))
+            assert kernel(np.int64(0), 1) == flint.fmpq(1, 4)
+            assert kernel.k_point_correlation([0, 1]) == flint.fmpq(3, 16)
+            assert gap_probability_discrete(kernel, [0, 1]) == flint.fmpq(3, 16)
+            with pytest.raises(TypeError):
+                kernel(0.5, 1)
 
 
 @pytest.mark.parametrize("states", [[2, 0], [2, 0, 1]])
@@ -28,9 +39,10 @@ def test_sampling_kernel_on_requested_states(states: list[int]) -> None:
     assert sample_discrete(kernel, []) == []
 
 
-@pytest.mark.parametrize(
-    "matrix, message",
-    [
+def test_invalid_sampling_kernels() -> None:
+    matrix: Any
+    message: str
+    for matrix, message in [
         (np.eye(2) * 2, "eigenvalues"),
         (np.diag([-0.01, 0.5]), "eigenvalues"),
         (np.array([[0.5, 0.1], [0.0, 0.5]]), "symmetric"),
@@ -39,48 +51,123 @@ def test_sampling_kernel_on_requested_states(states: list[int]) -> None:
         (np.eye(3), "shape"),
         (np.array([0.5, 0.5]), "shape"),
         (np.eye(2, dtype=complex), "real symmetric"),
-    ],
-)
-def test_invalid_sampling_kernels(matrix: Any, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        sample_discrete(matrix, [0, 1])
+    ]:
+        with case(matrix=matrix, message=message):
+            with pytest.raises(ValueError, match=message):
+                sample_discrete(matrix, [0, 1])
 
 
-def test_sampling_roundoff_and_state_labels() -> None:
+def test_sampling_boundaries_preserve_state_labels_and_projection_rank() -> None:
     matrix = np.diag([-1e-12, 1 + 1e-12])
-    assert sample_discrete(matrix, ["excluded", "included"]) == ["included"]
+    states = ["excluded", "included"]
+    assert sample_discrete(matrix, states) == ["included"]
+    assert PreparedDiscreteDPP(matrix, states).sample() == ["included"]
+    assert PreparedDiscreteDPP(np.empty((0, 0)), []).sample() == []
     with pytest.raises(ValueError, match="distinct"):
         sample_discrete(np.eye(2), [0, 0])
+    with pytest.raises(ValueError, match="shape"):
+        PreparedDiscreteDPP(np.eye(1), [])
+    with pytest.raises(ValueError, match="required"):
+        sample_discrete(np.eye(1))
+    with pytest.raises(TypeError, match="Generator"):
+        PreparedDiscreteDPP(matrix, states).sample(rng=123)  # type: ignore[arg-type]
+    kernel = DiscreteFiniteKernel(np.diag([1.0, 1.0, 1.0, 0.0, 0.0]))
+    for _ in range(5):
+        sample = sample_discrete(kernel, list(range(5)))
+        assert len(sample) == 3
+        assert set(sample) == {0, 1, 2}
 
 
-def test_nondiagonal_projection_inclusion_probabilities(
+@pytest.mark.parametrize("prepared", [False, True])
+@pytest.mark.parametrize("representation", ["array", "object", "callable"])
+@pytest.mark.parametrize("entry", [complex(0.5), complex(0.5, 0.25)])
+def test_complex_kernels_are_rejected_before_casting_or_random_draws(
+    prepared: bool,
+    representation: str,
+    entry: complex,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rng = np.random.default_rng(20261002)
-    monkeypatch.setattr(np.random, "rand", rng.random)
-    monkeypatch.setattr(np.random, "choice", rng.choice)
-    # Projection onto the plane orthogonal to (1, 1, 1).
-    kernel = np.eye(3) - np.ones((3, 3)) / 3
-    pairs = np.zeros(3)
-    trials = 3000
-    for _ in range(trials):
-        sample = sample_discrete(kernel, [0, 1, 2])
-        assert len(sample) == len(set(sample)) == 2
-        pairs[list({0, 1, 2} - set(sample))[0]] += 1
-    # Each pair's inclusion probability is its 2x2 principal minor, 1/3.
-    np.testing.assert_allclose(pairs / trials, np.full(3, 1 / 3), atol=0.03)
+    matrix = np.array([[entry]], dtype=object if representation == "object" else None)
+    kernel = DiscreteFiniteKernel(matrix) if representation == "callable" else matrix
+
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("Invalid kernel consumed randomness")
+
+    monkeypatch.setattr(np.random, "rand", unexpected)
+    with pytest.raises(ValueError, match="real symmetric"):
+        if prepared:
+            PreparedDiscreteDPP(kernel, [0])
+        else:
+            sample_discrete(kernel, [0])
 
 
-def test_nonprojection_sampling_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
-    rng = np.random.default_rng(12345)
-    monkeypatch.setattr(np.random, "rand", rng.random)
-    monkeypatch.setattr(np.random, "choice", rng.choice)
-    kernel = np.array([[0.6, 0.2], [0.2, 0.4]])
-    counts = np.zeros(4)
-    trials = 4000
-    for _ in range(trials):
-        sample = sample_discrete(kernel, [0, 1])
-        assert len(sample) == len(set(sample))
-        counts[sum(1 << state for state in sample)] += 1
-    # det(K)=.2, det(I-K)=.2, and marginals .6, .4 determine the law.
-    np.testing.assert_allclose(counts / trials, [0.2, 0.4, 0.2, 0.2], atol=0.03)
+def test_raw_and_prepared_sampling_against_exact_subset_laws(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kernels = [
+        (
+            "nonprojection",
+            sp.Matrix(
+                [
+                    [sp.Rational(3, 5), sp.Rational(1, 5)],
+                    [sp.Rational(1, 5), sp.Rational(2, 5)],
+                ]
+            ),
+        ),
+        ("projection", sp.eye(3) - sp.ones(3) / 3),
+        ("dense", sp.Matrix([[5, 2, -1], [2, 6, 1], [-1, 1, 4]]) / 10),
+    ]
+    scenarios = [(name, exact, "prepared", 8000, 20261006) for name, exact in kernels]
+    scenarios += [
+        (kernels[0][0], kernels[0][1], "legacy", 4000, 12345),
+        (kernels[1][0], kernels[1][1], "legacy", 3000, 20261002),
+    ]
+    for name, exact, mode, trials, seed in scenarios:
+        with case(kernel=name, mode=mode):
+            n = exact.rows
+            subsets = [
+                subset
+                for size in range(n + 1)
+                for subset in itertools.combinations(range(n), size)
+            ]
+            expected = np.zeros(1 << n)
+            for subset in subsets:
+                probability = sum(
+                    (-1) ** (len(superset) - len(subset))
+                    * exact.extract(superset, superset).det()
+                    for superset in subsets
+                    if set(subset) <= set(superset)
+                )
+                assert probability >= 0
+                expected[sum(1 << i for i in subset)] = float(probability)
+            np.testing.assert_allclose(expected.sum(), 1, rtol=0, atol=2e-16)
+            matrix = np.array(exact, dtype=float)
+            if mode == "legacy" and name == "projection":
+                matrix = np.eye(3) - np.ones((3, 3)) / 3
+            states = list(range(n)) if mode == "legacy" else [101, -7, 43][:n]
+            prepared = PreparedDiscreteDPP(matrix, states)
+            rng = np.random.default_rng(seed)
+            counts = np.zeros(len(expected))
+            with monkeypatch.context() as patch:
+                patch.setattr(np.random, "rand", rng.random)
+                patch.setattr(np.random, "choice", rng.choice)
+                for _ in range(trials):
+                    sample = (
+                        sample_discrete(matrix, states)
+                        if mode == "legacy"
+                        else prepared.sample(rng=rng)
+                    )
+                    assert len(sample) == len(set(sample))
+                    assert set(sample) <= set(states)
+                    if name == "projection":
+                        assert len(sample) == 2
+                    counts[sum(1 << states.index(state) for state in sample)] += 1
+            # Preserve the legacy bounds and the simultaneous Hoeffding bound.
+            tolerance = (
+                0.03
+                if mode == "legacy"
+                else math.sqrt(math.log(2 * len(expected) / 1e-5) / (2 * trials))
+            )
+            np.testing.assert_allclose(
+                counts / trials, expected, rtol=0, atol=tolerance
+            )

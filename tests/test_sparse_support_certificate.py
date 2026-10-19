@@ -9,6 +9,7 @@ import finitefree.multivariate as multivariate
 from finitefree.hyperbolic import SymmetricMatrixPencil
 from finitefree.multivariate import MultivariatePolynomial
 from finitefree.utils.modular import prime_generator
+from tests._cases import case
 
 
 def test_specialization_cancellation_cannot_hide_support(
@@ -61,46 +62,48 @@ def test_failed_discovery_has_bounded_deterministic_fallback(
     assert result.expr == sp.expand((x + 3 * y) * (2 * x + 4 * y))
 
 
-@pytest.mark.parametrize("mutation", ["missing", "wrong", "empty", "collision"])
-def test_certificate_repairs_incomplete_or_incorrect_candidates(
-    mutation: str,
-) -> None:
-    matrices = [
-        [[2, 1, 0], [1, -3, 2], [0, 2, 1]],
-        [[-1, 0, 3], [0, 2, 0], [3, 0, 4]],
-        [[3, -2, 1], [-2, 1, 0], [1, 0, -1]],
-    ]
-    x, y, z = sp.symbols("x y z")
-    expected = sp.Poly(
-        (
-            x * sp.Matrix(matrices[0])
-            + y * sp.Matrix(matrices[1])
-            + z * sp.Matrix(matrices[2])
-        ).det(),
-        x,
-        y,
-        z,
-    )
-    candidate = {exps[:-1]: int(c) for exps, c in expected.terms()}
-    first = next(iter(candidate))
-    if mutation == "missing":
-        del candidate[first]
-    elif mutation == "wrong":
-        candidate[first] += 1
-    elif mutation == "empty":
-        candidate.clear()
-    bound = multivariate._determinant_coefficient_bound(matrices)
-    base, weights = multivariate._determinant_encoding_parameters(3, 3, bound, 1000000)
-    if mutation == "collision":
-        # Equal encoded values alone are insufficient without coefficient bounds:
-        # shifting b units from the constant digit to the next digit preserves it.
-        candidate[(0, 0)] = candidate.get((0, 0), 0) - base
-        candidate[(1, 0)] = candidate.get((1, 0), 0) + 1
-    repaired = multivariate._certify_sparse_determinant_coefficients(
-        matrices, candidate, bound, base, weights
-    )
-    actual = {exps + (3 - sum(exps),): c for exps, c in repaired.items()}
-    assert actual == {exps: int(c) for exps, c in expected.terms()}
+def test_certificate_repairs_incomplete_or_incorrect_candidates() -> None:
+    mutation: str
+    for mutation in ["missing", "wrong", "empty", "collision"]:
+        with case(mutation=mutation):
+            matrices = [
+                [[2, 1, 0], [1, -3, 2], [0, 2, 1]],
+                [[-1, 0, 3], [0, 2, 0], [3, 0, 4]],
+                [[3, -2, 1], [-2, 1, 0], [1, 0, -1]],
+            ]
+            x, y, z = sp.symbols("x y z")
+            expected = sp.Poly(
+                (
+                    x * sp.Matrix(matrices[0])
+                    + y * sp.Matrix(matrices[1])
+                    + z * sp.Matrix(matrices[2])
+                ).det(),
+                x,
+                y,
+                z,
+            )
+            candidate = {exps[:-1]: int(c) for exps, c in expected.terms()}
+            first = next(iter(candidate))
+            if mutation == "missing":
+                del candidate[first]
+            elif mutation == "wrong":
+                candidate[first] += 1
+            elif mutation == "empty":
+                candidate.clear()
+            bound = multivariate._determinant_coefficient_bound(matrices)
+            base, weights = multivariate._determinant_encoding_parameters(
+                3, 3, bound, 1000000
+            )
+            if mutation == "collision":
+                # Equal encoded values alone are insufficient without coefficient bounds:
+                # shifting b units from the constant digit to the next digit preserves it.
+                candidate[(0, 0)] = candidate.get((0, 0), 0) - base
+                candidate[(1, 0)] = candidate.get((1, 0), 0) + 1
+            repaired = multivariate._certify_sparse_determinant_coefficients(
+                matrices, candidate, bound, base, weights
+            )
+            actual = {exps + (3 - sum(exps),): c for exps, c in repaired.items()}
+            assert actual == {exps: int(c) for exps, c in expected.terms()}
 
 
 def test_complete_sparse_candidate_avoids_decoding(
@@ -137,13 +140,15 @@ def test_verification_limit_is_checked_before_discovery(
         )
 
 
-@pytest.mark.parametrize("bad", [0, -1, True, np.bool_(True), 1.5, "1000"])
-def test_invalid_verification_limit(bad: Any) -> None:
-    pencil = SymmetricMatrixPencil([[[1]], [[2]]])
-    with pytest.raises((TypeError, ValueError)):
-        MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(
-            pencil, max_verification_bits=bad
-        )
+def test_invalid_verification_limit() -> None:
+    bad: Any
+    for bad in [0, -1, True, np.bool_(True), 1.5, "1000"]:
+        with case(bad=bad):
+            pencil = SymmetricMatrixPencil([[[1]], [[2]]])
+            with pytest.raises((TypeError, ValueError)):
+                MultivariatePolynomial.from_symmetric_matrix_pencil_sparse(
+                    pencil, max_verification_bits=bad
+                )
 
 
 def test_explicit_larger_limit_preserves_rational_coefficients() -> None:
