@@ -1,5 +1,5 @@
 site_name: FiniteFree
-site_description: Finite Free Probability Library
+site_description: Finite free probability with reusable numerical workflows, controlled precision and reproducible sampling
 theme:
   name: material
   features:
@@ -44,7 +44,7 @@ nav:
   - GUE Spectral Workflow: gue-workflow.md
   - Development: development.md
   - Code Map: code-map.md
-  - Release Review: release.md
+  - Release Process: release.md
 validation:
   links:
     not_found: warn

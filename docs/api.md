@@ -1,6 +1,8 @@
 # API Reference
 
-This page describes **FiniteFree 0.4.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
+This page describes the published **FiniteFree 0.4.0** release, with executable examples and reference sections generated from its docstrings. Install with `python -m pip install finitefree==0.4.0` from [PyPI](https://pypi.org/project/finitefree/0.4.0/). See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md), and [release process](release.md).
+
+For repeated numerical work, use prepared kernels or pencils, batch evaluation and streaming summaries where appropriate. These APIs expose reuse and storage choices while preserving existing defaults. Integer/rational algebra and floating-point evaluation have different precision contracts: an exact coefficient representation or an `exact=True` option does not make numerical outputs exact or certify their error. Performance measurements apply to the recorded inputs and environments; see the [benchmark commands](development.md#benchmarks).
 
 ## Optional numerical workflows
 
@@ -13,6 +15,14 @@ representation. Exact scalar calls and `BaseKernel.matrix` keep their existing
 behavior. These explicit float64 APIs reject complex/nonfinite coordinates and
 raise for nonfinite results. Finite results can still lose information through
 underflow or ill-conditioning.
+
+| Prepared call | Input | Output |
+| :--- | :--- | :--- |
+| `basis(points)` | One-dimensional coordinates of length `m` | float64 array `(m, rank)` |
+| `matrix(xs)` | One-dimensional coordinates of length `m` | float64 array `(m, m)` |
+| `matrix(xs, ys)` | One-dimensional coordinates of lengths `m`, `k` | float64 array `(m, k)` |
+
+These methods accept real array-like coordinates, including empty arrays. They differ from the existing single-argument `BaseKernel.matrix(xs)`, which returns nested scalar evaluations.
 
 `prepared.quadrature(a, b, n_points=50, weight_func=None)` retains nodes,
 measure weights and a rank-by-rank restricted Gram matrix for repeated gap/count
@@ -28,7 +38,9 @@ P(N>k). Thresholds are integers. Upper tails are summed directly. `mean` and
 `count_distribution_continuous(kernel, a, b, n_points=50, weight_func=None)`
 construct the corresponding laws.
 
-Continuous results have `estimated=True`. Eigenvalues outside [0,1] by more
+`pmf()` has one more entry than the restriction matrix dimension, including any zero-mass entries. Outside that support, `pmf(k)` is zero; `cdf(k)` is zero below zero and one at or above the upper endpoint, and `sf(k)` has the complementary endpoint values. The discrete convenience helper expects a `BaseKernel` and distinct states; wrap an array in `DiscreteFiniteKernel` first.
+
+Continuous results have `estimated=True`; `estimated=False` does not certify a float64 count law. Restriction symmetry is checked with absolute tolerance 1e-12. Eigenvalues outside [0,1] by more
 than 1e-12 are rejected; smaller roundoff excursions are clipped and reported
 as `spectral_correction`. `probability_mass_error` records the PMF mass error
 before normalization. These diagnostics and quadrature refinements are not
@@ -39,13 +51,14 @@ the distinction between expected characteristic roots and mean spectra.
 
 ```python
 import numpy as np
+import sympy as sp
 from finitefree import OrthogonalPolynomialKernel, RealRootedPolynomial
 
 # Rank-two Legendre kernel for Lebesgue measure on [-1,1].
 kernel = OrthogonalPolynomialKernel(
     [RealRootedPolynomial([1]), RealRootedPolynomial([1, 0]),
-     RealRootedPolynomial([1, 0, -1/3])],
-    [2, 2/3],
+     RealRootedPolynomial([1, 0, -sp.Rational(1, 3)])],
+    [2, sp.Rational(2, 3)],
 )
 prepared = kernel.prepare_numeric()
 assert prepared.matrix([0, 0.5], [0.25]).shape == (2, 1)
