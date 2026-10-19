@@ -1,6 +1,8 @@
 # Release process
 
-This checklist prepares **FiniteFree 0.4.0**. Production versions and files are listed on [PyPI](https://pypi.org/project/finitefree/). A candidate build and a static version entry do not establish production publication: verify the approved tag, publishing workflow and PyPI files using this checklist.
+**FiniteFree 0.4.0 is published** on [PyPI](https://pypi.org/project/finitefree/0.4.0/) and [GitHub Releases](https://github.com/jontb/FiniteFree/releases/tag/v0.4.0). The [successful production workflow](https://github.com/jontb/FiniteFree/actions/runs/39194310960) built and tested 16 wheels and one source archive; their published hashes and fresh installations were verified. Install with `python -m pip install finitefree==0.4.0`.
+
+The checklist below also governs future releases. A candidate build and a static version entry do not establish production publication: verify the approved tag, publishing workflow and PyPI files before promotion.
 
 The 0.4.0 scope is optional ensemble RNG streams, prepared/batched orthogonal
 kernels and reusable quadrature, finite-rank DPP count statistics, streaming

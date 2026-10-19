@@ -1,7 +1,9 @@
 # Composing the GUE spectral workflow
 
-The development example composes existing functionality on the sampler's common
+The source-checkout example composes the released APIs on the sampler's common
 variance scale `1/d`:
+
+Run it from a checkout after following the [development setup](development.md#installation). Plot output additionally requires Matplotlib (`python -m pip install matplotlib`); neither example script is installed by the library wheel.
 
 ```bash
 OPENBLAS_NUM_THREADS=1 PYTHONPATH=. python examples/gue_spectral_workflow.py --dimension 8 --samples 256 --output /tmp/gue-workflow.json
