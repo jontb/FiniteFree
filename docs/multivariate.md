@@ -1,6 +1,6 @@
 # Rational multivariate workflows
 
-This guide describes the FiniteFree 0.3.0 source and candidate package. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and the [release process](release.md) for validation. A `MultivariatePolynomial` represents a sparse polynomial over the rationals in an explicit ordered sequence of SymPy symbols. Construction and algebra do not certify stability, hyperbolicity or real-rootedness.
+This guide describes the FiniteFree 0.4.0 source and candidate package. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and the [release process](release.md) for validation. A `MultivariatePolynomial` represents a sparse polynomial over the rationals in an explicit ordered sequence of SymPy symbols. Construction and algebra do not certify stability, hyperbolicity or real-rootedness.
 
 ## Construction and exact evaluation
 

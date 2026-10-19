@@ -1,13 +1,17 @@
 # Release process
 
-The latest production release is [FiniteFree 0.3.0](https://pypi.org/project/finitefree/0.3.0/), from [tag v0.3.0](https://github.com/jontb/FiniteFree/tree/v0.3.0). The development branch contains unreleased 0.4 maintenance; its static package version is changed only when the complete next candidate is prepared. A candidate build and a version entry do not establish production publication: verify the approved tag, workflow and [PyPI files](https://pypi.org/project/finitefree/) using this checklist.
+This checklist prepares **FiniteFree 0.4.0**. Production versions and files are listed on [PyPI](https://pypi.org/project/finitefree/). A candidate build and a static version entry do not establish production publication: verify the approved tag, publishing workflow and PyPI files using this checklist.
 
-The 0.3.0 feature scope is prepared NumPy/optional-CuPy pencils, verified
-scaled Hermite workflows, bounded interactive examples and exact-input
-corrections. Test consolidation must include the integrated GUE regressions.
+The 0.4.0 scope is optional ensemble RNG streams, prepared/batched orthogonal
+kernels and reusable quadrature, finite-rank DPP count statistics, streaming
+empirical summaries, and contributor/release validation improvements. Existing
+exact/scalar paths, retained comparisons, legacy RNG defaults, mathematical
+normalizations and runtime dependency floors remain unchanged. The 0.3.0
+prepared-pencil and integrated GUE regressions remain part of validation.
 GPU performance studies, rigorous rare-tail enclosures and new GPU algorithms
-are deferred research, not claims of this release. Preserve their documented
-limits when preparing release notes.
+remain deferred research. Continuous count laws are quadrature estimates and
+float64 tails have finite-resolution limits; the diagnostics do not certify
+probability error bounds.
 
 ## Release promotion
 
@@ -23,7 +27,7 @@ Publication precedes promotion to `main`. If publication or verification fails, 
 
 ## Compatibility
 
-0.3.0 retains Python 3.10 or later and `python-flint>=0.9.0` from 0.2.0. Testing the former Python 3.9 / FLINT 0.6 floor reproduced `AttributeError`: that backend does not expose `fmpq_mpoly_ctx`, needed for rational multivariate polynomials. Stable FLINT 0.7 and 0.8 require Python 3.11; FLINT 0.9 supports Python 3.10 and supplies this API. The exact supported runtime floors are recorded in `requirements/minimum-runtime.txt` and exercised separately in CI.
+0.4.0 retains Python 3.10 or later and `python-flint>=0.9.0` from 0.3.0. Testing the former Python 3.9 / FLINT 0.6 floor reproduced `AttributeError`: that backend does not expose `fmpq_mpoly_ctx`, needed for rational multivariate polynomials. Stable FLINT 0.7 and 0.8 require Python 3.11; FLINT 0.9 supports Python 3.10 and supplies this API. The exact supported runtime floors are recorded in `requirements/minimum-runtime.txt` and exercised separately in CI.
 
 The symmetric S default remains the legacy even-coefficient ratio. Use `convention="standard"` for the positive-imaginary square root in Definition 8.1. See [the API contract](api.md#symmetric-finite-s-output-convention) and [all migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), including cumulant normalization and snapshot ownership.
 

@@ -5,7 +5,7 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe **FiniteFree 0.3.0**. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md) for compatibility changes, and the [release process](release.md) for candidate validation and publication.
+This README and the API reference describe **FiniteFree 0.4.0**. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md) for compatibility changes, and the [release process](release.md) for candidate validation and publication.
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](development.md#branch-workflow) for development and release promotion.
 
@@ -15,11 +15,33 @@ FiniteFree represents finite free probability operations through polynomial coef
 
 To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.
 
+## New in 0.4
+
+- Optional keyword-only `rng=` accepts a NumPy `Generator` in Gaussian, Wishart
+  and Haar samplers. Existing calls preserve the global RNG and draw order.
+
+- `OrthogonalPolynomialKernel.prepare_numeric()` reuses normalized basis data
+  for batch matrices and finite-interval quadrature.
+
+- `DPPCountDistribution` and the discrete/continuous helpers provide count
+  PMFs, CDFs, directly summed upper tails, means and variances.
+
+- `StreamingEmpiricalComparison` accumulates coefficient moments and interval
+  count histograms with storage independent of the number of samples. The
+  original `EmpiricalComparison` continues to retain samples for analysis.
+
+These APIs are optional. Exact scalar operations, ensemble normalizations and
+runtime dependency floors are unchanged. Continuous count probabilities are
+quadrature estimates, with explicit reference densities and numerical diagnostics;
+no certified probability bounds are implied. See the [numerical workflow
+contracts](api.md#optional-numerical-workflows) and [migration
+notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md#migration-from-030).
+
 ## Visual Showcase
 
 The following pre-rendered figures illustrate selected finite-degree examples and asymptotic comparisons. They are not certificates of convergence, interlacing, numerical accuracy or sampler distributions. Regeneration scripts live in `visuals/` and need Matplotlib and Pillow; some use expensive high-degree calculations and approximate discretizations.
 
-Interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](development.md#documentation). These bounded examples are included in the 0.3.0 source.
+Interactive companions are linked beside their related figures. In a built documentation site these links open standalone dashboards; on GitHub they lead to the [generation instructions](development.md#documentation). These bounded examples are included in the 0.4.0 source.
 
 ??? "1. Limiting Distributions of Free Convolutions"
 
@@ -181,7 +203,7 @@ Interactive companions are linked beside their related figures. In a built docum
 
 ## Installation
 
-For a published 0.3.0 release, install with `python -m pip install finitefree==0.3.0`. Before publication, use the source or built candidate wheel as described below. The package and API contracts require Python 3.10 or later.
+For a published 0.4.0 release, install with `python -m pip install finitefree==0.4.0`. Before publication, use the source or built candidate wheel as described below. The package and API contracts require Python 3.10 or later.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 
