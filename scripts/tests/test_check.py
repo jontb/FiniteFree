@@ -5,7 +5,23 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check import Check, run_checks
+from scripts.check import Check, build_checks, run_checks
+
+
+def test_full_check_generates_docs_assets_before_strict_build() -> None:
+    checks = build_checks(full=True, installed_wheel=False)
+    commands = [list(check.command) for check in checks]
+    strict = commands.index([sys.executable, "-m", "mkdocs", "build", "--strict"])
+    for generator in ("interactive_geometry.py", "spectral_dashboards.py"):
+        command = [
+            sys.executable,
+            f"examples/{generator}",
+            "--output",
+            "docs/visuals/interactive",
+        ]
+        assert commands.index(command) < strict
+    ordinary = build_checks(full=False, installed_wheel=False)
+    assert not any("Generate" in check.label for check in ordinary)
 
 
 def test_checks_use_checkout_and_isolate_fallback_environment(
