@@ -1,8 +1,8 @@
 # API Reference
 
-This page describes **FiniteFree 0.3.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
+This page describes **FiniteFree 0.4.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
 
-## Optional numerical workflows (unreleased 0.4)
+## Optional numerical workflows
 
 `OrthogonalPolynomialKernel.prepare_numeric()` returns an owned
 `PreparedOrthogonalKernel`. `basis(points)` evaluates normalized basis rows;
@@ -352,7 +352,7 @@ assert SymmetricFiniteSTransform(p, exact=False, convention="standard")[0] == 1j
 
 `to_scipy_dist()` constructs a continuous piecewise-linear CDF through numerical roots and requires at least two root entries. It is an interpolation, not the atomic empirical root measure; repeated roots remain present.
 
-### Ensemble random streams (unreleased 0.4 addition)
+### Ensemble random streams
 
 `sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart` and all three
 `sample_haar_*` functions accept keyword-only `rng=None` or a

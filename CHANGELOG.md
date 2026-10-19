@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — 0.4
+## 0.4.0
+
+### Optional numerical workflows and maintenance
 
 - Add opt-in prepared orthogonal kernels with batched normalized-basis evaluation
   and reusable finite-interval quadrature. Exact scalar evaluation and existing
@@ -27,6 +29,25 @@
   existing required CI check names are unchanged.
 - Regenerate Cython C for each build target, preventing C generated against newer
   NumPy declarations from breaking a later build against the minimum headers.
+
+### Migration from 0.3.0
+
+- Existing calls need no migration. Ensemble samplers still use the global NumPy
+  RNG when `rng` is omitted or `None`; pass a `numpy.random.Generator` explicitly
+  to use an independent stream. Matrix formulas and normalizations are unchanged.
+- Prepared/batched orthogonal kernels and DPP count laws are optional float64
+  APIs. Exact scalar kernels and existing gap-probability APIs retain their
+  behavior. Supply the kernel's reference density for continuous restrictions;
+  the default density is 1. Quadrature results and float64 tail probabilities
+  are numerical estimates, not certified bounds.
+- `EmpiricalComparison` continues to retain samples. Choose
+  `StreamingEmpiricalComparison` for bounded-storage coefficient/count summaries;
+  it retains no matrices or eigenvalues for later plots. Interval counts use
+  closed intervals and sample variances use `ddof=1`. Both comparison classes
+  retain the documented independence and t-band assumptions; online roundoff
+  can differ from retained two-pass statistics near a decision threshold.
+- Python 3.10 and all runtime dependency floors are unchanged from 0.3.0.
+  No GPU performance or certified rare-tail guarantees are added.
 
 ## 0.3.0
 
