@@ -215,7 +215,7 @@ class DPPCountDistribution:
         eigenvalues = np.linalg.eigvalsh(matrix / 2 + matrix.T / 2)
         if np.any(eigenvalues < -1e-12) or np.any(eigenvalues > 1 + 1e-12):
             raise ValueError("Restricted kernel eigenvalues must lie in [0, 1]")
-        self._eigenvalues = np.clip(eigenvalues, 0, 1)
+        self._eigenvalues: NDArray[np.float64] = np.clip(eigenvalues, 0, 1)
         self.spectral_correction = float(
             np.max(np.abs(self._eigenvalues - eigenvalues), initial=0)
         )

@@ -120,7 +120,10 @@ class StreamingEmpiricalComparison:
     def count_mean(self) -> NDArray[np.float64]:
         if not self.samples:
             raise ValueError("At least one sample is required")
-        return (self._counts / self.samples) @ np.arange(self.d + 1, dtype=float)
+        mean: NDArray[np.float64] = (self._counts / self.samples) @ np.arange(
+            self.d + 1, dtype=float
+        )
+        return mean
 
     @property
     def count_variance(self) -> NDArray[np.float64]:
@@ -128,7 +131,10 @@ class StreamingEmpiricalComparison:
         if self.samples < 2:
             raise ValueError("At least two samples are required")
         offsets = np.arange(self.d + 1) - self.count_mean[:, None]
-        return np.sum(self._counts * offsets**2, axis=1) / (self.samples - 1)
+        variance: NDArray[np.float64] = np.sum(self._counts * offsets**2, axis=1) / (
+            self.samples - 1
+        )
+        return variance
 
     def update(self, matrix: Any) -> None:
         """Add one sample atomically; invalid samples leave all statistics intact."""
