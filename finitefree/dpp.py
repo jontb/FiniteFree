@@ -2,7 +2,7 @@ import abc
 import math
 import operator
 from decimal import Decimal, localcontext
-from typing import Any, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 
 import flint
 import numpy as np
@@ -10,6 +10,9 @@ import sympy as sp
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial
+
+if TYPE_CHECKING:
+    from .numerical import PreparedOrthogonalKernel
 
 
 def _exact_det(A: List[List[Any]]) -> Any:
@@ -160,6 +163,12 @@ class OrthogonalPolynomialKernel(BaseKernel):
     def leading_coeffs(self) -> List[Any]:
         """Return a caller-owned list of the leading coefficients."""
         return list(self._leading_coeffs)
+
+    def prepare_numeric(self) -> "PreparedOrthogonalKernel":
+        """Prepare an owned float64 basis for repeated batch/quadrature work."""
+        from .numerical import PreparedOrthogonalKernel
+
+        return PreparedOrthogonalKernel(self)
 
     @staticmethod
     def _positive_sqrt_float64(value: Any) -> float:

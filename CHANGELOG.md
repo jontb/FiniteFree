@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased — 0.4
+
+- Add opt-in prepared orthogonal kernels with batched normalized-basis evaluation
+  and reusable finite-interval quadrature. Exact scalar evaluation and existing
+  gap-probability defaults remain unchanged.
+- Expose finite-rank DPP count PMFs, CDFs, directly summed upper tails, mean and
+  variance. Continuous laws are quadrature estimates with visible spectrum/mass
+  diagnostics, not certified probability bounds.
+- Add incremental empirical coefficient moments and interval-count histograms
+  with storage independent of the number of samples. The existing empirical
+  comparison continues to retain samples by default.
+
+- Add optional keyword-only NumPy `Generator` arguments to the Gaussian,
+  Wishart and Haar samplers. Omitting `rng` or passing `None` preserves the
+  legacy global RNG, draw order, matrix formulas and normalization.
+- Generate both interactive asset families in the full contributor check before
+  strict MkDocs. Run representative adversarial fault audits with clean controls.
+- Replace recursive full-suite fallback tests with focused compiled, flag-fallback
+  and missing-extension subprocess probes. Installed-wheel checks explicitly run
+  both compiled and flag-fallback suites, without a whole-suite 30-second limit.
+- Validate release tag/version agreement and prerelease routing before builds;
+  inspect archive metadata, runtime source and native inventories and preserve
+  SHA-256 manifests. Verify downloaded upload bytes against the reviewed manifest.
+  Manual dispatch still defaults to TestPyPI. Runtime dependency floors and
+  existing required CI check names are unchanged.
+- Regenerate Cython C for each build target, preventing C generated against newer
+  NumPy declarations from breaking a later build against the minimum headers.
+
 ## 0.3.0
 
 ### Prepared numerical pencils and spectral workflows
