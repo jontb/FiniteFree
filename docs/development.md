@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions describe FiniteFree 0.4.0 on `develop`. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and follow the [release process](release.md) to distinguish a validated candidate from a production upload. Record the Git commit when reproducing results.
+These instructions support development of FiniteFree. The current production release is [0.4.0 on PyPI](https://pypi.org/project/finitefree/0.4.0/); `main` and the public docs track that release, while `develop` accepts ongoing work. Follow the [release process](release.md) for candidate validation and publication, and record the Git commit when reproducing results.
 
 ## Branch workflow
 
@@ -228,7 +228,7 @@ The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison
 
 ## Release validation
 
-The 0.4.0 candidate retains the 0.3.0 compatibility floors and symmetric S conventions; see the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md). Follow the [release review checklist](release.md) to inspect artifacts and checks on the final versioned commit, including consolidated tests. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+The published 0.4.0 release retains the 0.3.0 compatibility floors and symmetric S conventions; see the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md). For future releases, follow the [release review checklist](release.md) to inspect artifacts and checks on the final versioned commit, including consolidated tests. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
 
 ## Prepared pencil validation checklist
 

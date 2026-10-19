@@ -1,6 +1,15 @@
-# Exact coefficients and numerical outputs
+# Numerical workflows and precision
 
-This tutorial uses the unreleased source described in the [API reference](api.md). Install that checkout using the [development guide](development.md).
+This tutorial uses the published **FiniteFree 0.4.0** APIs. Install with `python -m pip install finitefree==0.4.0`, or follow the [development guide](development.md) for a source checkout. The [API reference](api.md) records numerical precision, ownership and conditioning limits.
+
+## Repeated numerical work
+
+- Pass an explicit NumPy `Generator` with `rng=` for a sampling stream owned by your experiment. Omitting it preserves the global RNG and existing draw order; reproducibility assumes a fixed NumPy/build environment.
+- Use `OrthogonalPolynomialKernel.prepare_numeric()` for repeated basis/kernel batches and reusable finite-interval quadrature. Supply the reference measure density explicitly for weighted measures, including Hermite kernels.
+- Use `DPPCountDistribution` for finite-rank count PMFs, CDFs, upper tails and moments. Continuous count laws are quadrature estimates with diagnostics, not certified error bounds.
+- Use `StreamingEmpiricalComparison` when coefficient moments and configured interval histograms suffice. Keep `EmpiricalComparison` when you need retained samples or plots.
+
+See the executable [kernel, count and streaming examples](api.md#optional-numerical-workflows) and [sampling-stream example](api.md#ensemble-random-streams). These are opt-in workflows; existing numerical and algebraic defaults remain available.
 
 ## Polynomial inputs and finite cumulants
 

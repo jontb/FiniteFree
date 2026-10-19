@@ -5,15 +5,15 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe **FiniteFree 0.4.0**. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md) for compatibility changes, and the [release process](docs/release.md) for candidate validation and publication.
+This README and the API reference describe the published **FiniteFree 0.4.0** release. Install it from [PyPI](https://pypi.org/project/finitefree/0.4.0/); see the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md) for compatibility changes and the [release process](docs/release.md) for validation and publication.
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](docs/development.md#branch-workflow) for development and release promotion.
 
 Contributing? Start with the [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md), the [code map](docs/code-map.md) and `python scripts/check.py` for routine checks. New contributors and reproducible bug reports are welcome.
 
-FiniteFree represents finite free probability operations through polynomial coefficients. Rational polynomial construction, coefficient convolutions and finite cumulants use exact FLINT arithmetic. Root extraction, matrix sampling and continuous gap probabilities have separate numerical paths.
+FiniteFree is a Python library for finite free probability, random matrix sampling and spectral computation. Its focus is efficient repeated calculations, numerical stability and reproducible workflows, with reusable kernels, prepared matrix pencils and bounded-storage empirical summaries.
 
-To prevent numerical floating-point drift and avoid the computational complexity of high-order runtime differential operators, FiniteFree implements exact finite free convolutions using discrete algebraic representations, exact generating function recurrences, and arbitrary-precision integer and rational scaling.
+Rational polynomial construction, coefficient convolutions and rational finite cumulants use FLINT integer and rational arithmetic. Exactness applies to those algebraic operations; roots, sampled matrices and continuous gap/count probabilities use numerical methods with documented precision and conditioning limits. Performance depends on the input and selected path; see the [API contracts](docs/api.md) and [reproducible benchmarks](docs/development.md#benchmarks).
 
 ## New in 0.4
 
@@ -27,12 +27,12 @@ To prevent numerical floating-point drift and avoid the computational complexity
   count histograms with storage independent of the number of samples. The
   original `EmpiricalComparison` continues to retain samples for analysis.
 
-These APIs are optional. Exact scalar operations, ensemble normalizations and
+These APIs are optional. Existing scalar operations, ensemble normalizations and
 runtime dependency floors are unchanged. Continuous count probabilities are
 quadrature estimates, with explicit reference densities and numerical diagnostics;
 no certified probability bounds are implied. See the [numerical workflow
 contracts](docs/api.md#optional-numerical-workflows) and [migration
-notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md#migration-from-030).
+notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md#migration-from-030).
 
 ## Visual Showcase
 
@@ -94,7 +94,7 @@ Interactive companion: [Open Hermite kernels](docs/development.md#hermite-kernel
 
 Illustrates exact algebraic properties, root interlacing constraints, and geometric distributions of FiniteFree polynomials:
 - **Root Interlacing Examples**: Illustrates interlacing under additive and multiplicative convolution in the displayed examples. Preservation theorems require the corresponding real-rooted and non-negative-root domains; strict interlacing is not an unconditional API guarantee.
-- **Multivariate Pencil Topography**: Visualizes the log-determinant topography and exact eigenvalue boundaries of random symmetric matrix pencils.
+- **Multivariate Pencil Topography**: Visualizes the log-determinant topography and numerically evaluated eigenvalue boundaries of random symmetric matrix pencils.
 - **Unitary Eigenvalue Repulsion**: Visualizes roots evolving on the complex unit circle $\mathbb{T}$ under unitary Hermite polynomial flows.
 
 | Original Roots ($p \prec q$) | Additive Convolution ($p \boxplus_6 r \prec q \boxplus_6 r$) | Multiplicative Convolution ($p \boxtimes_6 r \prec q \boxtimes_6 r$) |
@@ -157,7 +157,7 @@ Interactive companion: [Open finite transforms](docs/development.md#finite-trans
 
 - **Jacobi Polynomials** (`jacobi_polynomial`): Exact $O(n^2)$ recurrence construction of $P_n^{(\alpha, \beta)}(x)$ using `flint.fmpq_poly` in exact rational arithmetic.
 - **Hahn Polynomials** (`hahn_polynomial`): Exact $O(n)$ recurrence construction of $Q_n(x; \alpha, \beta, N)$ using sequential running products to prevent redundant Pochhammer factorial operations.
-- **Jack Polynomials** (`jack_polynomial`): High-performance variables recursion computing symmetric Jack polynomials $J_\lambda^{(\alpha)}(x_1, \dots, x_m)$ strictly over sparse monomial exponent dictionaries, completely bypassing SymPy's slow symbolic expansion engine.
+- **Jack Polynomials** (`jack_polynomial`): Sparse variable recursion computes symmetric Jack polynomials $J_\lambda^{(\alpha)}(x_1, \dots, x_m)$ using monomial exponent dictionaries without general symbolic expansion.
 - **Chebyshev & Legendre Polynomials** (`chebyshev_t_polynomial`, `chebyshev_u_polynomial`, `legendre_polynomial`): Exact recurrence constructions of $T_n(x)$, $U_n(x)$, and $P_n(x)$ over $\mathbb{Q}$ via `flint.fmpq_poly`.
 
 </details>
@@ -232,7 +232,7 @@ Interactive companion: [Open finite transforms](docs/development.md#finite-trans
 
 ## Installation
 
-For a published 0.4.0 release, install with `python -m pip install finitefree==0.4.0`. Before publication, use the source or built candidate wheel as described below. The package and API contracts require Python 3.10 or later.
+Install the published release with `python -m pip install finitefree==0.4.0`. The package requires Python 3.10 or later. Use the source installation below for development.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 

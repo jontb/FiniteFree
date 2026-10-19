@@ -1,5 +1,5 @@
 site_name: FiniteFree
-site_description: Finite Free Probability Library
+site_description: Finite free probability with reusable numerical workflows, controlled precision and reproducible sampling
 theme:
   name: material
   features:

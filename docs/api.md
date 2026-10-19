@@ -1,6 +1,8 @@
 # API Reference
 
-This page describes **FiniteFree 0.4.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
+This page describes the published **FiniteFree 0.4.0** release, with executable examples and reference sections generated from its docstrings. Install with `python -m pip install finitefree==0.4.0` from [PyPI](https://pypi.org/project/finitefree/0.4.0/). See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md), and [release process](release.md).
+
+For repeated numerical work, use prepared kernels or pencils, batch evaluation and streaming summaries where appropriate. These APIs expose reuse and storage choices while preserving existing defaults. Integer/rational algebra and floating-point evaluation have different precision contracts: an exact coefficient representation or an `exact=True` option does not make numerical outputs exact or certify their error. Performance measurements apply to the recorded inputs and environments; see the [benchmark commands](development.md#benchmarks).
 
 ## Optional numerical workflows
 
