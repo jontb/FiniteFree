@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions describe the 0.3.0 source and release candidate on `develop`. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and follow the [release process](release.md) to distinguish a validated candidate from a production upload. Record the Git commit when reproducing results.
+These instructions describe unreleased 0.4 maintenance on `develop`; the latest published release is 0.3.0. Consult [PyPI](https://pypi.org/project/finitefree/) for published versions and follow the [release process](release.md) to distinguish a validated candidate from a production upload. Record the Git commit when reproducing results.
 
 ## Branch workflow
 
@@ -30,7 +30,7 @@ python -m pip install Cython build mkdocs-material "mkdocstrings[python]"
 The Hatch backend builds the Cython extension in the wheel. To make it available when tests explicitly import this source checkout, build it in place as CI does:
 
 ```bash
-python -c "from setuptools import setup, Extension; from Cython.Build import cythonize; import numpy as np; setup(ext_modules=cythonize(Extension('finitefree.utils.modular_fast', ['finitefree/utils/modular_fast.pyx'], include_dirs=[np.get_include()])), script_args=['build_ext', '--inplace'])"
+python -c "from setuptools import setup, Extension; from Cython.Build import cythonize; import numpy as np; setup(ext_modules=cythonize(Extension('finitefree.utils.modular_fast', ['finitefree/utils/modular_fast.pyx'], include_dirs=[np.get_include()]), force=True), script_args=['build_ext', '--inplace'])"
 ```
 
 Source builds require a C compiler. Building python-flint itself additionally requires FLINT/GMP/MPFR headers and libraries; compatible python-flint wheels avoid that build. Editable installation is useful during development, but installed-wheel verification below requires a **standard** installation without the checkout on the import path.
@@ -40,7 +40,9 @@ Source builds require a C compiler. Building python-flint itself additionally re
 After installing the development dependencies, Cython and `setuptools<77`, run
 `python scripts/check.py` for lint, formatting, typing, an in-place extension
 build and source/tooling tests. Add `--full` for the fallback suite, examples,
-README/index consistency and strict MkDocs build (install its dependencies below).
+README/index consistency, adversarial fault audit and strict MkDocs build (install
+its dependencies below). The full runner generates both required interactive
+asset families before building documentation.
 Add `--installed-wheel` after a standard installation of the current candidate
 to validate it away from the source tree. The runner uses the active interpreter
 and stops at the first failure; the individual commands remain available below.
@@ -70,7 +72,16 @@ python -m pip check
 
 Then build the source extension and run both source suites, examples and the installed-wheel helper above. Building with isolation would select newer build dependencies and would not check the minimum NumPy headers.
 
-The installed-wheel helper runs library tests in a temporary directory and confirms that the compiled extension is present. Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects Python grid evaluation and CRT reconstruction; it does not remove the built extension, and `modular_det` can still use it. This checks those fallback paths rather than an extension-free installation. In PowerShell, set the corresponding variables with `$env:PYTHONPATH="."` and `$env:PYFFP_DISABLE_CYTHON="1"`, then clear them before installed-wheel checks.
+The installed-wheel helper runs compiled and flag-fallback library suites explicitly
+in a temporary directory and confirms that the compiled extension is present.
+Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects
+Python grid evaluation and CRT reconstruction; it does not remove the built
+extension, and `modular_det` can still use it. A focused fresh-process test blocks
+the extension import separately and checks determinant, CRT and specialization
+results against independent values. It does not recursively launch pytest or
+claim an extension-free distribution. In PowerShell, set the corresponding
+variables with `$env:PYTHONPATH="."` and `$env:PYFFP_DISABLE_CYTHON="1"`, then clear
+them before installed-wheel checks.
 
 ## Documentation
 

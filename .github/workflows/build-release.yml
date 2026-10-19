@@ -13,6 +13,8 @@ on:
       - "scripts/build_flint_musllinux.sh"
       - "scripts/clean_wheel_extensions.py"
       - "scripts/check_wheel_contents.py"
+      - "scripts/check_release_artifacts.py"
+      - "scripts/release_preflight.py"
   push:
     # A branch pointing to reviewed main runs the matrix on that exact commit.
     # Branch pushes never match publish.yml's release-tag trigger.
@@ -67,4 +69,29 @@ jobs:
         with:
           name: release-review-sdist
           path: dist/*.tar.gz
+          if-no-files-found: error
+
+  validate_artifacts:
+    name: Verify release archive contents and manifest
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install packaging twine
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-review-*
+          path: dist
+          merge-multiple: true
+      - run: python -m scripts.check_release_artifacts dist --expected-wheels 16 --require-sdist --manifest dist/artifact-manifest.json
+      - run: python -m twine check dist/*.whl dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-review-manifest
+          path: |
+            dist/artifact-manifest.json
+            dist/SHA256SUMS
           if-no-files-found: error

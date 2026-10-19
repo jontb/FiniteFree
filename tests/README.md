@@ -13,6 +13,11 @@ skips and interrupts propagate. Use `pytest -k contract_name` to rerun a family.
 API variants retain separate reports where useful. Tests requiring fresh
 fixtures, monkeypatches, or platform skips stay independently parametrized.
 
+CI and `scripts/check.py --full` run compiled and flag-fallback suites explicitly;
+the installed-wheel helper also runs both modes outside the checkout. No test
+recursively runs a full pytest suite. A small subprocess probe verifies compiled
+selection, the documented fallback flag, and actual native-import failure.
+
 Consolidation reduces collected pytest items without dropping the original
 numerical cases or expecting proportional runtime savings. Keep independent
 oracles and edge cases when changing the suite:
@@ -26,6 +31,12 @@ oracles and edge cases when changing the suite:
   retaining their seeded trials, legacy RNG coverage, and probability bounds.
 - Prepared-pencil derivatives use independent symbolic determinants, extreme
   coefficient scales, strided batches, varied block sizes, and cache reuse.
+- Prepared kernels use exact rational basis sums with signed/scaled/shifted
+  families. Count laws use exhaustive Bernoulli enumeration and an analytically
+  integrated rank-two Gram matrix, including tails below CDF resolution.
+- Streaming coefficient bands use closed-form t quantiles at extreme scales;
+  moments/counts agree with retained samples across update order and rescaling.
+  Invalid updates preserve state and stored array shapes do not grow with samples.
 - Root, CRT, matrix-input, and derivative cases retain range, ownership, and
   invalid-input checks alongside their exact or analytic references.
 - The root-cache lifecycle checks ownership and multiplicity while counting
@@ -37,3 +48,16 @@ oracles and edge cases when changing the suite:
 When consolidating further, compare line and branch coverage for both compiled
 and fallback runs. Check representative deliberately broken implementations as
 well: coverage alone does not establish that assertions detect wrong answers.
+
+Run the fixed adversarial audit with:
+
+```sh
+OPENBLAS_NUM_THREADS=1 python scripts/audit_adversarial.py --both-backends --output /tmp/fault-audit.json
+```
+
+It first runs an unmodified control and then injects each fault in a separate
+process, without editing source files. The four representative faults cover
+cumulant normalization, premature CRT reconstruction, stale HVP direction caches
+and deterministic Haar sampling. A detected fault must produce an assertion
+failure in its selected contract; import/collection failures and timeouts do not
+count. This is a bounded regression audit, not an exhaustive mutation score.

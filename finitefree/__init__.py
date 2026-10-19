@@ -23,6 +23,13 @@ from .ensembles import (
     sample_wishart,
     wishart_expected_poly,
 )
+from .numerical import (
+    DPPCountDistribution,
+    PreparedKernelQuadrature,
+    PreparedOrthogonalKernel,
+    count_distribution_continuous,
+    count_distribution_discrete,
+)
 from .orthogonal import (
     chebyshev_t_polynomial,
     chebyshev_u_polynomial,
@@ -35,6 +42,7 @@ from .orthogonal import (
     legendre_polynomial,
     unitary_hermite_polynomial,
 )
+from .streaming import StreamingEmpiricalComparison
 from .transforms import (
     FiniteCauchyTransform,
     FiniteRTransform,
@@ -73,10 +81,16 @@ __all__ = [
     "gue_expected_poly",
     "wishart_expected_poly",
     "EmpiricalComparison",
+    "StreamingEmpiricalComparison",
     "BaseKernel",
     "DiscreteFiniteKernel",
     "OrthogonalPolynomialKernel",
     "PreparedDiscreteDPP",
+    "PreparedOrthogonalKernel",
+    "PreparedKernelQuadrature",
+    "DPPCountDistribution",
+    "count_distribution_discrete",
+    "count_distribution_continuous",
     "gap_probability_discrete",
     "gap_probability_continuous",
     "sample_discrete",

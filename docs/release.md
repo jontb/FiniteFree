@@ -1,6 +1,6 @@
 # Release process
 
-This source prepares **FiniteFree 0.3.0**. A candidate build and a version entry do not establish production publication: verify the approved tag, workflow and [PyPI files](https://pypi.org/project/finitefree/) using this checklist. The previous production release is [0.2.0](https://pypi.org/project/finitefree/0.2.0/), from [tag v0.2.0](https://github.com/jontb/FiniteFree/tree/v0.2.0).
+The latest production release is [FiniteFree 0.3.0](https://pypi.org/project/finitefree/0.3.0/), from [tag v0.3.0](https://github.com/jontb/FiniteFree/tree/v0.3.0). The development branch contains unreleased 0.4 maintenance; its static package version is changed only when the complete next candidate is prepared. A candidate build and a version entry do not establish production publication: verify the approved tag, workflow and [PyPI files](https://pypi.org/project/finitefree/) using this checklist.
 
 The 0.3.0 feature scope is prepared NumPy/optional-CuPy pencils, verified
 scaled Hermite workflows, bounded interactive examples and exact-input
@@ -46,4 +46,35 @@ Linux build and test environments select compatible NumPy/SciPy binary wheels. T
 
 Each wheel build removes compiled extensions left by earlier Python/libc targets in the reused build checkout. Both workflows then require each wheel to contain exactly one modular extension matching its Python tag, alongside the installed-wheel regression suite.
 
-The `publish.yml` workflow builds platform wheels with cibuildwheel and uploads through PyPI trusted publishing. A matching `v*.*.*` tag or manual workflow dispatch starts that upload. Creating `v0.3.0` is therefore a publication action, not a harmless preparation step. Do not create the tag or dispatch publishing before the release review is complete. Its manual input defaults to TestPyPI; choosing `false` selects production. Tag routing only checks for `rc` or `dev`: other matching prerelease names can reach production. The tag does not change the static package version in `pyproject.toml`.
+The `publish.yml` workflow validates the static version and publishing destination
+before starting any build. Tag pushes require an exact `vX.Y.Z` match to the
+package version. Canonical `a`, `b`, `rc` and `.dev` prereleases route to TestPyPI;
+only stable three-component versions route to production. Local, epoch and post
+versions are outside this tag policy and fail preflight. Manual dispatch still
+defaults to TestPyPI; explicitly selecting production requires a stable version.
+A manually selected tag must also match the package version. The tag never changes
+that version.
+
+The review matrix and publisher both inspect archive names, version, Python and
+runtime dependency floors, complete Python/Cython runtime source and native
+extension inventories. The complete matrix requires 16 wheels and one sdist.
+Their validation jobs save `artifact-manifest.json` and `SHA256SUMS` as workflow
+artifacts. After the existing release-environment approval, the publishing job
+rechecks the downloaded archive bytes against that manifest before upload.
+Manifest files are kept outside the directory submitted to PyPI.
+
+These local commands perform validation only, using the matching candidate
+checkout and previously downloaded archives:
+
+```bash
+python -m scripts.release_preflight --event workflow_dispatch --ref refs/heads/develop
+python -m scripts.check_release_artifacts dist --expected-wheels 16 --require-sdist --manifest dist/artifact-manifest.json
+python -m scripts.check_release_artifacts downloaded --expected-wheels 16 --require-sdist --verify dist/artifact-manifest.json
+```
+
+`--manifest` writes hashes only after content validation succeeds; `--verify`
+rejects missing, extra, duplicate or altered archives, then also checks them
+against the checkout. Use `--expected-wheels 1` for an ordinary local wheel/sdist
+build. Neither script publishes, tags or changes release settings. Creating a
+stable release tag or invoking the publishing workflow remains a separate,
+explicitly approved release action.

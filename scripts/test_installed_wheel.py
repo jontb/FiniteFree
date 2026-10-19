@@ -25,11 +25,22 @@ def main() -> int:
         subprocess.run(
             [sys.executable, "-c", probe], cwd=directory, env=env, check=True
         )
-        return subprocess.call(
-            [sys.executable, "-m", "pytest", "--import-mode=importlib", "tests/"],
-            cwd=directory,
-            env=env,
-        )
+        for fallback in (False, True):
+            env.pop("PYFFP_DISABLE_CYTHON", None)
+            if fallback:
+                env["PYFFP_DISABLE_CYTHON"] = "1"
+            print(
+                f"Installed-wheel tests: {'fallback' if fallback else 'compiled'}",
+                flush=True,
+            )
+            status = subprocess.call(
+                [sys.executable, "-m", "pytest", "--import-mode=importlib", "tests/"],
+                cwd=directory,
+                env=env,
+            )
+            if status:
+                return status
+        return 0
 
 
 if __name__ == "__main__":

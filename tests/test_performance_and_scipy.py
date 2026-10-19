@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from finitefree.core import RealRootedPolynomial, UnitaryPolynomial
 from finitefree.utils.modular import modular_det
@@ -86,56 +85,52 @@ def test_cython_pencil_evals() -> None:
     assert res_grid == [2, 14]
 
 
-def test_pure_python_fallback() -> None:
+def test_backend_selection_and_missing_extension() -> None:
     import os
     import subprocess
     import sys
+    import textwrap
 
-    # Prevent recursive subprocess execution to avoid infinite process spawning
-    if (
-        os.environ.get("_PYFFP_SUBPROCESS_RUNNING") == "1"
-        or os.environ.get("PYFFP_DISABLE_CYTHON") == "1"
-    ):
-        return
-
-    # Filter out all pytest-cov environment variables to prevent coverage hangs/recursion loops
-    env = {}
-    for k, v in os.environ.items():
-        if not k.startswith("COV_") and k not in (
-            "PYTEST_CURRENT_TEST",
-            "PYTEST_PLUGINS",
-        ):
-            env[k] = v
-
-    env["PYFFP_DISABLE_CYTHON"] = "1"
-    env["_PYFFP_SUBPROCESS_RUNNING"] = "1"
-
-    # Find the project root directory path dynamically relative to this file
-    project_root = (
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if os.path.basename(os.path.dirname(os.path.abspath(__file__))) == "tests"
-        else os.path.dirname(os.path.abspath(__file__))
-    )
-
-    try:
-        res = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "tests",
-                "--ignore=tests/test_performance_and_scipy.py",
-                "-p",
-                "no:cov",  # Explicitly disable pytest-cov plugin in the subprocess
-            ],
-            cwd=project_root,
+    for mode in ("compiled", "flag", "missing"):
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("COV_")
+            and key
+            not in ("PYTEST_CURRENT_TEST", "PYTEST_PLUGINS", "PYFFP_DISABLE_CYTHON")
+        }
+        if mode == "flag":
+            env["PYFFP_DISABLE_CYTHON"] = "1"
+        probe = textwrap.dedent("""
+            import importlib.abc
+            import sys
+            class MissingExtension(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "finitefree.utils.modular_fast":
+                        raise ModuleNotFoundError(fullname)
+            mode = sys.argv[1]
+            if mode == "missing":
+                sys.meta_path.insert(0, MissingExtension())
+            import numpy as np
+            from finitefree.utils import modular, parallel
+            from finitefree.hyperbolic import SymmetricMatrixPencil
+            assert parallel.HAS_CYTHON == (mode == "compiled")
+            assert (modular.modular_det.__module__ == "finitefree.utils.modular_fast") == (mode != "missing")
+            # Independent integer determinant (-5), singular pivot, empty matrix,
+            # row swap and integers beyond int64; no shared modular oracle.
+            for matrix, expected in [([[2,1,3],[1,5,2],[3,2,4]],-5), ([[0,1],[2,3]],-2), ([[1,2],[2,4]],0), ([],1), ([[2**90+3,1],[2,4]],4*(2**90+3)-2)]:
+                assert modular.modular_det(modular._as_modular_array(matrix, 1000000007).tolist(), 1000000007) == expected % 1000000007
+            assert modular.crt([2, 3, 2], [3, 5, 7]) == 23
+            pencil = SymmetricMatrixPencil([np.eye(2, dtype=int), [[2,1],[1,3]]])
+            expected = [1,5,5]
+            for use_threads in (False, True):
+                assert list(pencil.diagonal_specialization([1,0], [0,1], parallel=use_threads).coeffs) == expected
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", probe, mode],
             env=env,
             capture_output=True,
             text=True,
-            timeout=30,  # Enforce safety timeout of 30 seconds to prevent hangs
+            timeout=60,
         )
-        assert res.returncode == 0, (
-            f"Fallback tests failed:\n{res.stdout}\n{res.stderr}"
-        )
-    except subprocess.TimeoutExpired as e:
-        pytest.fail(f"Fallback subprocess hung and timed out: {e}")
+        assert result.returncode == 0, f"{mode}:\n{result.stdout}\n{result.stderr}"
