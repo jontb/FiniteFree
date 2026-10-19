@@ -212,7 +212,7 @@ x, y, z = p.variables
 assert sp.expand(p.expr - x * (y - 2*z)) == 0
 ```
 
-## Prepared numerical pencils (develop)
+## Prepared numerical pencils
 
 For repeated numerical queries, call `prepare_numeric()` on a symmetric or
 multiplicative pencil. It takes an owned snapshot of the existing float64 matrix
@@ -289,8 +289,7 @@ there is no CPU fallback when the GPU backend is requested.
 The backend uses the official CuPy
 [LU factorization](https://docs.cupy.dev/en/stable/reference/generated/cupyx.scipy.linalg.lu_factor.html)
 and [solve](https://docs.cupy.dev/en/stable/reference/generated/cupyx.scipy.linalg.lu_solve.html)
-contracts. GPU execution remains unverified in this milestone's CPU-only cloud
-environment; see the [validation checklist](development.md#prepared-pencil-validation-checklist).
+contracts. Correctness was checked on an NVIDIA RTX 3050 using float64; see the [recorded environment and validation checklist](development.md#prepared-pencil-validation-checklist). Those results cover the recorded cases and do not establish a GPU speedup or a total-memory advantage.
 
 ### Prepared pencil benchmark
 

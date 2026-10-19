@@ -24,7 +24,7 @@ For standard installation, tests and documentation:
 
 ```bash
 python -m pip install ".[dev]"
-python -m pip install Cython build mkdocs-material "mkdocstrings[python]"
+python -m pip install Cython "setuptools<77" build mkdocs-material "mkdocstrings[python]"
 ```
 
 The Hatch backend builds the Cython extension in the wheel. To make it available when tests explicitly import this source checkout, build it in place as CI does:
@@ -103,9 +103,9 @@ The strict build treats missing documentation targets and invalid anchors as war
 
 Check that regeneration produces the expected index, then commit both README and the index. User-facing README/API text explains current behavior; dated measurements and migration history belong in changelog or review notes.
 
-## Interactive geometry examples on develop
+## Interactive geometry examples
 
-Two standalone explorers are available in the development branch. They are development examples; the stable API and public site remain tied to the latest published release.
+Two standalone explorers are included in the 0.4.0 source and linked from the public site. Run their generators from a source checkout; the installed library wheel does not include the example scripts.
 
 ```bash
 PYTHONPATH=. python examples/interactive_geometry.py
@@ -142,7 +142,7 @@ Set `FINITEFREE_BROWSER` to the browser executable if it is not on PATH. CI runs
 
 For managed browsers that disallow `file://`, serve only the generated directory with `python -m http.server 8765 --bind 127.0.0.1 --directory visuals/generated`, then set `FINITEFREE_BASE_URL=http://127.0.0.1:8765/` on either browser-check command. The optional transport accepts only loopback HTTP; Chromium sandboxing remains enabled and any non-navigation network request still fails the checks. The standalone files themselves need no server in browsers that permit local HTML.
 
-## Spectral dashboards on develop
+## Spectral dashboards
 
 For an end-to-end example connecting existing samplers, expected polynomials,
 DPP mean density and empirical comparisons, see the [GUE spectral workflow](gue-workflow.md).

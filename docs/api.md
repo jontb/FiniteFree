@@ -16,6 +16,14 @@ behavior. These explicit float64 APIs reject complex/nonfinite coordinates and
 raise for nonfinite results. Finite results can still lose information through
 underflow or ill-conditioning.
 
+| Prepared call | Input | Output |
+| :--- | :--- | :--- |
+| `basis(points)` | One-dimensional coordinates of length `m` | float64 array `(m, rank)` |
+| `matrix(xs)` | One-dimensional coordinates of length `m` | float64 array `(m, m)` |
+| `matrix(xs, ys)` | One-dimensional coordinates of lengths `m`, `k` | float64 array `(m, k)` |
+
+These methods accept real array-like coordinates, including empty arrays. They differ from the existing single-argument `BaseKernel.matrix(xs)`, which returns nested scalar evaluations.
+
 `prepared.quadrature(a, b, n_points=50, weight_func=None)` retains nodes,
 measure weights and a rank-by-rank restricted Gram matrix for repeated gap/count
 queries. Supply the reference measure density explicitly: the default is 1,
@@ -30,7 +38,9 @@ P(N>k). Thresholds are integers. Upper tails are summed directly. `mean` and
 `count_distribution_continuous(kernel, a, b, n_points=50, weight_func=None)`
 construct the corresponding laws.
 
-Continuous results have `estimated=True`. Eigenvalues outside [0,1] by more
+`pmf()` has one more entry than the restriction matrix dimension, including any zero-mass entries. Outside that support, `pmf(k)` is zero; `cdf(k)` is zero below zero and one at or above the upper endpoint, and `sf(k)` has the complementary endpoint values. The discrete convenience helper expects a `BaseKernel` and distinct states; wrap an array in `DiscreteFiniteKernel` first.
+
+Continuous results have `estimated=True`; `estimated=False` does not certify a float64 count law. Restriction symmetry is checked with absolute tolerance 1e-12. Eigenvalues outside [0,1] by more
 than 1e-12 are rejected; smaller roundoff excursions are clipped and reported
 as `spectral_correction`. `probability_mass_error` records the PMF mass error
 before normalization. These diagnostics and quadrature refinements are not

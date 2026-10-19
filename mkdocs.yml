@@ -44,7 +44,7 @@ nav:
   - GUE Spectral Workflow: gue-workflow.md
   - Development: development.md
   - Code Map: code-map.md
-  - Release Review: release.md
+  - Release Process: release.md
 validation:
   links:
     not_found: warn
