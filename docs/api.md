@@ -51,13 +51,14 @@ the distinction between expected characteristic roots and mean spectra.
 
 ```python
 import numpy as np
+import sympy as sp
 from finitefree import OrthogonalPolynomialKernel, RealRootedPolynomial
 
 # Rank-two Legendre kernel for Lebesgue measure on [-1,1].
 kernel = OrthogonalPolynomialKernel(
     [RealRootedPolynomial([1]), RealRootedPolynomial([1, 0]),
-     RealRootedPolynomial([1, 0, -1/3])],
-    [2, 2/3],
+     RealRootedPolynomial([1, 0, -sp.Rational(1, 3)])],
+    [2, sp.Rational(2, 3)],
 )
 prepared = kernel.prepare_numeric()
 assert prepared.matrix([0, 0.5], [0.25]).shape == (2, 1)
