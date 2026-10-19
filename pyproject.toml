@@ -9,6 +9,8 @@ dependencies = ["hatch-cython"]
 directives = {boundscheck = false, wraparound = false, nonecheck = false, cdivision = true, language_level = 3}
 include_numpy = true
 compile_py = false
+# Generated C can encode the previous interpreter's NumPy declarations.
+cythonize_kwargs = {force = true}
 
 [tool.setuptools]
 packages = ["finitefree"]
@@ -16,7 +18,7 @@ packages = ["finitefree"]
 
 [project]
 name = "finitefree"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Python library for exact finite free probability"
 readme = "README.md"
 authors = [
@@ -36,7 +38,9 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "mypy>=1.0",
-    "ruff>=0.3.0"
+    "ruff>=0.3.0",
+    "packaging>=23.0",
+    "tomli>=2.0; python_version < '3.11'"
 ]
 [tool.hatch.build.targets.wheel]
 packages = ["finitefree"]

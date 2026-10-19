@@ -1,4 +1,4 @@
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import numpy as np
 import pytest
@@ -163,3 +163,78 @@ def test_empirical_conjugation_coefficient_laws() -> None:
                     sample = np.poly(matrix)
                 coefficients.append(np.real(sample))
             assert_coefficient_law(np.asarray(coefficients), expected)
+
+
+def test_sampler_rng_default_stream_and_explicit_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    samplers: list[
+        tuple[
+            Callable[..., Any],
+            tuple[int, ...],
+            dict[str, int],
+            list[tuple[int, int]],
+            int,
+        ]
+    ] = [
+        (sample_goe, (3,), {}, [(3, 3)], 1),
+        (sample_gue, (3,), {}, [(3, 3)] * 2, 2),
+        (sample_gse, (3,), {}, [(6, 6)] * 2, 4),
+        *[
+            (sample_wishart, (3, 5), {"beta": beta}, [(3, 5)] * draws, beta)
+            for beta, draws in ((1, 1), (2, 2), (4, 4))
+        ],
+        (sample_haar_orthogonal, (3,), {}, [(3, 3)], 1),
+        (sample_haar_unitary, (3,), {}, [(3, 3)] * 2, 2),
+        (sample_haar_symplectic, (3,), {}, [(3, 3)] * 4, 4),
+    ]
+
+    def assert_state_equal(left: Any, right: Any) -> None:
+        assert left[0] == right[0]
+        np.testing.assert_array_equal(left[1], right[1])
+        assert left[2:] == right[2:]
+
+    for sampler, args, keywords, draw_shapes, beta in samplers:
+        with case(sampler=sampler.__name__, beta=beta):
+            np.random.seed(1729)
+            legacy = sampler(*args, **keywords)
+            after = np.random.get_state()
+            reference = np.random.RandomState(1729)
+            for shape in draw_shapes:
+                reference.randn(*shape)
+            assert_state_equal(after, reference.get_state())
+            np.random.seed(1729)
+            np.testing.assert_array_equal(sampler(*args, **keywords, rng=None), legacy)
+            assert_state_equal(np.random.get_state(), after)
+            first, second = np.random.default_rng(91), np.random.default_rng(91)
+            with monkeypatch.context() as patch:
+
+                def forbidden(*shape: Any) -> Any:
+                    raise AssertionError("Explicit Generator accessed the global RNG")
+
+                patch.setattr(np.random, "randn", forbidden)
+                actual = sampler(*args, **keywords, rng=first)
+                assert actual.dtype == legacy.dtype
+                expected_stream = np.random.default_rng(91)
+                for shape in draw_shapes:
+                    expected_stream.standard_normal(shape)
+                assert first.bit_generator.state == expected_stream.bit_generator.state
+                np.testing.assert_array_equal(
+                    actual, sampler(*args, **keywords, rng=second)
+                )
+                assert not np.array_equal(actual, sampler(*args, **keywords, rng=first))
+                for invalid in (7, np.random.RandomState(91), object()):
+                    with pytest.raises(TypeError, match="Generator or None"):
+                        sampler(*args, **keywords, rng=invalid)
+            assert_state_equal(np.random.get_state(), after)
+            if "haar" in sampler.__name__:
+                np.testing.assert_allclose(
+                    actual @ actual.conj().T, np.eye(len(actual)), atol=2e-14
+                )
+                if beta == 4:
+                    j = symplectic_form(3)
+                    np.testing.assert_allclose(actual.T @ j @ actual, j, atol=2e-14)
+            else:
+                assert_hermitian_structure(actual, 3, beta)
+                if sampler is sample_wishart:
+                    assert np.linalg.eigvalsh(actual).min() >= -1e-12

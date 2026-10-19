@@ -6,7 +6,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ["finitefree", "tests", "scripts", "examples"]
@@ -17,6 +17,7 @@ class Check:
     label: str
     command: Sequence[str]
     fallback: bool = False
+    environment: Optional[Mapping[str, str]] = None
 
 
 def build_checks(full: bool, installed_wheel: bool) -> list[Check]:
@@ -26,7 +27,7 @@ def build_checks(full: bool, installed_wheel: bool) -> list[Check]:
         "from Cython.Build import cythonize; import numpy as np; "
         "setup(ext_modules=cythonize(Extension("
         "'finitefree.utils.modular_fast', ['finitefree/utils/modular_fast.pyx'], "
-        "include_dirs=[np.get_include()])), "
+        "include_dirs=[np.get_include()]), force=True), "
         "script_args=['build_ext', '--inplace'])"
     )
     tests = [
@@ -54,12 +55,35 @@ def build_checks(full: bool, installed_wheel: bool) -> list[Check]:
         checks.extend(
             [
                 Check("Fallback tests", tests, fallback=True),
+                Check(
+                    "Adversarial fault audit",
+                    [python, "scripts/audit_adversarial.py", "--both-backends"],
+                ),
                 Check("README/index synchronization", [python, "-c", synchronization]),
                 Check(
                     "Documentation examples",
                     [python, "scripts/check_readme_examples.py"],
                 ),
                 Check("Showcase", [python, "examples/showcase.py"]),
+                Check(
+                    "Generate interactive geometry",
+                    [
+                        python,
+                        "examples/interactive_geometry.py",
+                        "--output",
+                        "docs/visuals/interactive",
+                    ],
+                ),
+                Check(
+                    "Generate spectral dashboards",
+                    [
+                        python,
+                        "examples/spectral_dashboards.py",
+                        "--output",
+                        "docs/visuals/interactive",
+                    ],
+                    environment={"OPENBLAS_NUM_THREADS": "1"},
+                ),
                 Check(
                     "Strict documentation build",
                     [python, "-m", "mkdocs", "build", "--strict"],
@@ -77,6 +101,7 @@ def run_checks(checks: Sequence[Check], root: Path) -> int:
     for check in checks:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(root)
+        env.update(check.environment or {})
         if check.fallback:
             env["PYFFP_DISABLE_CYTHON"] = "1"
         else:

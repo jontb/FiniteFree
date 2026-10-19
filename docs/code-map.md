@@ -13,8 +13,9 @@ before moving code or changing ownership of cached state.
 | Multivariate polynomials | `multivariate.py` | Ordered symbol contexts, exact sparse algebra, derivative shapes, owned exports and explicit numerical limits |
 | Matrix pencils and SLPs | `hyperbolic/pencils.py`, `hyperbolic/slp.py` | Rational input preservation, determinant conventions and the documented singular-point derivative limits |
 | Modular reconstruction | `utils/modular.py`, `utils/modular_fast.pyx`, `utils/parallel.py` | Integer reduction before narrowing, valid prime-field interpolation, coefficient bounds and compiled/fallback agreement |
-| Random matrices and empirical comparisons | `ensembles.py` | Ensemble scaling, paired spectra, RNG behavior and the statistical scope of coefficient diagnostics |
+| Random matrices and empirical comparisons | `ensembles.py`, `streaming.py` | Ensemble scaling, paired spectra, legacy/explicit RNG behavior, bounded online storage and the statistical scope of coefficient diagnostics |
 | DPP kernels and sampling | `dpp.py` | Kernel domains, reference measure and normalization, owned preparation, state order and sampling law |
+| Optional numerical kernels and count laws | `numerical.py` | Normalized owned basis, explicit measure density, reused quadrature, directly summed tails and estimated versus certified probabilities |
 | Precision and conversion | `utils/precision.py`, `utils/conversion.py` | Restored precision context, supplied binary float values and explicit output range/rounding limits |
 
 Module paths in the table are relative to `finitefree/`. Library changes belong

@@ -1,6 +1,91 @@
 # API Reference
 
-This page describes **FiniteFree 0.3.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
+This page describes **FiniteFree 0.4.0**, with executable examples and reference sections generated from its docstrings. Published versions are listed on [PyPI](https://pypi.org/project/finitefree/); use a built wheel or source checkout while a release candidate is under review. See the [development guide](development.md), [migration notes](https://github.com/jontb/FiniteFree/blob/develop/CHANGELOG.md), and [release process](release.md).
+
+## Optional numerical workflows
+
+`OrthogonalPolynomialKernel.prepare_numeric()` returns an owned
+`PreparedOrthogonalKernel`. `basis(points)` evaluates normalized basis rows;
+`matrix(xs, ys=None)` computes a batch kernel matrix. Verified shifted/scaled
+Hermite bases use their normalized recurrence. Other families use normalized
+coefficients with Horner evaluation, retaining the conditioning limits of that
+representation. Exact scalar calls and `BaseKernel.matrix` keep their existing
+behavior. These explicit float64 APIs reject complex/nonfinite coordinates and
+raise for nonfinite results. Finite results can still lose information through
+underflow or ill-conditioning.
+
+`prepared.quadrature(a, b, n_points=50, weight_func=None)` retains nodes,
+measure weights and a rank-by-rank restricted Gram matrix for repeated gap/count
+queries. Supply the reference measure density explicitly: the default is 1,
+including for Hermite kernels. Storage is O(n_points * rank + rank**2).
+
+`DPPCountDistribution(restricted_matrix)` gives the finite-rank Bernoulli-sum
+count law from a real symmetric restriction. `pmf()` returns probabilities on
+0..rank, `pmf(k)` returns one probability, `cdf(k)` is P(N<=k), and `sf(k)` is
+P(N>k). Thresholds are integers. Upper tails are summed directly. `mean` and
+`variance` are population moments. Convenience functions
+`count_distribution_discrete(kernel, points)` and
+`count_distribution_continuous(kernel, a, b, n_points=50, weight_func=None)`
+construct the corresponding laws.
+
+Continuous results have `estimated=True`. Eigenvalues outside [0,1] by more
+than 1e-12 are rejected; smaller roundoff excursions are clipped and reported
+as `spectral_correction`. `probability_mass_error` records the PMF mass error
+before normalization. These diagnostics and quadrature refinements are not
+certified error bounds. Float64 cannot resolve every rare tail, and a spectrum
+in [0,1] alone does not establish quadrature accuracy. Returned arrays are owned
+copies. See the [GUE workflow](gue-workflow.md) for measure conventions and
+the distinction between expected characteristic roots and mean spectra.
+
+```python
+import numpy as np
+from finitefree import OrthogonalPolynomialKernel, RealRootedPolynomial
+
+# Rank-two Legendre kernel for Lebesgue measure on [-1,1].
+kernel = OrthogonalPolynomialKernel(
+    [RealRootedPolynomial([1]), RealRootedPolynomial([1, 0]),
+     RealRootedPolynomial([1, 0, -1/3])],
+    [2, 2/3],
+)
+prepared = kernel.prepare_numeric()
+assert prepared.matrix([0, 0.5], [0.25]).shape == (2, 1)
+restriction = prepared.quadrature(0, 1, n_points=16)
+law = restriction.count_distribution()
+np.testing.assert_allclose(law.pmf(), [1/16, 7/8, 1/16], atol=1e-14)
+assert abs(restriction.gap_probability() - law.pmf(0)) < 1e-14
+assert law.estimated
+```
+
+`StreamingEmpiricalComparison(polynomial, intervals=())` accumulates coefficient
+moments and count histograms through `update(matrix)` or
+`extend(generator, samples)`. Intervals are closed [a,b]. A doubled matrix must
+have paired eigenvalues, with one eigenvalue counted per pair. The object retains
+no samples or eigenvalues. Its O(d + m*d) storage depends on polynomial degree d
+and the number of configured intervals m. `coefficient_mean`, `coefficient_std`,
+`count_mean`, `count_variance`, and `count_histograms` return owned summaries;
+standard deviations and variances use ddof=1. At least two samples are needed
+for variances or coefficient verification. An invalid update leaves statistics
+intact; a failed `extend` retains its prior successful updates.
+
+`verify_coefficients` uses the same Bonferroni-adjusted t bands and tolerances as
+`EmpiricalComparison`: independent samples are required, with exact bands for
+normal coefficient observations and a large-sample approximation otherwise.
+Dynamic scaling protects variance calculations at extreme magnitudes, but online
+roundoff can differ from a retained two-pass calculation near a test threshold.
+The original `EmpiricalComparison` continues to retain samples and support plots.
+
+```python
+import numpy as np
+from finitefree import RealRootedPolynomial, StreamingEmpiricalComparison
+
+comparison = StreamingEmpiricalComparison(
+    RealRootedPolynomial.from_roots([1, 3]), intervals=[(1, 3), (1, 1)]
+)
+comparison.extend(lambda: np.diag([1.0, 3.0]), samples=3)
+assert comparison.verify_coefficients()
+np.testing.assert_array_equal(comparison.count_mean, [2, 1])
+np.testing.assert_array_equal(comparison.count_variance, [0, 0])
+```
 
 ## Root evaluation and conditioning
 
@@ -267,6 +352,29 @@ assert SymmetricFiniteSTransform(p, exact=False, convention="standard")[0] == 1j
 
 `to_scipy_dist()` constructs a continuous piecewise-linear CDF through numerical roots and requires at least two root entries. It is an interpolation, not the atomic empirical root measure; repeated roots remain present.
 
+### Ensemble random streams
+
+`sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart` and all three
+`sample_haar_*` functions accept keyword-only `rng=None` or a
+`numpy.random.Generator`, matching the discrete DPP sampling convention.
+Omitting `rng` or passing `None` preserves the legacy global NumPy RNG, draw order,
+ensemble normalization and positional arguments. An explicit generator is
+advanced in place without reading or changing global RNG state. Integer seeds
+and `RandomState` objects are rejected with `TypeError`; construct a generator
+explicitly. Reproducibility refers to a fixed NumPy/build environment, not a
+cross-version or cross-platform bitwise guarantee.
+
+```python
+import numpy as np
+from finitefree import sample_gue
+
+matrix = sample_gue(3, rng=np.random.default_rng(2026))
+np.testing.assert_array_equal(
+    matrix, sample_gue(3, rng=np.random.default_rng(2026))
+)
+np.testing.assert_allclose(matrix, matrix.conj().T)
+```
+
 ### Empirical coefficient comparison
 
 `EmpiricalComparison(p, samples, generator)` stores eigenvalues and characteristic coefficients from at least two samples. Each sample must be a finite Hermitian matrix of shape `(d, d)`, where `d=p.degree`. A `(2d, 2d)` representation is accepted when its sorted eigenvalues occur in pairs; one eigenvalue from each pair supplies the degree-`d` characteristic polynomial. Hermitian and pairing checks permit absolute roundoff up to `1e-10` times the largest entry magnitude or eigenvalue magnitude, respectively. Matrix eigenvalues, sampled coefficients, and analytical coefficients must fit finite `float64` values.
@@ -442,9 +550,13 @@ validation does not establish a speed or memory advantage.
 
 ::: finitefree.ensembles
 
+::: finitefree.streaming
+
 ## Determinantal Point Processes (DPP)
 
 ::: finitefree.dpp
+
+::: finitefree.numerical
 
 ## Multivariate Geometry & Matrix Pencils
 

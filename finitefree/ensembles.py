@@ -1,42 +1,61 @@
 import math
 import operator
-from typing import Any, Callable, SupportsIndex
+from typing import Any, Callable, Optional, SupportsIndex
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial
+from .streaming import _sample_observations
 from .utils.roots import _gaussian_roots, _laguerre_roots
 
 
-def sample_gue(d: int, scale: float = 1.0) -> Any:
+def _normal_draw(
+    rng: Optional[np.random.Generator],
+) -> Callable[..., NDArray[np.float64]]:
+    """Select a stream without changing the legacy draw order or global state."""
+    if rng is None:
+        return np.random.randn
+    if not isinstance(rng, np.random.Generator):
+        raise TypeError("rng must be a numpy.random.Generator or None")
+    return lambda *shape: rng.standard_normal(shape)
+
+
+def sample_gue(
+    d: int, scale: float = 1.0, *, rng: Optional[np.random.Generator] = None
+) -> Any:
     r"""
     Generates a sample GUE matrix (Hermitian, Gaussian entries)
     with diagonal and off-diagonal variance of $1/d$.
     """
-    X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2.0)
+    normal = _normal_draw(rng)
+    X = (normal(d, d) + 1j * normal(d, d)) / np.sqrt(2.0)
     H = (X + X.conj().T) / (np.sqrt(2.0) * np.sqrt(d))
     return H * scale
 
 
-def sample_goe(d: int, scale: float = 1.0) -> Any:
+def sample_goe(
+    d: int, scale: float = 1.0, *, rng: Optional[np.random.Generator] = None
+) -> Any:
     r"""
     Generates a sample GOE matrix (Symmetric, Gaussian entries)
     with diagonal variance $2/d$ and off-diagonal variance $1/d$.
     """
-    X = np.random.randn(d, d)
+    normal = _normal_draw(rng)
+    X = normal(d, d)
     H = (X + X.T) / (np.sqrt(2.0) * np.sqrt(d))
     return H * scale
 
 
-def sample_gse(d: int, scale: float = 1.0) -> Any:
+def sample_gse(
+    d: int, scale: float = 1.0, *, rng: Optional[np.random.Generator] = None
+) -> Any:
     r"""
     Generates a sample GSE matrix of dimension $2d \times 2d$ (Self-dual, Gaussian entries)
     with Kramers degeneracy, scaled to match the $d$-dimensional expected characteristic polynomial.
     """
-    X = (np.random.randn(2 * d, 2 * d) + 1j * np.random.randn(2 * d, 2 * d)) / np.sqrt(
-        2.0
-    )
+    normal = _normal_draw(rng)
+    X = (normal(2 * d, 2 * d) + 1j * normal(2 * d, 2 * d)) / np.sqrt(2.0)
     H = (X + X.conj().T) / 2.0
     J = np.zeros((2 * d, 2 * d))
     J[:d, d:] = np.eye(d)
@@ -45,22 +64,30 @@ def sample_gse(d: int, scale: float = 1.0) -> Any:
     return H * np.sqrt(2.0 / d) * scale
 
 
-def sample_wishart(d: int, n: int, beta: int = 2, scale: float = 1.0) -> NDArray[Any]:
+def sample_wishart(
+    d: int,
+    n: int,
+    beta: int = 2,
+    scale: float = 1.0,
+    *,
+    rng: Optional[np.random.Generator] = None,
+) -> NDArray[Any]:
     r"""
     Sample a real/complex/quaternionic Wishart representation.
     For beta=1 or 2, return a d-by-d matrix XX^H/n. For beta=4, the complex
     representation has shape (2d,2d), paired eigenvalues, and normalization
     XX^H/(2n). scale multiplies the matrix. beta must be 1, 2 or 4.
     """
+    normal = _normal_draw(rng)
     if beta == 1:
-        X = np.random.randn(d, n)
+        X = normal(d, n)
         W = (X @ X.T) / n
     elif beta == 2:
-        X = (np.random.randn(d, n) + 1j * np.random.randn(d, n)) / np.sqrt(2.0)
+        X = (normal(d, n) + 1j * normal(d, n)) / np.sqrt(2.0)
         W = (X @ X.conj().T) / n
     elif beta == 4:
-        A = (np.random.randn(d, n) + 1j * np.random.randn(d, n)) / np.sqrt(2.0)
-        B = (np.random.randn(d, n) + 1j * np.random.randn(d, n)) / np.sqrt(2.0)
+        A = (normal(d, n) + 1j * normal(d, n)) / np.sqrt(2.0)
+        B = (normal(d, n) + 1j * normal(d, n)) / np.sqrt(2.0)
         X = np.block([[A, B], [-np.conj(B), np.conj(A)]])
         W = (X @ X.conj().T) / (2 * n)
     else:
@@ -68,28 +95,33 @@ def sample_wishart(d: int, n: int, beta: int = 2, scale: float = 1.0) -> NDArray
     return W * scale
 
 
-def sample_haar_unitary(d: int) -> Any:
+def sample_haar_unitary(d: int, *, rng: Optional[np.random.Generator] = None) -> Any:
     """Generates a Haar-distributed random unitary matrix."""
-    X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2.0)
+    normal = _normal_draw(rng)
+    X = (normal(d, d) + 1j * normal(d, d)) / np.sqrt(2.0)
     Q, R = np.linalg.qr(X)
     d_r = np.diagonal(R)
     ph = d_r / np.abs(d_r)
     return Q * ph
 
 
-def sample_haar_orthogonal(d: int) -> Any:
+def sample_haar_orthogonal(d: int, *, rng: Optional[np.random.Generator] = None) -> Any:
     """Generates a Haar-distributed random orthogonal matrix."""
-    X = np.random.randn(d, d)
+    normal = _normal_draw(rng)
+    X = normal(d, d)
     Q, R = np.linalg.qr(X)
     d_r = np.diagonal(R)
     ph = d_r / np.abs(d_r)
     return Q * ph
 
 
-def sample_haar_symplectic(d: int) -> NDArray[np.complex128]:
+def sample_haar_symplectic(
+    d: int, *, rng: Optional[np.random.Generator] = None
+) -> NDArray[np.complex128]:
     r"""Generates a Haar-distributed random symplectic matrix in $\text{USp}(2d)$."""
-    X = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
-    Y = (np.random.randn(d, d) + 1j * np.random.randn(d, d)) / np.sqrt(2)
+    normal = _normal_draw(rng)
+    X = (normal(d, d) + 1j * normal(d, d)) / np.sqrt(2)
+    Y = (normal(d, d) + 1j * normal(d, d)) / np.sqrt(2)
     Z = np.block([[X, Y], [-np.conj(Y), np.conj(X)]])
     Q = np.zeros((2 * d, 2 * d), dtype=complex)
     J = np.block([[np.zeros((d, d)), np.eye(d)], [-np.eye(d), np.zeros((d, d))]])
@@ -198,34 +230,7 @@ class EmpiricalComparison:
         eigs_list = []
         coeffs_list = []
         for _ in range(sample_count):
-            M = np.asarray(generator(), dtype=np.complex128)
-            if M.shape not in [(self.d, self.d), (2 * self.d, 2 * self.d)]:
-                raise ValueError("Sample matrices must have shape (d, d) or (2d, 2d).")
-            if not np.all(np.isfinite(M)):
-                raise ValueError("Sample matrices must contain finite entries.")
-            matrix_scale = np.max(np.abs(M), initial=0.0)
-            if not np.isfinite(matrix_scale) or not np.allclose(
-                M, M.conj().T, rtol=0, atol=1e-10 * matrix_scale
-            ):
-                raise ValueError("Sample matrices must be numerically Hermitian.")
-            eigs = np.linalg.eigvalsh(M)
-            if not np.all(np.isfinite(eigs)):
-                raise ValueError("Sample eigenvalues must be finite.")
-            if self.d and M.shape[0] == 2 * self.d:
-                # A doubled-size sample is usable only with Kramers pairs.
-                eigenvalue_scale = np.max(np.abs(eigs))
-                if not np.allclose(
-                    eigs[::2], eigs[1::2], rtol=0, atol=1e-10 * eigenvalue_scale
-                ):
-                    raise ValueError(
-                        "Doubled-size samples must have paired eigenvalues."
-                    )
-                eigs = eigs[::2]
-
-            with np.errstate(over="ignore", invalid="ignore"):
-                coefficients = np.atleast_1d(np.poly(eigs))
-            if not np.all(np.isfinite(coefficients)):
-                raise ValueError("Sample characteristic coefficients must be finite.")
+            eigs, coefficients = _sample_observations(generator(), self.d)
 
             eigs_list.append(eigs)
             coeffs_list.append(coefficients)
