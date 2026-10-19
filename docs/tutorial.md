@@ -1,6 +1,6 @@
 # Numerical workflows and precision
 
-This tutorial uses the published **FiniteFree 0.4.0** APIs. Install with `python -m pip install finitefree==0.4.0`, or follow the [development guide](development.md) for a source checkout. The [API reference](api.md) records numerical precision, ownership and conditioning limits.
+This tutorial uses the **FiniteFree 0.4** APIs, unchanged by the metadata-only 0.4.1 patch. Install with `python -m pip install finitefree==0.4.1`, or follow the [development guide](development.md) for a source checkout. The [API reference](api.md) records numerical precision, ownership and conditioning limits.
 
 ## Repeated numerical work
 

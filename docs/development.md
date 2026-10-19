@@ -1,6 +1,6 @@
 # Development and documentation
 
-These instructions support development of FiniteFree. The current production release is [0.4.0 on PyPI](https://pypi.org/project/finitefree/0.4.0/); `main` and the public docs track that release, while `develop` accepts ongoing work. Follow the [release process](release.md) for candidate validation and publication, and record the Git commit when reproducing results.
+These instructions support development of FiniteFree. Production versions are listed on [PyPI](https://pypi.org/project/finitefree/); `main` and the public docs track the latest release, while `develop` accepts ongoing work. Follow the [release process](release.md) for candidate validation and publication, and record the Git commit when reproducing results.
 
 ## Branch workflow
 
@@ -85,7 +85,7 @@ them before installed-wheel checks.
 
 ## Documentation
 
-README is the source for `docs/index.md`. Edit README, API prose, tutorial and docstrings; regenerate the index:
+README is the source for `docs/index.md`. `PYPI_README.md` is the concise package-index description selected by `pyproject.toml`; keep its API claims aligned with these docs and use absolute links. Edit README, API prose, tutorial and docstrings; regenerate the index:
 
 ```bash
 PYTHONPATH=. python examples/interactive_geometry.py --output docs/visuals/interactive
@@ -228,7 +228,7 @@ The [multivariate scaling study](multivariate.md#reproducible-scaling-comparison
 
 ## Release validation
 
-The published 0.4.0 release retains the 0.3.0 compatibility floors and symmetric S conventions; see the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md). For future releases, follow the [release review checklist](release.md) to inspect artifacts and checks on the final versioned commit, including consolidated tests. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
+The 0.4 series retains the 0.3.0 compatibility floors and symmetric S conventions; 0.4.1 changes metadata and documentation only. See the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.1/CHANGELOG.md). For future releases, follow the [release review checklist](release.md) to inspect artifacts and checks on the final versioned commit, including consolidated tests. The publish workflow uses `v*.*.*` tags or a manual dispatch and trusted publishing; invoking either is a separate release action.
 
 ## Prepared pencil validation checklist
 

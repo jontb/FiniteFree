@@ -5,7 +5,7 @@
 [![Type Checked: mypy](https://img.shields.io/badge/mypy-strict-blue.svg)](http://mypy-lang.org/)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 
-This README and the API reference describe the published **FiniteFree 0.4.0** release. Install it from [PyPI](https://pypi.org/project/finitefree/0.4.0/); see the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md) for compatibility changes and the [release process](release.md) for validation and publication.
+This README and the API reference describe **FiniteFree 0.4**. Version 0.4.1 updates package descriptions and documentation; the functional API is unchanged from 0.4.0. See [PyPI](https://pypi.org/project/finitefree/) for published versions, the [migration notes](https://github.com/jontb/FiniteFree/blob/v0.4.1/CHANGELOG.md) for compatibility details and the [release process](release.md) for validation and publication.
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](development.md#branch-workflow) for development and release promotion.
 
@@ -22,7 +22,7 @@ Install in a virtual environment with Python 3.10 or later:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install finitefree==0.4.0
+python -m pip install finitefree==0.4.1
 ```
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
@@ -67,7 +67,7 @@ runtime dependency floors are unchanged. Continuous count probabilities are
 quadrature estimates, with explicit reference densities and numerical diagnostics;
 no certified probability bounds are implied. See the [numerical workflow
 contracts](api.md#optional-numerical-workflows) and [migration
-notes](https://github.com/jontb/FiniteFree/blob/v0.4.0/CHANGELOG.md#migration-from-030).
+notes](https://github.com/jontb/FiniteFree/blob/v0.4.1/CHANGELOG.md#migration-from-030).
 
 ## Visual Showcase
 
@@ -235,7 +235,7 @@ Interactive companions are linked beside their related figures. In a built docum
 
 ## Installation
 
-Install the published release with `python -m pip install finitefree==0.4.0`. The package requires Python 3.10 or later. Use the source installation below for development.
+Install version 0.4.1 with `python -m pip install finitefree==0.4.1`. The package requires Python 3.10 or later. Use the source installation below for development.
 
 Source installations use `hatchling` and `hatch-cython` to compile `modular_fast.pyx` through the PEP 517 build backend. A compatible prebuilt wheel does not require a local C compiler.
 

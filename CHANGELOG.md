@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1
+
+### Package descriptions and documentation
+
+- Replace the broad exactness-focused package summary with reusable numerical
+  workflows and reproducible sampling. Use a concise PyPI-specific description
+  with working absolute documentation links and explicit precision/performance
+  limits; add project documentation, source, issue and changelog metadata links.
+- Include the refreshed getting-started, API, setup and validation guidance in
+  the source release. This patch changes metadata and documentation only:
+  runtime source, defaults, mathematical normalization and dependencies match
+  0.4.0. Existing callers need no migration.
+
 ## 0.4.0
 
 ### Optional numerical workflows and maintenance

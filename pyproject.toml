@@ -18,9 +18,9 @@ packages = ["finitefree"]
 
 [project]
 name = "finitefree"
-version = "0.4.0"
-description = "A Python library for exact finite free probability"
-readme = "README.md"
+version = "0.4.1"
+description = "Finite free probability with reusable numerical workflows and reproducible sampling"
+readme = "PYPI_README.md"
 authors = [
     { name = "Jonathan Borenstein" }
 ]
@@ -32,6 +32,12 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10"
 ]
+
+[project.urls]
+Documentation = "https://jontb.github.io/FiniteFree/"
+Source = "https://github.com/jontb/FiniteFree"
+Issues = "https://github.com/jontb/FiniteFree/issues"
+Changelog = "https://github.com/jontb/FiniteFree/blob/v0.4.1/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
