@@ -6,7 +6,6 @@ import argparse
 import functools
 import hashlib
 import importlib
-import json
 import os
 import platform
 import subprocess
@@ -19,6 +18,7 @@ import numpy as np
 import scipy
 
 from finitefree.hyperbolic import PreparedMatrixPencil
+from scripts._benchmark import SEED, array_digest, metadata, scaled_error, write_result
 
 
 def timed(call: Callable[[], Any], sync: Callable[[], Any]) -> tuple[Any, float]:
@@ -37,6 +37,22 @@ def process_peak_rss_bytes() -> int | None:
         return None
     scale = 1 if platform.system() == "Darwin" else 1024
     return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * scale
+
+
+def independent_reference(a: Any, x: Any, v: Any) -> tuple[Any, ...]:
+    """Dense NumPy solves and trace identities, independent of prepared factors."""
+    matrices = np.einsum("bi,ijk->bjk", x, a)
+    signs, logs = np.linalg.slogdet(matrices)
+    gradient = np.empty((len(x), len(a)))
+    hvp = np.empty_like(gradient)
+    direction = np.einsum("i,ijk->jk", v, a)
+    for row, matrix in enumerate(matrices):
+        solved_direction = np.linalg.solve(matrix, direction)
+        for j, coefficient in enumerate(a):
+            solved = np.linalg.solve(matrix, coefficient)
+            gradient[row, j] = np.trace(solved)
+            hvp[row, j] = -np.trace(solved_direction @ solved)
+    return signs, logs, gradient, hvp
 
 
 def benchmark(
@@ -61,7 +77,7 @@ def benchmark(
         context_seconds = time.perf_counter() - start
         props = xp.cuda.runtime.getDeviceProperties(xp.cuda.runtime.getDevice())
         device = str(props["name"])
-    rng = np.random.default_rng(862)
+    rng = np.random.default_rng(SEED)
     a = rng.normal(size=(m, n, n)) / (10 * n * m)
     a += a.transpose(0, 2, 1)
     a[0] = np.eye(n)
@@ -69,9 +85,10 @@ def benchmark(
     prepared, preparation = timed(
         lambda: PreparedMatrixPencil(resident_a, backend=backend), sync
     )
-    reference = PreparedMatrixPencil(a)
     records = []
     for batch in batches:
+        # A case must not change when earlier batches are omitted or reordered.
+        rng = np.random.default_rng(np.random.SeedSequence([SEED, n, m, batch]))
         x = rng.uniform(-1, 1, (batch, m))
         x[:, 0] = 2.0
         v = rng.normal(size=m)
@@ -115,12 +132,13 @@ def benchmark(
             ),
             sync,
         )
+        rss_before_reference = process_peak_rss_bytes()
+        reference = PreparedMatrixPencil(a)
         ref = reference.factor(x)
         expected = (*ref.slogdet(), ref.logabsdet_gradient(), ref.logabsdet_hvp(v))
-        errors = [
-            float(np.max(np.abs(g - e) / (1 + np.abs(e))))
-            for g, e in zip(host, expected)
-        ]
+        errors = [scaled_error(g, e) for g, e in zip(host, expected)]
+        independent = independent_reference(a, x, v)
+        independent_errors = [scaled_error(g, e) for g, e in zip(host, independent)]
         # Independent matrix slogdet and finite-difference derivative checks.
         direct = np.linalg.slogdet(np.einsum("bi,ijk->bjk", x, a))
         log_error = float(np.max(np.abs(host[1] - direct[1])))
@@ -149,6 +167,10 @@ def benchmark(
         records.append(
             {
                 "batch": batch,
+                "input_sha256": array_digest(a, x, v),
+                "accuracy_passed": errors[0] == independent_errors[0] == 0.0
+                and max(errors + independent_errors) <= 5e-10,
+                "independent_scaled_errors_sign_log_gradient_hvp": independent_errors,
                 "input_transfer_seconds": transfer if backend == "cupy" else 0.0,
                 "output_transfer_seconds": output_transfer
                 if backend == "cupy"
@@ -161,6 +183,7 @@ def benchmark(
                 "cuda_event_hvp_samples_seconds": event_samples,
                 "python_traced_peak_bytes": traced_peak,
                 "process_peak_rss_bytes": process_peak_rss_bytes(),
+                "process_peak_rss_before_reference_bytes": rss_before_reference,
                 "isolated_cupy_pool_high_water_bytes": device_peak,
                 "coefficient_storage_bytes": 2 * m * n * n * 8,
                 "lu_storage_bytes_excluding_pivots": batch * n * n * 8,
@@ -171,7 +194,11 @@ def benchmark(
         )
     root = Path(__file__).resolve().parent.parent
     return {
-        "status": "measured",
+        **metadata(Path(__file__).name),
+        "status": "measured"
+        if all(r["accuracy_passed"] for r in records)
+        else "invalid",
+        "accuracy_scaled_tolerance": 5e-10,
         "backend": backend,
         "device": device,
         "dtype": "float64",
@@ -185,7 +212,6 @@ def benchmark(
         "source_sha256": hashlib.sha256(
             (root / "finitefree/hyperbolic/prepared.py").read_bytes()
         ).hexdigest(),
-        "cpu": platform.processor(),
         "visible_cpu_count": os.cpu_count(),
         "thread_limits": {
             key: os.environ.get(key)
@@ -226,15 +252,11 @@ def main() -> None:
             "backend": args.backend,
             "error": f"{type(error).__name__}: {error}",
         }
-        rendered = json.dumps(result, indent=2, allow_nan=False) + "\n"
-        if args.output:
-            args.output.write_text(rendered)
-        print(rendered)
+        write_result(result, args.output)
         raise SystemExit(1) from error
-    rendered = json.dumps(result, indent=2, allow_nan=False) + "\n"
-    if args.output:
-        args.output.write_text(rendered)
-    print(rendered)
+    write_result(result, args.output)
+    if result["status"] != "measured":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,11 @@ These methods accept real array-like coordinates, including empty arrays. They d
 measure weights and a rank-by-rank restricted Gram matrix for repeated gap/count
 queries. Supply the reference measure density explicitly: the default is 1,
 including for Hermite kernels. Storage is O(n_points * rank + rank**2).
+The first successful `count_distribution()` or `gap_probability()` query caches
+the eigendecomposition and PMF. Later queries reuse them; each returned count-law
+object owns its arrays and metadata. Editing a returned law cannot change later
+queries. Spectrum validation remains lazy, and failed computations are retried
+on the next query.
 
 `DPPCountDistribution(restricted_matrix)` gives the finite-rank Bernoulli-sum
 count law from a real symmetric restriction. `pmf()` returns probabilities on

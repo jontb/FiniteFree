@@ -23,8 +23,15 @@ def kernel(n: int) -> OrthogonalPolynomialKernel:
 def test_verified_hermite_sum_against_independent_exact_basis() -> None:
     n: int
     points: tuple[float, float]
-    for points in [(2.0, 2.000000001), (0.5, 0.5), (-2.0, -1.999999999), (0.3, 1.2)]:
-        for n in [1, 2, 20, 40, 80]:
+    for points in [
+        (2.0, 2.000000001),
+        (0.5, 0.5),
+        (-2.0, -1.999999999),
+        (0.3, 1.2),
+        (0.5, 1.2),
+        (0.5, 0.5 + 1e-9),
+    ]:
+        for n in [1, 2, 3, 20, 40, 80]:
             with case(n=n, points=points):
                 x, y = points
                 symbol = sp.Symbol("z")

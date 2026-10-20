@@ -6,6 +6,7 @@ Gauss-Legendre quadrature: their probabilities are estimates, not enclosures.
 
 import math
 import operator
+from copy import copy
 from decimal import Decimal, localcontext
 from typing import Any, Callable, Optional, Sequence, SupportsIndex
 
@@ -133,7 +134,9 @@ class PreparedKernelQuadrature:
 
     weight_func is the density of the kernel's reference measure; it defaults
     to Lebesgue density 1. It is called once per node. No density is inferred
-    from a polynomial family. Storage is O(n_points * rank + rank**2).
+    from a polynomial family. The first successful count/gap query caches its
+    count law; returned laws own their arrays and metadata. Validation remains
+    lazy. Storage is O(n_points * rank + rank**2), including the O(rank) cache.
     """
 
     def __init__(
@@ -175,6 +178,7 @@ class PreparedKernelQuadrature:
             np.isfinite(self._gram)
         ):
             raise RuntimeError("Quadrature exceeds finite float64 range")
+        self._cached_distribution: Optional[DPPCountDistribution] = None
 
     @property
     def nodes(self) -> NDArray[np.float64]:
@@ -188,13 +192,18 @@ class PreparedKernelQuadrature:
     def gram(self) -> NDArray[np.float64]:
         return self._gram.copy()
 
+    def _count_law(self) -> "DPPCountDistribution":
+        if self._cached_distribution is None:
+            self._cached_distribution = DPPCountDistribution(self._gram, estimated=True)
+        return self._cached_distribution
+
     def count_distribution(self) -> "DPPCountDistribution":
-        """Compute a count law from this restriction without reevaluating it."""
-        return DPPCountDistribution(self._gram, estimated=True)
+        """Return an owned count law, reusing its successful first computation."""
+        return self._count_law()._copy()
 
     def gap_probability(self) -> float:
         """Estimated probability of no points, using the same restricted Gram."""
-        return float(self.count_distribution().pmf(0))
+        return float(self._count_law().pmf(0))
 
 
 class DPPCountDistribution:
@@ -226,6 +235,12 @@ class DPPCountDistribution:
         mass = math.fsum(pmf)
         self.probability_mass_error = abs(mass - 1)
         self._pmf = pmf / mass
+
+    def _copy(self) -> "DPPCountDistribution":
+        result = copy(self)
+        result._eigenvalues = self._eigenvalues.copy()
+        result._pmf = self._pmf.copy()
+        return result
 
     @property
     def eigenvalues(self) -> NDArray[np.float64]:

@@ -208,7 +208,13 @@ CI generates both the geometry explorers and spectral dashboards, exercises drop
 
 ## Benchmarks
 
-These small cases exercise all five benchmark tools. They write JSON only at the supplied output paths:
+For the prepared-pencil, prepared-kernel and streaming measurement plan, fixed
+inputs, bounded runner and optimization gates, see the
+[numerical benchmark protocol](benchmark-plan.md). Its smoke profile validates
+tooling; larger measurements are a separate run.
+
+These small cases exercise the root, transform, scalar-kernel and projection
+tools. They write JSON only at the supplied output paths:
 
 ```bash
 PYTHONPATH=. python scripts/benchmark_roots.py --degrees 32 --output roots-benchmark.json

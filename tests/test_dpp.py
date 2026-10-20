@@ -1,5 +1,6 @@
 import itertools
 import math
+import warnings
 from typing import Any
 
 import flint
@@ -30,31 +31,56 @@ def test_exact_kernel_representations() -> None:
             assert gap_probability_discrete(kernel, [0, 1]) == flint.fmpq(3, 16)
             with pytest.raises(TypeError):
                 kernel(0.5, 1)
+            # Retain the three-state example with a deterministic occupied state.
+            third = flint.fmpq(1, 3)
+            kernel = DiscreteFiniteKernel(
+                representation(
+                    [[2 * third, third, 0], [third, 2 * third, 0], [0, 0, 1]]
+                )
+            )
+            assert kernel(0, 0) == kernel.k_point_correlation([0]) == 2 * third
+            assert kernel(0, 1) == third
+            assert kernel(2, 2) == 1
+            assert kernel.k_point_correlation([0, 1]) == third
+            assert gap_probability_discrete(kernel, [0, 1]) == 0
 
 
-@pytest.mark.parametrize("states", [[2, 0], [2, 0, 1]])
-def test_sampling_kernel_on_requested_states(states: list[int]) -> None:
+def test_sampling_kernel_on_requested_states() -> None:
     kernel = DiscreteFiniteKernel(np.diag([0.0, 1.0, 1.0]))
-    assert set(sample_discrete(kernel, states)) == set(states) & {1, 2}
+    for states in ([2, 0], [2, 0, 1]):
+        with case(states=states):
+            assert set(sample_discrete(kernel, states)) == set(states) & {1, 2}
     assert sample_discrete(kernel, []) == []
 
 
-def test_invalid_sampling_kernels() -> None:
+def test_invalid_kernels_are_rejected_before_random_draws(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("Invalid kernel consumed randomness")
+
+    monkeypatch.setattr(np.random, "rand", unexpected)
+    monkeypatch.setattr(np.random, "choice", unexpected)
     matrix: Any
-    message: str
-    for matrix, message in [
-        (np.eye(2) * 2, "eigenvalues"),
-        (np.diag([-0.01, 0.5]), "eigenvalues"),
-        (np.array([[0.5, 0.1], [0.0, 0.5]]), "symmetric"),
-        (np.diag([np.nan, 0.5]), "finite"),
-        (np.diag([np.inf, 0.5]), "finite"),
-        (np.eye(3), "shape"),
-        (np.array([0.5, 0.5]), "shape"),
-        (np.eye(2, dtype=complex), "real symmetric"),
-    ]:
-        with case(matrix=matrix, message=message):
-            with pytest.raises(ValueError, match=message):
-                sample_discrete(matrix, [0, 1])
+    for prepared in (False, True):
+        for matrix, states, message in [
+            (np.eye(2) * 2, [0, 1], "eigenvalues"),
+            (np.diag([-0.01, 0.5]), [0, 1], "eigenvalues"),
+            (np.diag([-0.1, 0.5]), [0, 1], "eigenvalues"),
+            (np.array([[0.5, 0.1], [0.0, 0.5]]), [0, 1], "symmetric"),
+            (np.diag([np.nan, 0.5]), [0, 1], "finite"),
+            (np.diag([np.inf, 0.5]), [0, 1], "finite"),
+            (np.eye(3), [0, 1], "shape"),
+            (np.array([0.5, 0.5]), [0, 1], "shape"),
+            (np.eye(2, dtype=complex), [0, 1], "real symmetric"),
+            (np.eye(2), [0, 0], "distinct"),
+        ]:
+            with case(prepared=prepared, matrix=matrix, states=states):
+                with pytest.raises(ValueError, match=message):
+                    if prepared:
+                        PreparedDiscreteDPP(matrix, states)
+                    else:
+                        sample_discrete(matrix, states)
 
 
 def test_sampling_boundaries_preserve_state_labels_and_projection_rank() -> None:
@@ -78,27 +104,34 @@ def test_sampling_boundaries_preserve_state_labels_and_projection_rank() -> None
         assert set(sample) == {0, 1, 2}
 
 
-@pytest.mark.parametrize("prepared", [False, True])
-@pytest.mark.parametrize("representation", ["array", "object", "callable"])
-@pytest.mark.parametrize("entry", [complex(0.5), complex(0.5, 0.25)])
 def test_complex_kernels_are_rejected_before_casting_or_random_draws(
-    prepared: bool,
-    representation: str,
-    entry: complex,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    matrix = np.array([[entry]], dtype=object if representation == "object" else None)
-    kernel = DiscreteFiniteKernel(matrix) if representation == "callable" else matrix
-
     def unexpected(*args: Any, **kwargs: Any) -> Any:
         pytest.fail("Invalid kernel consumed randomness")
 
     monkeypatch.setattr(np.random, "rand", unexpected)
-    with pytest.raises(ValueError, match="real symmetric"):
-        if prepared:
-            PreparedDiscreteDPP(kernel, [0])
-        else:
-            sample_discrete(kernel, [0])
+    monkeypatch.setattr(np.random, "choice", unexpected)
+    for prepared, representation, entry in itertools.product(
+        (False, True),
+        ("array", "object", "callable"),
+        (complex(0.5), complex(0.5, 0.25), np.complex64(0.5), np.complex128(0.5)),
+    ):
+        with case(prepared=prepared, representation=representation, entry=entry):
+            matrix = np.array(
+                [[entry]], dtype=object if representation == "object" else None
+            )
+            kernel = (
+                DiscreteFiniteKernel(matrix) if representation == "callable" else matrix
+            )
+            # A lossy cast must not be accepted merely because it emits a warning.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                with pytest.raises(ValueError, match="real symmetric"):
+                    if prepared:
+                        PreparedDiscreteDPP(kernel, [0])
+                    else:
+                        sample_discrete(kernel, [0])
 
 
 def test_raw_and_prepared_sampling_against_exact_subset_laws(

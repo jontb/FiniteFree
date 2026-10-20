@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Any
+from typing import Any, Callable
 
 import flint
 import numpy as np
@@ -95,7 +95,18 @@ def test_generic_normalization_precedes_float_conversion() -> None:
     )
 
 
-def test_quadrature_matches_analytic_rank_two_restriction_and_reuses_density() -> None:
+def test_quadrature_matches_analytic_rank_two_restriction_and_reuses_density(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    decompositions = 0
+    original = np.linalg.eigvalsh
+
+    def counted(matrix: Any) -> Any:
+        nonlocal decompositions
+        decompositions += 1
+        return original(matrix)
+
+    monkeypatch.setattr(np.linalg, "eigvalsh", counted)
     # Orthonormal 1/sqrt(2), sqrt(3/2)*x in Lebesgue measure on [-1,1].
     kernel = OrthogonalPolynomialKernel(
         [
@@ -105,39 +116,111 @@ def test_quadrature_matches_analytic_rank_two_restriction_and_reuses_density() -
         ],
         [2, sp.Rational(2, 3)],
     )
-    called = []
-
-    def density(x: float) -> float:
-        called.append(x)
-        return 1.0
-
-    quadrature = kernel.prepare_numeric().quadrature(0, 1, 8, density)
     gram = np.array([[0.5, math.sqrt(3) / 4], [math.sqrt(3) / 4, 0.5]])
-    np.testing.assert_allclose(quadrature.gram, gram, atol=5e-15)
-    law = quadrature.count_distribution()
-    # det(G)=1/16, trace(G)=1 => PMF=(1/16,7/8,1/16).
-    np.testing.assert_allclose(law.pmf(), [1 / 16, 7 / 8, 1 / 16], atol=2e-15)
-    assert law.mean == pytest.approx(1)
-    assert law.variance == pytest.approx(1 / 8)
-    assert quadrature.gap_probability() == pytest.approx(1 / 16)
-    assert law.estimated
-    assert len(called) == 8
-    for array in [
-        quadrature.nodes,
-        quadrature.weights,
-        quadrature.gram,
-        law.eigenvalues,
-        law.pmf(),
-    ]:
-        array[:] = 0
-    np.testing.assert_allclose(quadrature.gram, gram, atol=5e-15)
-    assert len(called) == 8
-    assert law.pmf(0) == pytest.approx(gap_probability_continuous(kernel, 0, 1, 8))
-    np.testing.assert_allclose(
-        count_distribution_continuous(kernel, 0, 1, 8).pmf(), law.pmf()
-    )
+    # For the standard Gaussian basis 1,x on [-1,1], oddness kills the
+    # cross term; integration by parts gives integral(x^2 phi)=mass-2*phi(1).
+    mass = math.erf(1 / math.sqrt(2))
+    second = mass - 2 * math.exp(-0.5) / math.sqrt(2 * math.pi)
+    scenarios: list[tuple[Any, ...]] = [
+        (
+            "Lebesgue",
+            kernel,
+            0,
+            1,
+            8,
+            lambda x: 1.0,
+            gram,
+            [1 / 16, 7 / 8, 1 / 16],
+            5e-15,
+            2e-15,
+        ),
+        (
+            "Gaussian",
+            hermite_kernel(2),
+            -1,
+            1,
+            10,
+            lambda x: math.exp(-x * x / 2) / math.sqrt(2 * math.pi),
+            np.diag([mass, second]),
+            [
+                (1 - mass) * (1 - second),
+                mass + second - 2 * mass * second,
+                mass * second,
+            ],
+            5e-13,
+            5e-13,
+        ),
+    ]
+    for name, kernel, a, b, nodes, weight, gram, pmf, gram_tol, pmf_tol in scenarios:
+        with case(measure=name):
+            # Exercise the public default density as well as an explicit one.
+            density_kwargs = {} if name == "Lebesgue" else {"weight_func": weight}
+            called: list[float] = []
+
+            def density(
+                x: float,
+                called: list[float] = called,
+                weight: Callable[[float], float] = weight,
+            ) -> float:
+                called.append(x)
+                return float(weight(x))
+
+            before = decompositions
+            quadrature = kernel.prepare_numeric().quadrature(a, b, nodes, density)
+            assert decompositions == before  # Count-law validation stays lazy.
+            np.testing.assert_allclose(quadrature.gram, gram, rtol=0, atol=gram_tol)
+            if name == "Gaussian":  # Also exercise a gap query before a count query.
+                assert quadrature.gap_probability() == pytest.approx(
+                    pmf[0], rel=0, abs=pmf_tol
+                )
+            law = quadrature.count_distribution()
+            np.testing.assert_allclose(law.pmf(), pmf, rtol=0, atol=pmf_tol)
+            assert law.mean == pytest.approx(np.trace(gram))
+            assert law.variance == pytest.approx(np.trace(gram - gram @ gram))
+            assert quadrature.gap_probability() == pytest.approx(
+                pmf[0], rel=0, abs=pmf_tol
+            )
+            assert law.estimated
+            assert len(called) == nodes
+            for array in (
+                quadrature.nodes,
+                quadrature.weights,
+                quadrature.gram,
+                law.eigenvalues,
+                law.pmf(),
+            ):
+                array[:] = 0
+            np.testing.assert_allclose(quadrature.gram, gram, rtol=0, atol=gram_tol)
+            assert len(called) == nodes
+            # Returned laws and their mutable metadata must be independent of
+            # the cache, in addition to the owned numerical exports above.
+            law.estimated = False
+            law.spectral_correction = 99
+            law.probability_mass_error = 99
+            again = quadrature.count_distribution()
+            assert again is not law and again.estimated
+            assert again.spectral_correction < 1e-12
+            assert again.probability_mass_error < 1e-12
+            np.testing.assert_allclose(again.pmf(), pmf, rtol=0, atol=pmf_tol)
+            assert quadrature.gap_probability() == pytest.approx(
+                pmf[0], rel=0, abs=pmf_tol
+            )
+            assert decompositions == before + 1
+            # The legacy path must match the analytic value, not just [0,1].
+            assert gap_probability_continuous(
+                kernel, a, b, nodes, **density_kwargs
+            ) == pytest.approx(pmf[0], rel=0, abs=pmf_tol)
+            np.testing.assert_allclose(
+                count_distribution_continuous(
+                    kernel, a, b, nodes, **density_kwargs
+                ).pmf(),
+                pmf,
+                rtol=0,
+                atol=pmf_tol,
+            )
     empty = hermite_kernel(0).prepare_numeric().quadrature(-1, 1)
     np.testing.assert_array_equal(empty.count_distribution().pmf(), [1])
+    assert empty.gap_probability() == 1
 
 
 def test_count_law_matches_enumeration_rotation_and_exact_gap() -> None:
@@ -218,8 +301,14 @@ def test_numeric_validation_and_roundoff_diagnostics() -> None:
     ]:
         with case(a=a, b=b, order=order), pytest.raises(ValueError):
             prepared.quadrature(a, b, order, density)
-    with pytest.raises(ValueError, match="eigenvalues"):
-        prepared.quadrature(-3, 3, 20).count_distribution()  # Missing Gaussian measure.
+    invalid = prepared.quadrature(-3, 3, 20)  # Missing Gaussian measure.
+    for query in (
+        invalid.count_distribution,
+        invalid.gap_probability,
+        invalid.count_distribution,
+    ):
+        with pytest.raises(ValueError, match="eigenvalues"):
+            query()  # Failed construction must not leave a usable cached law.
     for norm in [0, -1, sp.Symbol("h"), sp.I]:
         with case(norm=norm), pytest.raises(ValueError, match="Basis"):
             OrthogonalPolynomialKernel(
