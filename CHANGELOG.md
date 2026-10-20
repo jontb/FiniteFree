@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Cache the first successful prepared-quadrature count law for repeated count
+  and gap queries. Returned laws retain independent arrays and metadata;
+  spectrum validation remains lazy and failed computations are retried.
+
 ## 0.4.1
 
 ### Package descriptions and documentation
