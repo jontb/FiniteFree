@@ -558,7 +558,7 @@ The [development guide](docs/development.md) gives the complete lint, typing, co
 - **`test_transformations.py`**: Exact algebraic variable scaling (dilation), shifts, powers, and reciprocal-root polynomial transformations.
 - **`test_convolutions.py`**: Additive and multiplicative explicit formulas and hyperbolic geometry preservation.
 - **`test_transforms.py`**: Exact recursive generating functions and high-order finite free cumulant strict additivity ($\kappa_n^{(d)}$).
-- **`test_empirical.py`**: Expected characteristic polynomial identities for GOE ($\beta=1$), GUE ($\beta=2$), and GSE ($\beta=4$) random matrix ensembles using the `ensembles` module.
+- **`test_ensembles.py`**: Gaussian, Wishart and Haar matrix structure, characteristic-coefficient laws, and isolation of explicit random-number generators.
 - **`test_hyperbolic.py`**: Multivariate homogeneous polynomials, CRT grid interpolations, sparse FLINT arrays, and Jacobi SLP evaluations.
 - **`test_orthogonal.py`**: Exact hypergeometric and multivariate orthogonal polynomial families (Jacobi, Hahn, Jack).
 - **`test_numerical_roots.py`**: Independent 192-bit Arb comparisons, tiny positive hard-edge roots, affine scales, solver fallback and cache behavior.

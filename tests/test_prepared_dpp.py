@@ -52,29 +52,6 @@ def test_prepared_snapshots_own_matrices_labels_and_exports() -> None:
                 prepared.state_space = ("changed",)  # type: ignore[misc]
 
 
-@pytest.mark.parametrize(
-    "matrix,states",
-    [
-        (np.eye(2) * 2, [0, 1]),
-        (np.diag([-0.1, 0.5]), [0, 1]),
-        (np.eye(3), [0, 1]),
-        (np.eye(2), [0, 0]),
-        (np.diag([np.nan, 0.5]), [0, 1]),
-        (np.array([[0.5, 0.1], [0, 0.5]]), [0, 1]),
-        (np.eye(2, dtype=complex), [0, 1]),
-    ],
-)
-def test_preparation_rejects_invalid_kernels_before_rng(
-    matrix: Any, states: list[int], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def unexpected(*args: Any, **kwargs: Any) -> Any:
-        pytest.fail("Invalid preparation drew random numbers")
-
-    monkeypatch.setattr(np.random, "rand", unexpected)
-    with pytest.raises(ValueError):
-        PreparedDiscreteDPP(matrix, states)
-
-
 def test_sampler_representations_preserve_preparation_and_rng_sequences() -> None:
     state = np.random.get_state()
     try:

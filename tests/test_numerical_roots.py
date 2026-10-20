@@ -33,34 +33,48 @@ def reference_roots(p: RealRootedPolynomial) -> Any:
         )
 
 
-@pytest.mark.parametrize(
-    "factory",
-    [
-        hermite_polynomial,
-        lambda n: hermite_polynomial(n, False),
-        legendre_polynomial,
-        chebyshev_t_polynomial,
-        chebyshev_u_polynomial,
-        lambda n: laguerre_polynomial(n, 0),
-        lambda n: jacobi_polynomial(n, sp.Rational(-1, 2), sp.Rational(-1, 2)),
-        lambda n: jacobi_polynomial(n, sp.Rational(-3, 4), sp.Rational(3, 2)),
-        gue_expected_poly,
-        lambda n: wishart_expected_poly(n, 2 * n),
-    ],
-)
-def test_recurrence_roots_against_independent_arb(
-    factory: Callable[[int], RealRootedPolynomial],
-) -> None:
-    degree: int
-    for degree in [2, 17, 64]:
-        with case(degree=degree):
-            p = factory(degree)
-            assert p._root_recurrence is not None
-            expected = reference_roots(p)
-            actual = p.evaluate_roots_float64(exact=False)
-            np.testing.assert_allclose(
-                actual, expected, atol=3e-14 * max(1, max(abs(expected))), rtol=3e-13
-            )
+def test_recurrence_roots_against_independent_arb() -> None:
+    families: list[tuple[str, Callable[[int], RealRootedPolynomial]]] = [
+        ("Hermite physicist", hermite_polynomial),
+        ("Hermite probabilist", lambda n: hermite_polynomial(n, False)),
+        ("Legendre", legendre_polynomial),
+        ("Chebyshev T", chebyshev_t_polynomial),
+        ("Chebyshev U", chebyshev_u_polynomial),
+        ("Laguerre", lambda n: laguerre_polynomial(n, 0)),
+        (
+            "Jacobi symmetric",
+            lambda n: jacobi_polynomial(n, sp.Rational(-1, 2), sp.Rational(-1, 2)),
+        ),
+        (
+            "Jacobi asymmetric",
+            lambda n: jacobi_polynomial(n, sp.Rational(-3, 4), sp.Rational(3, 2)),
+        ),
+        ("GUE", gue_expected_poly),
+        ("Wishart", lambda n: wishart_expected_poly(n, 2 * n)),
+    ]
+    for name, factory in families:
+        for degree in [2, 17, 64]:
+            with case(family=name, degree=degree):
+                p = factory(degree)
+                assert p._root_recurrence is not None
+                expected = reference_roots(p)
+                actual = p.evaluate_roots_float64(exact=False)
+                np.testing.assert_allclose(
+                    actual,
+                    expected,
+                    atol=3e-14 * max(1, max(abs(expected))),
+                    rtol=3e-13,
+                )
+                assert not actual.flags.writeable
+                # The numerical path must not certify its own answer or poison
+                # a later independent high-precision public request.
+                with PrecisionContext(degree=degree, prec=192):
+                    np.testing.assert_allclose(
+                        p.evaluate_roots_float64(exact=True),
+                        expected,
+                        rtol=3e-13,
+                        atol=3e-14,
+                    )
 
 
 def test_laguerre_tiny_positive_hard_edge() -> None:

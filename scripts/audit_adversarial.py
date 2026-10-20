@@ -53,6 +53,41 @@ import finitefree
 finitefree.sample_haar_unitary = lambda dimension: np.eye(dimension, dtype=complex)
 """,
     ),
+    "complex_dpp_coercion": (
+        "tests/test_dpp.py::test_complex_kernels_are_rejected_before_casting_or_random_draws",
+        """
+import numpy as np
+import finitefree.dpp as dpp
+original = dpp._validated_discrete_eigensystem
+def wrong(kernel, states):
+    if isinstance(kernel, np.ndarray) and np.iscomplexobj(kernel):
+        kernel = kernel.real
+    return original(kernel, states)
+dpp._validated_discrete_eigensystem = wrong
+""",
+    ),
+    "constant_continuous_gap": (
+        "tests/test_numerical_counts.py::test_quadrature_matches_analytic_rank_two_restriction_and_reuses_density",
+        """
+import finitefree
+import finitefree.dpp as dpp
+finitefree.gap_probability_continuous = dpp.gap_probability_continuous = lambda *args, **kwargs: 0.5
+""",
+    ),
+    "cancelled_count_tail": (
+        "tests/test_numerical_counts.py::test_count_law_matches_enumeration_rotation_and_exact_gap",
+        """
+from finitefree import DPPCountDistribution
+DPPCountDistribution.sf = lambda self, k: 1 - self.cdf(k)
+""",
+    ),
+    "shared_quadrature_law": (
+        "tests/test_numerical_counts.py::test_quadrature_matches_analytic_rank_two_restriction_and_reuses_density",
+        """
+from finitefree import DPPCountDistribution
+DPPCountDistribution._copy = lambda self: self
+""",
+    ),
 }
 
 
