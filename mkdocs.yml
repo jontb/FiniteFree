@@ -43,6 +43,7 @@ nav:
   - Multivariate Workflows: multivariate.md
   - GUE Spectral Workflow: gue-workflow.md
   - Development: development.md
+  - Numerical Benchmark Plan: benchmark-plan.md
   - Code Map: code-map.md
   - Release Process: release.md
 validation:
