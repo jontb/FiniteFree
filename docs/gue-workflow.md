@@ -46,6 +46,52 @@ The construction follows the [orthogonal-polynomial recurrence and kernel
 identities](https://dlmf.nist.gov/18.2) and the
 [orthogonal-polynomial ensemble framework](https://arxiv.org/abs/1709.01287).
 
+## Streaming interval summaries
+
+Use `StreamingEmpiricalComparison` when coefficient moments and configured
+interval-count summaries suffice. The object retains no matrices or individual
+eigenvalues; its storage depends on dimension and configured intervals rather
+than the number of draws. Keep the `EmpiricalComparison` workflow above when
+later plots or individual observations are needed.
+
+This example uses 16 seeded GUE matrices of dimension 4 at the default variance
+scale `1/d`. Counts include both endpoints of `[-1, 1]`, and count variance uses
+`ddof=1`. The small list of reference counts is an example-only allocation for
+checking the summaries; the streaming object does not need it.
+
+```python
+import numpy as np
+from finitefree import StreamingEmpiricalComparison, gue_expected_poly, sample_gue
+
+dimension = 4
+rng = np.random.default_rng(2026)
+interval = (-1.0, 1.0)
+comparison = StreamingEmpiricalComparison(
+    gue_expected_poly(dimension), intervals=[interval]
+)
+reference_counts = []
+for _ in range(16):
+    matrix = sample_gue(dimension, rng=rng)
+    comparison.update(matrix)
+    eigenvalues = np.linalg.eigvalsh(matrix)
+    reference_counts.append(
+        np.count_nonzero((eigenvalues >= interval[0]) & (eigenvalues <= interval[1]))
+    )
+
+counts = np.asarray(reference_counts)
+assert comparison.samples == len(counts)
+np.testing.assert_allclose(comparison.count_mean, [counts.mean()])
+np.testing.assert_allclose(comparison.count_variance, [counts.var(ddof=1)])
+np.testing.assert_array_equal(
+    comparison.count_histograms[0], np.bincount(counts, minlength=dimension + 1)
+)
+```
+
+Each NumPy count comes from the same matrix passed to `update`, so these
+assertions check summary aggregation on identical draws. Coefficient checks via
+`verify_coefficients()` are finite-sample diagnostics and can report a mismatch
+on a small random trial.
+
 ## Bounded concentration showcase
 
 ```bash
