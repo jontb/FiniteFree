@@ -19,6 +19,29 @@ python-flint may also require FLINT/GMP/MPFR source-build prerequisites.
 Start with the [tutorial](https://jontb.github.io/FiniteFree/tutorial/) or the
 [API reference](https://jontb.github.io/FiniteFree/api/).
 
+## Quick example
+
+```python
+import numpy as np
+from finitefree import gue_expected_poly, sample_gue
+
+polynomial = gue_expected_poly(4)
+roots = polynomial.evaluate_roots_float64(exact=False)
+matrix = sample_gue(4, rng=np.random.default_rng(2026))
+
+assert roots.shape == (4,)
+assert matrix.shape == (4, 4)
+np.testing.assert_allclose(matrix, matrix.conj().T)
+```
+
+This constructs the expected characteristic polynomial of a 4 × 4 Gaussian
+unitary ensemble (GUE) matrix and samples one Hermitian matrix with an explicit
+random-number generator. The assertion checks the sample against its conjugate
+transpose. The polynomial roots are not the mean sampled eigenvalues; root
+evaluation and sampling use floating-point arithmetic. See the
+[GUE workflow](https://jontb.github.io/FiniteFree/gue-workflow/) for normalization
+and interpretation.
+
 ## Main workflows
 
 - **Polynomial calculations:** finite free convolutions, cumulants, transforms
