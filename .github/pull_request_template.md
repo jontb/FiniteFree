@@ -1,6 +1,7 @@
 ## Problem and resulting behavior
 
-<!-- Link an issue if one exists. Explain the trigger and what changes. -->
+<!-- Link an issue if one exists. Explain the trigger and what changes.
+For a new API, convention change or substantial refactor, link the scope discussion. -->
 
 ## Mathematical contract and compatibility
 
@@ -14,7 +15,9 @@ for a numerical fix. Distinguish local checks from GitHub CI and unexecuted plan
 
 ## Remaining limits and assistance
 
-<!-- Record numerical/hardware limitations and material AI assistance. -->
+<!-- Record numerical/hardware limitations and unrun checks. If materially assisted
+by AI/agents, briefly describe their role and what you reviewed and verified.
+Prompt transcripts are not required. -->
 
 - [ ] The base branch is `develop` for routine contributions.
 - [ ] Regression tests and relevant documentation accompany behavior changes.

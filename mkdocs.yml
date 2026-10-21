@@ -45,6 +45,7 @@ nav:
   - Development: development.md
   - Numerical Benchmark Plan: benchmark-plan.md
   - Code Map: code-map.md
+  - Contributing: https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md
   - Release Process: release.md
 validation:
   links:
