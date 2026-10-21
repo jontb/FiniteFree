@@ -10,6 +10,7 @@ def main() -> None:
     root = Path(__file__).resolve().parent.parent
     paths = [
         root / "README.md",
+        root / "PYPI_README.md",
         root / "CHANGELOG.md",
         *sorted((root / "docs").glob("*.md")),
     ]
