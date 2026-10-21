@@ -9,7 +9,7 @@ This README and the API reference describe **FiniteFree 0.4**. Version 0.4.1 upd
 
 `main` and the [published documentation](https://jontb.github.io/FiniteFree/) track the latest PyPI release. Ongoing work lives on [`develop`](https://github.com/jontb/FiniteFree/tree/develop); maintenance pull requests target that branch. See the [branch workflow](development.md#branch-workflow) for development and release promotion.
 
-Contributing? Start with the [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md), the [code map](code-map.md) and `python scripts/check.py` for routine checks. New contributors and reproducible bug reports are welcome.
+Contributing? Start with the [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md), [open contribution opportunities](https://github.com/jontb/FiniteFree/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22) and the [code map](code-map.md). New contributors, reproducible bug reports and agent-assisted PRs are welcome. Agents should read [AGENTS.md](https://github.com/jontb/FiniteFree/blob/develop/AGENTS.md); community contributions receive maintainer review before merging. Run `python scripts/check.py` for routine checks.
 
 FiniteFree is a Python library for finite free probability, random matrix sampling and spectral computation. Its focus is efficient repeated calculations, numerical stability and reproducible workflows, with reusable kernels, prepared matrix pencils and bounded-storage empirical summaries.
 

@@ -6,6 +6,23 @@ pull requests before starting. Discuss new public APIs, changed mathematical
 conventions and substantial refactors in an issue first; small fixes can go
 straight to a pull request.
 
+## Finding a contribution
+
+Start with issues labeled
+[`help wanted`](https://github.com/jontb/FiniteFree/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22).
+These describe work the maintainer welcomes; the
+[`good first issue`](https://github.com/jontb/FiniteFree/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+subset has a smaller scope and more setup guidance. Read the issue's acceptance
+criteria and recent discussion, then check for an existing PR. Leave a comment
+when starting to help others avoid duplicate work. Ask in the issue if the scope
+or validation is unclear; a label is an invitation to contribute, not a promise
+that any implementation will be accepted.
+
+Useful contributions also include trying the quick start in a fresh environment,
+reporting a minimal reproducible failure, clarifying a mathematical convention
+and improving a worked example. You do not need to use an agent or propose a new
+feature to help.
+
 ## Branches and pull requests
 
 Start a short-lived branch from the current `develop` branch and open your pull
@@ -18,7 +35,9 @@ commits for independently reviewable changes. Avoid unrelated formatting or
 generated assets. Describe the problem, resulting behavior, validation and
 remaining limits in the PR template; link an existing issue when applicable.
 
-Required CI checks must pass. The current single-maintainer policy requires
+Community PRs are reviewed and merged by a maintainer. Required CI checks must
+pass, but passing checks alone does not imply acceptance. The current
+single-maintainer policy requires
 **zero approving reviews** and permits the maintainer to merge their own PRs.
 Peer review is encouraged when available; there are no mandatory code-owner
 approvals. Request a fresh review after substantive changes and resolve concrete
@@ -91,7 +110,23 @@ unreleased behavior documented with its development source.
 
 ## AI-assisted contributions
 
-AI-assisted work is welcome. Disclose material assistance in the PR and review
-the resulting code, references and tests yourself. Contributors remain
-responsible for correctness and reproducibility; generated claims need the same
-independent evidence as other contributions.
+AI-assisted and agent-driven work is welcome, and using these tools is optional.
+Start your tool with the repository's [AGENTS.md](AGENTS.md); if it does not load
+that file automatically, add it to the project context yourself. The same scope,
+correctness and review standards apply to all contributions.
+
+For substantial changes, agree on the scope in an issue before starting an
+implementation. Keep the agent on that task and review its diff, references and
+tests before requesting maintainer review. You should be able to explain the
+resulting behavior and validation. Do not submit unchecked agent output or a
+collection of unrelated generated changes.
+
+Disclose material assistance in the PR with a short description of how the tool
+was used, what you reviewed and which checks you ran. Prompt transcripts and
+paid tools are not required. Contributors remain responsible for correctness
+and reproducibility; generated claims need the same independent evidence as
+other contributions. Report missing validation or uncertain results openly.
+
+Agent instructions and automated reviews do not grant merge or release
+authority. Maintainer acceptance is required for community contributions;
+publication follows the separate release process above.
