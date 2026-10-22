@@ -11,6 +11,8 @@ This README and the API reference describe **FiniteFree 0.4**. Version 0.4.1 upd
 
 Contributing? Start with the [contribution guide](https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md), [open contribution opportunities](https://github.com/jontb/FiniteFree/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22) and the [code map](docs/code-map.md). New contributors, reproducible bug reports and agent-assisted PRs are welcome. Agents should read [AGENTS.md](https://github.com/jontb/FiniteFree/blob/develop/AGENTS.md); community contributions receive maintainer review before merging. Run `python scripts/check.py` for routine checks.
 
+See the proposed [feature roadmap](docs/roadmap.md) and [phased implementation packets](docs/implementation-packets.md) for Phase 1 and 2 transforms, their empirical matrix counterparts, and ensemble samplers.
+
 FiniteFree is a Python library for finite free probability, random matrix sampling and spectral computation. Its focus is efficient repeated calculations, numerical stability and reproducible workflows, with reusable kernels, prepared matrix pencils and bounded-storage empirical summaries.
 
 Rational polynomial construction, coefficient convolutions and rational finite cumulants use FLINT integer and rational arithmetic. Exactness applies to those algebraic operations; roots, sampled matrices and continuous gap/count probabilities use numerical methods with documented precision and conditioning limits. Performance depends on the input and selected path; see the [API contracts](docs/api.md) and [reproducible benchmarks](docs/development.md#benchmarks).
