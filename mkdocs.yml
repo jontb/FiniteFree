@@ -43,6 +43,23 @@ nav:
   - Multivariate Workflows: multivariate.md
   - GUE Spectral Workflow: gue-workflow.md
   - Development: development.md
+  - Feature Roadmap: roadmap.md
+  - Implementation Packets:
+      - Overview: implementation-packets.md
+      - Phase 0:
+          - P00 Baseline: packets/p00-baseline.md
+          - P00 Evidence Report: p00-baseline-report.md
+      - Phase 1:
+          - P01 Exact Moments: packets/p01-exact-moments.md
+          - P01 Scope Proposal: p01-scope.md
+          - P02 Inverse Finite R: packets/p02-inverse-finite-r.md
+          - P03 Beta Hermite: packets/p03-beta-hermite.md
+          - P04 Beta Laguerre: packets/p04-beta-laguerre.md
+          - P16 Existing Empirical Transforms: packets/p16-empirical-legacy-transforms.md
+      - Phase 2:
+          - P05 Rectangular Convolution: packets/p05-rectangular-convolution.md
+          - P06 Rectangular Cumulants: packets/p06-rectangular-cumulants.md
+          - P07 Jacobi MANOVA: packets/p07-jacobi-manova.md
   - Numerical Benchmark Plan: benchmark-plan.md
   - Code Map: code-map.md
   - Contributing: https://github.com/jontb/FiniteFree/blob/develop/CONTRIBUTING.md
