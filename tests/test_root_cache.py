@@ -1,3 +1,4 @@
+from fractions import Fraction
 from typing import Any, cast
 
 import flint
@@ -91,3 +92,28 @@ def test_rejected_complex_roots_do_not_fill_cache() -> None:
         raise AssertionError("Complex roots were accepted")
     assert p._roots_cached is None
     assert not p._roots_cached_exact
+
+
+def test_from_roots_cache_is_correctly_rounded_without_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    roots = [
+        Fraction(1, 3),
+        Fraction(-7, 3),
+        Fraction(10**20 + 1, 7),
+        Fraction(1, 10**30),
+        Fraction(1, 3),
+    ]
+    p = RealRootedPolynomial.from_roots(roots)
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("known exact roots should not be isolated again")
+
+    monkeypatch.setattr(p, "_evaluate_roots_float64_uncached", forbidden)
+    expected = sorted(float(root) for root in roots)  # Fraction rounds correctly
+    for prec in [53, 4096]:
+        with case(prec=prec):
+            with PrecisionContext(degree=p.degree, prec=prec):
+                actual = p.evaluate_roots_float64(exact=True)
+            assert actual.tolist() == expected
+            assert not actual.flags.writeable

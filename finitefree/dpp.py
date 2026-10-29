@@ -51,14 +51,30 @@ class BaseKernel(abc.ABC):
 
 
 class DiscreteFiniteKernel(BaseKernel):
-    """Discrete state space kernel defined by a symmetric matrix representation."""
+    """Discrete state space kernel defined by a symmetric matrix representation.
+
+    States are the integer indices 0..M-1. The kernel owns a snapshot of K, so
+    later edits to the caller's matrix do not change it. Negative indices are
+    rejected with IndexError rather than wrapping to the end of the matrix.
+    """
 
     def __init__(self, K: Any) -> None:
-        """K can be a list of lists, a numpy array, or a flint.fmpq_mat."""
-        self._K = K
+        """K can be a list of lists, a numpy array, or a flint.fmpq_mat.
+
+        An fmpq_mat or ndarray is copied as the same type; a nested sequence is
+        copied row by row as a list of lists retaining the original entries.
+        """
+        if isinstance(K, flint.fmpq_mat):
+            self._K: Any = flint.fmpq_mat(K)
+        elif isinstance(K, np.ndarray):
+            self._K = K.copy()
+        else:
+            self._K = [list(row) for row in K]
 
     def __call__(self, i: Any, j: Any) -> Any:
         i, j = operator.index(i), operator.index(j)
+        if i < 0 or j < 0:
+            raise IndexError(f"kernel index ({i}, {j}) must be nonnegative")
         if isinstance(self._K, flint.fmpq_mat):
             return self._K[i, j]
         return self._K[i][j]
@@ -146,7 +162,7 @@ class OrthogonalPolynomialKernel(BaseKernel):
         return RealRootedPolynomial(
             p._fmpq_poly if p._is_flint else p.coeffs,
             monic=False,
-            assume_real_rooted=p._is_verified,
+            assume_real_rooted=p._real_roots_trusted,
         )
 
     @property
@@ -345,8 +361,13 @@ def sympy_to_exact(val: Any) -> Any:
 
 
 def gap_probability_discrete(kernel: BaseKernel, points_in_gap: Sequence[Any]) -> Any:
-    r"""Computes exact gap probability over a discrete state space subset: $\det(I - K_I)$."""
+    r"""Computes exact gap probability over a discrete state space subset: $\det(I - K_I)$.
+
+    The points must be distinct states; repeated points raise ValueError.
+    """
     n = len(points_in_gap)
+    if len(set(points_in_gap)) != n:
+        raise ValueError("points_in_gap must contain distinct states")
     if n == 0:
         return 1
     K_mat = kernel.matrix(points_in_gap)

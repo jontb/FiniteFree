@@ -115,12 +115,17 @@ def test_backend_selection_and_missing_extension() -> None:
             from finitefree.utils import modular, parallel
             from finitefree.hyperbolic import SymmetricMatrixPencil
             assert parallel.HAS_CYTHON == (mode == "compiled")
-            assert (modular.modular_det.__module__ == "finitefree.utils.modular_fast") == (mode != "missing")
+            assert (modular._modular_det_fast is not None) == (mode == "compiled")
             # Independent integer determinant (-5), singular pivot, empty matrix,
             # row swap and integers beyond int64; no shared modular oracle.
             for matrix, expected in [([[2,1,3],[1,5,2],[3,2,4]],-5), ([[0,1],[2,3]],-2), ([[1,2],[2,4]],0), ([],1), ([[2**90+3,1],[2,4]],4*(2**90+3)-2)]:
                 assert modular.modular_det(modular._as_modular_array(matrix, 1000000007).tolist(), 1000000007) == expected % 1000000007
+            # Unreduced signed/huge entries; expected values from integer determinants.
+            for matrix, expected in [([[-2,1],[1,1]],-3), ([[-1]],-1), ([[2**70,1],[1,1]],2**70-1)]:
+                assert modular.modular_det(matrix, 7) == expected % 7
+                assert modular.modular_det(matrix, 1000000007) == expected % 1000000007
             assert modular.crt([2, 3, 2], [3, 5, 7]) == 23
+            assert modular.crt([-1, 2**80 * 4294967357 - 1], [4294967311, 4294967357]) == -1
             pencil = SymmetricMatrixPencil([np.eye(2, dtype=int), [[2,1],[1,3]]])
             expected = [1,5,5]
             for use_threads in (False, True):

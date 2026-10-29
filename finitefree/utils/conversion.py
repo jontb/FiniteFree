@@ -7,20 +7,22 @@ import sympy as sp
 def flint_to_float(val: Any) -> float:
     r"""
     Convert a rational/numeric value to a Python float.
-    Huge rational numerator/denominator integers use a Decimal fallback. Final
-    range and rounding still apply; infinity or underflow to zero is possible.
-    This helper does not provide certified rounding or a finiteness guarantee.
+    Values with integer numerator ``p`` and denominator ``q`` attributes are
+    rounded once, to nearest with ties to even, from the exact ratio, including
+    huge numerator/denominator integers. Results beyond the float range become
+    signed infinity and tiny results may become subnormal or signed zero. Other
+    values use ``float(val)``. This helper does not provide a finiteness
+    guarantee or an interval bound.
     """
     if hasattr(val, "p") and hasattr(val, "q"):
+        numerator = int(val.p)
+        denominator = int(val.q)
         try:
-            return float(int(val.p)) / float(int(val.q))
+            # Python integer true division is correctly rounded.
+            return numerator / denominator
         except OverflowError:
-            from decimal import Decimal
-
-            try:
-                return float(Decimal(int(val.p)) / Decimal(int(val.q)))
-            except Exception:
-                return float("inf") if (int(val.p) * int(val.q)) > 0 else float("-inf")
+            negative = (numerator < 0) != (denominator < 0)
+            return float("-inf") if negative else float("inf")
     return float(val)
 
 

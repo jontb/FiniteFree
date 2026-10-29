@@ -18,10 +18,11 @@ def FiniteCauchyTransform(p: RealRootedPolynomial) -> sp.Expr:
     if d == 0:
         raise ValueError("Finite Cauchy transform requires a positive degree.")
 
-    poly = sp.Poly(list(p.coeffs), z)
+    coeffs = p.coeffs
+    poly = sp.Poly(list(coeffs), z)
     expr = poly.as_expr()
 
-    dp_coeffs = [p.coeffs[i] * (d - i) for i in range(d)]
+    dp_coeffs = [coeffs[i] * (d - i) for i in range(d)]
     dp_poly = sp.Poly(dp_coeffs, z)
     p_prime = dp_poly.as_expr()
 
@@ -148,26 +149,93 @@ def FiniteRTransform(
             flint.ctx.prec = old_prec
 
     # c_n = classical cumulant of the sequence (e_1, e_2, ..., e_n)
-    # Using the recurrence: c_n = e_n - sum_{k=1}^{n-1} C(n-1, k-1) * c_k * e_{n-k}
     # Then: kappa_n^{(d)} = c_n * (-d)^{n-1} / (n-1)!
-    c = []  # c[0] = c_1, c[1] = c_2, etc.
+    c = _classical_cumulants(e_k, count)
     cumulants = []
     for n in range(1, order + 1):
         if n > d:
             cumulants.append(0)
-            c.append(flint.fmpq(0))
             continue
 
-        cn = e_k[n]
-        for k in range(1, n):
-            cn -= math.comb(n - 1, k - 1) * c[k - 1] * e_k[n - k]
-        c.append(cn)
-
         # Maintain exact representation
-        kappa_n = cn * ((-d) ** (n - 1)) / math.factorial(n - 1)
+        kappa_n = c[n - 1] * ((-d) ** (n - 1)) / math.factorial(n - 1)
         cumulants.append(sp.Rational(int(kappa_n.p), int(kappa_n.q)))
 
     return cumulants
+
+
+def _egf_series(moments: List[Any], count: int) -> Any:
+    r"""Return $\sum_{k \le count} m_k z^k / k!$ as a FLINT series of that length."""
+    import flint
+
+    factorial = 1
+    terms = [flint.fmpq(1)]
+    for k in range(1, count + 1):
+        factorial *= k
+        terms.append(moments[k] / factorial)
+    return flint.fmpq_series(terms, prec=count + 1)
+
+
+class _SeriesCap:
+    """Temporarily raise FLINT's process-wide series length cap."""
+
+    def __init__(self, length: int) -> None:
+        self.length = length
+
+    def __enter__(self) -> None:
+        import flint
+
+        self.saved = flint.ctx.cap
+        flint.ctx.cap = max(self.saved, self.length)
+
+    def __exit__(self, *exc: Any) -> None:
+        import flint
+
+        flint.ctx.cap = self.saved
+
+
+def _classical_cumulants(moments: List[Any], count: int) -> List[Any]:
+    r"""
+    Return classical cumulants $c_1, \ldots, c_{count}$ of moments with $m_0 = 1$.
+    They are $c_n = n! [z^n] \log \sum_k m_k z^k / k!$, which equals the recurrence
+    $c_n = m_n - \sum_{k<n} \binom{n-1}{k-1} c_k m_{n-k}$ in exact arithmetic;
+    FLINT's series logarithm replaces the quadratic Python-level loop.
+    """
+    import flint
+
+    if count == 0:
+        return []
+    with _SeriesCap(count + 1):
+        log_series = _egf_series(moments, count).log()
+    coefficients = log_series.coeffs()
+    cumulants = []
+    factorial = 1
+    for n in range(1, count + 1):
+        factorial *= n
+        value = coefficients[n] if n < len(coefficients) else 0
+        cumulants.append(flint.fmpq(value) * factorial)
+    return cumulants
+
+
+def _moments_of_scaled_cumulants(moments: List[Any], count: int, t: Any) -> List[Any]:
+    r"""
+    Return $m_0, \ldots, m_{count}$ whose classical cumulants are t times those of
+    the given moments: $n! [z^n] \exp(t \log \sum_k m_k z^k / k!)$.
+    """
+    import flint
+
+    if count == 0:
+        return [flint.fmpq(1)]
+    with _SeriesCap(count + 1):
+        powered = (_egf_series(moments, count).log() * t).exp()
+    coefficients = powered.coeffs()
+    result = [flint.fmpq(1)]
+    factorial = 1
+    for n in range(1, count + 1):
+        factorial *= n
+        value = coefficients[n] if n < len(coefficients) else 0
+        result.append(flint.fmpq(value) * factorial)
+    return result
 
 
 class FiniteTTransform:

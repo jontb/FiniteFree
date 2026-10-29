@@ -1,7 +1,21 @@
 # cython: boundscheck=False, wraparound=False, nonecheck=False, cdivision=True
+from operator import index
+
 import numpy as np
 cimport numpy as cnpt
 from libc.stdlib cimport malloc, free
+
+# Largest modulus m = isqrt(2**63 - 1); m * m + m < 2**63, so residue products
+# and accumulated sums stay inside signed 64-bit arithmetic.
+INT64_SAFE_MODULUS = 3037000499
+
+
+cdef inline long long _checked_modulus(object p) except -1:
+    if not 2 <= p <= INT64_SAFE_MODULUS:
+        raise ValueError(
+            f"modulus {p!r} is outside the compiled int64 range [2, {INT64_SAFE_MODULUS}]"
+        )
+    return <long long>p
 
 cdef long long mod_inv(long long a, long long m) noexcept nogil:
     cdef long long m0 = m
@@ -57,7 +71,15 @@ def construct_zippel_vandermonde_mod_p(long long[:, :] test_pts, long long[:, :]
     return V
 
 
-def modular_det(list A, long long p):
+def modular_det(list A, object modulus):
+    """Determinant of the integer matrix A modulo p, returned in [0, p).
+
+    Entries are reduced with Python integer arithmetic before narrowing, so
+    negative and arbitrarily large entries are valid. The modulus must be a
+    prime in [2, INT64_SAFE_MODULUS]; otherwise ValueError is raised.
+    """
+    cdef long long p = _checked_modulus(modulus)
+    cdef object py_p = p
     cdef int n = len(A)
     cdef long long det = 1
     cdef int i, r, c, pivot
@@ -68,7 +90,8 @@ def modular_det(list A, long long p):
     for i in range(n):
         row = A[i]
         for c in range(n):
-            M[i, c] = (<long long>row[c]) % p
+            # Python modulo returns a value in [0, p) for every integer entry.
+            M[i, c] = <long long>(index(row[c]) % py_p)
             
     for i in range(n):
         pivot = -1
@@ -229,10 +252,20 @@ def eval_points_grid_mod_p(long long[:, :, :] matrices, long long[:, :] grid_pts
 
 
 def crt(long long[::1] mix, long long[::1] primes):
+    """Symmetric CRT reconstruction for int64 residues and pairwise coprime primes.
+
+    Every prime must lie in [2, INT64_SAFE_MODULUS]; otherwise ValueError is
+    raised before any int64 product is formed. Residues are reduced first.
+    """
 
     cdef int n_p = primes.shape[0]
     if n_p == 0:
         return 0
+    if mix.shape[0] != n_p:
+        raise ValueError("residue and prime sequences must have equal length")
+    cdef int k
+    for k in range(n_p):
+        _checked_modulus(primes[k])
 
     cdef long long* c = <long long*>malloc(n_p * sizeof(long long))
     cdef long long* u = <long long*>malloc(n_p * sizeof(long long))
@@ -267,7 +300,10 @@ def crt(long long[::1] mix, long long[::1] primes):
                 p_prod_mod = (p_prod_mod * primes[j - 1]) % primes[i]
                 val = (val + u[j] * p_prod_mod) % primes[i]
 
-            c_val = (mix[i] - val) % primes[i]
+            c_val = mix[i] % primes[i]
+            if c_val < 0:
+                c_val += primes[i]
+            c_val = (c_val - val) % primes[i]
             if c_val < 0:
                 c_val += primes[i]
             u[i] = (c_val * c[i]) % primes[i]

@@ -5,6 +5,77 @@
 - Cache the first successful prepared-quadrature count law for repeated count
   and gap queries. Returned laws retain independent arrays and metadata;
   spectrum validation remains lazy and failed computations are retried.
+- Fix `RealRootedPolynomial.evaluate_roots_float64(parallel=True, exact=False)`
+  returning unconverged Aberth–Ehrlich real parts. Ill-conditioned generic
+  coefficients, such as roots 1..32, previously produced errors above 20 on
+  both the CuPy and NumPy seekers. Seeker results are now accepted only after
+  convergence and the companion path's real-root test; otherwise the call
+  continues with the existing companion and Arb fallbacks. Converged results,
+  defaults and signatures are unchanged.
+- Stop certifying real roots that do not exist. `hahn_polynomial` now trusts
+  real-rootedness only for `alpha > -1` and `beta > -1` (other parameters are
+  validated lazily, as for Jacobi) and rejects non-integer `N`, which was
+  silently truncated. `wishart_expected_poly` requires integers `d >= 0` and
+  `n >= 1`. Polynomials derived from a `UnitaryPolynomial` (`derivative`,
+  `shift`, `dilation`, `projection`, `square_roots_map` and copies made by
+  empirical comparisons or DPP kernels) no longer inherit its unit-circle
+  trust as a real-root certificate, and `verify_root_interlacing` raises
+  `ValueError` when real-rootedness does not hold. Previously these cases
+  returned `True` and reported complex roots as repeated real parts.
+- Speed up exact cumulant and transform paths without changing results.
+  `FiniteRTransform` (exact) and `additive_power` take classical cumulants from
+  a FLINT series logarithm instead of a quadratic Python recurrence (order 400:
+  1.07 s to 0.06 s; `additive_power(3/7)` at degree 250: 0.69 s to 0.026 s).
+  `FiniteCauchyTransform` reads coefficients once (degree 400: 1.19 s to
+  0.07 s). `from_roots` caches correctly rounded roots as exact, so the default
+  `exact=True` call no longer isolates known roots again (degree 200: 0.76 s
+  to under 1 ms). Real empirical samples keep the real symmetric eigensolver
+  (GOE, degree 500: 39.5 ms to 15.4 ms per sample). Timings are single-thread
+  measurements on one Linux machine; outputs were checked identical.
+- Fix exact-arithmetic utility defects. `PrecisionContext` restored the
+  precision seen at construction rather than at entry, so a precision change in
+  between, or nested reuse, was lost on exit. `flint_to_float` rounded twice and
+  was one ulp off for about a third of large ratios; it now rounds once. The
+  compiled `modular_det` gave wrong results for negative entries and overflowed
+  above int64, the compiled `crt` overflowed for primes above about 3.04e9, and
+  `PYFFP_DISABLE_CYTHON=1` did not disable the compiled `modular_det`; entries
+  are now reduced exactly before narrowing, large primes use Python arithmetic,
+  and the flag is honoured. Internal callers did not reach these inputs. The
+  exact Sturm fallback used when Arb cannot certify degrees 15-30 raised or
+  miscounted for abnormal remainder sequences; it now uses a sign-correct
+  integer Sturm sequence and raises `ValueError` for non-real-rooted inputs.
+- Fix float straight-line-program derivatives, empty pencils and operation
+  validation. Float determinant gradients and Hessians switched to a
+  pseudoinverse whenever `|det| < 1e-15`, returning wrong derivatives at
+  nonsingular points such as `diag(x1, x2)` at `(1, 1e-16)`; they now use LU
+  solves with log-scaled products and, as prepared pencils do, raise
+  `numpy.linalg.LinAlgError` at an exactly singular point instead of returning
+  zeros. An empty 0x0 pencil made the interpolated constructor loop forever
+  with the compiled extension; it and `diagonal_specialization` now return 1,
+  per-prime workers retry only singular modular systems, and repeated failures
+  stop after eight primes. `StraightLineProgram` validates operation codes,
+  arity and operand indices at construction, recognises any sequence equal to
+  `["det"]`, and raises `NotImplementedError` for Hessians of generic programs
+  instead of returning the determinant Hessian.
+- Evaluate prepared orthogonal-kernel bases by an exactly verified three-term
+  recurrence. `prepare_numeric()` used Horner's rule on monomial coefficients
+  for every family except Hermite, so Legendre bases had relative error 2.6e-7
+  at rank 30 and were wrong at rank 50, and count laws raised "eigenvalues must
+  lie in [0, 1]" from rank 30 on. Any basis whose monic recurrence and norm
+  ratios check exactly in rational arithmetic (shifted, scaled or signed
+  Hermite, Legendre, Laguerre, Jacobi) now uses the orthonormal float
+  recurrence (errors near 1e-14 through rank 50); other bases keep Horner. The
+  Hermite fast path also dropped the sign of sign-flipped basis polynomials in
+  `basis()`; every recurrence column now takes the sign of its supplied
+  leading coefficient.
+- Reject repeated and negative discrete DPP states. `gap_probability_discrete`
+  raised no error for repeated points and returned the determinant of a
+  duplicated principal matrix (`gap([0, 0])` gave 0 instead of `gap([0])`).
+  `DiscreteFiniteKernel` let negative indices wrap to the end of list and
+  ndarray matrices, so `[4, -1]` silently meant state 4 twice in count laws,
+  gaps and sampling. Both now raise (`ValueError` for repeated points,
+  `IndexError` for negative indices), and the kernel stores a copy of its
+  matrix so later edits to the caller's array cannot change it.
 
 ## 0.4.1
 

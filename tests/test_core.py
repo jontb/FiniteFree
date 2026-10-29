@@ -1,3 +1,6 @@
+import importlib
+import sys
+
 import flint
 import numpy as np
 import pytest
@@ -114,6 +117,41 @@ def test_hybrid_root_isolation() -> None:
     assert len(roots_seq) == d
     assert len(roots_par) == d
     assert np.allclose(roots_seq, roots_par, atol=1e-8)
+
+
+def _cupy_device_available() -> bool:
+    try:
+        cp = importlib.import_module("cupy")
+        return bool(cp.cuda.runtime.getDeviceCount() > 0)
+    except Exception:
+        return False
+
+
+@pytest.mark.parametrize("backend", ["numpy", "cupy"])
+def test_parallel_roots_reject_unconverged_or_complex_aberth_iterates(
+    backend: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Integer and equally spaced rational roots are exact references. Their
+    # float64 monomial coefficients are ill-conditioned, and the 50-step Aberth
+    # seeker previously returned unconverged real parts with errors above 0.3.
+    if backend == "numpy":
+        monkeypatch.setitem(sys.modules, "cupy", None)
+    elif not _cupy_device_available():
+        pytest.skip("CuPy with a CUDA device is not available")
+    cases = {
+        "integers": [flint.fmpq(j) for j in range(1, 33)],
+        "equispaced": [flint.fmpq(2 * j - 63, 63) for j in range(64)],
+    }
+    for name, expected in cases.items():
+        with case(roots=name, backend=backend):
+            poly = flint.fmpq_poly([1])
+            for root in expected:
+                poly *= flint.fmpq_poly([-root, 1])
+            p = RealRootedPolynomial(poly, assume_real_rooted=True)
+            roots = p.evaluate_roots_float64(parallel=True, exact=False)
+            np.testing.assert_allclose(
+                roots, [float(root) for root in expected], rtol=1e-12, atol=1e-12
+            )
 
 
 def test_from_roots() -> None:

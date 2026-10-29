@@ -58,13 +58,23 @@ def sturm_subresultant_prs(
     A: flint.fmpq_poly, B: flint.fmpq_poly
 ) -> List[flint.fmpq_poly]:
     """
-    Computes a Sturm sequence for A and B using the signed integer Subresultant PRS algorithm.
-    All polynomial divisions are performed via exact integer pseudo-division in Z[x] to eliminate
-    rational arithmetic overhead while strictly preserving the sign-variation parity.
+    Computes an integer Sturm sequence for A and B by sign-corrected primitive
+    pseudo-remainders.
+
+    Each returned term is a positive rational multiple of the corresponding
+    term of the classical Euclidean sequence A, B, -rem(A, B), ...; sign
+    variations, and hence Sturm real-root counts, are therefore the same,
+    including for abnormal sequences whose degrees drop by more than one.
+    Rational inputs are scaled by their positive denominators. Since
+    prem(P, Q) = lc(Q)**delta * rem(P, Q) with delta = deg(P) - deg(Q) + 1,
+    the pseudo-remainder is negated and multiplied by sign(lc(Q))**delta;
+    its positive integer content is then divided out. The historical name is
+    kept for compatibility: Brown-Collins subresultant scalings can introduce
+    negative factors and are not used. All returned terms have integer
+    coefficients.
     """
-    # Coerce input rational polynomials into integer polynomials by extracting their numerators.
-    # Flint denominators are positive, so this is a positive scalar scaling that does not
-    # alter the signs or sign-variations.
+    # Flint denominators are positive, so taking numerators is a positive
+    # scaling that preserves signs and sign variations.
     A_num = A.numer()
     B_num = B.numer()
 
@@ -72,39 +82,16 @@ def sturm_subresultant_prs(
         return [flint.fmpq_poly(A_num)]
 
     P = [A_num, B_num]
-
-    # Initialize subresultant scalar sequences psi and beta
-    psi = [-1, -1]  # index 0 is unused, index 1 is psi_1
-    beta = [1, 1]  # index 0 is unused, index 1 is beta_1
-
-    d_1 = P[0].degree() - P[1].degree()
-    beta[1] = (-1) ** (d_1 + 1)
-
-    k = 2
     while True:
-        R_k = prem(P[k - 2], P[k - 1])
-        if R_k.is_zero():
+        previous = P[-2]
+        current = P[-1]
+        R = prem(previous, current)
+        if R.is_zero():
             break
-
-        div_factor = beta[k - 1]
-        P_next = -R_k / div_factor
-        P.append(P_next)
-
-        d_k_minus_1 = P[k - 2].degree() - P[k - 1].degree()
-        c_k_minus_1 = P[k - 1].leading_coefficient()
-
-        psi_val = (-c_k_minus_1) ** d_k_minus_1
-        pow_val = 1 - d_k_minus_1
-        if pow_val >= 0:
-            psi_k = psi_val * (psi[k - 1] ** pow_val)
-        else:
-            psi_k = psi_val // (psi[k - 1] ** (-pow_val))
-
-        beta_k = -c_k_minus_1 * (psi_k**d_k_minus_1)
-
-        psi.append(psi_k)
-        beta.append(beta_k)
-
-        k += 1
+        delta = previous.degree() - current.degree() + 1
+        if current.leading_coefficient() < 0 and delta % 2 == 1:
+            R = -R  # R is now a positive multiple of rem(previous, current).
+        next_term = -R
+        P.append(next_term // next_term.content())
 
     return [flint.fmpq_poly(p) for p in P]

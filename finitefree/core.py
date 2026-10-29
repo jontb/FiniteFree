@@ -2,6 +2,7 @@ import abc
 import functools
 import math
 import operator
+import sys
 import warnings
 from typing import Any, List, Sequence, SupportsIndex, Union
 
@@ -29,6 +30,49 @@ def _get_shift_poly(c_fmpq: Any) -> Any:
     import flint
 
     return flint.fmpq_poly([-c_fmpq, 1])
+
+
+def _aberth_ehrlich_real_roots(
+    xp: Any, scaled_coeffs: NDArray[np.float64]
+) -> Union[NDArray[np.float64], None]:
+    """Run at most 50 Aberth-Ehrlich steps on monic float64 coefficients.
+
+    Return host real parts only after the final correction falls below 1e-12
+    and every iterate passes the companion path's real-root test. Otherwise
+    return None so callers fall through to the companion/certified solvers.
+    """
+    d = len(scaled_coeffs) - 1
+    c_0 = scaled_coeffs[0]
+    center = -scaled_coeffs[1] / (d * c_0)
+    r_vals = [abs(scaled_coeffs[k] / c_0) ** (1.0 / k) for k in range(1, d + 1)]
+    R = max(r_vals) * 1.5
+    theta = (2.0 * xp.arange(d) + 0.5) * xp.pi / d
+    z = center + R * (xp.cos(theta) + 1j * xp.sin(theta))
+    dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
+
+    for _ in range(50):
+        P_z = xp.zeros_like(z, dtype=complex)
+        for c in scaled_coeffs:
+            P_z = P_z * z + c
+        Dp_z = xp.zeros_like(z, dtype=complex)
+        for c in dp_coeffs:
+            Dp_z = Dp_z * z + c
+        w = P_z / Dp_z
+        diff = z[:, None] - z[None, :]
+        xp.fill_diagonal(diff, 1.0)
+        inv_diff = 1.0 / diff
+        xp.fill_diagonal(inv_diff, 0.0)
+        sum_diff = xp.sum(inv_diff, axis=1)
+        update = w / (1.0 - w * sum_diff)
+        z = z - update
+        if xp.max(xp.abs(update)) < 1e-12:
+            break
+    else:
+        return None
+    roots = np.asarray(xp.asnumpy(z) if hasattr(xp, "asnumpy") else z)
+    if not np.all(np.abs(roots.imag) < 1e-10 * (np.abs(roots.real) + 1)):
+        return None
+    return np.asarray(roots.real, dtype=np.float64)
 
 
 class RealRootedPolynomial(Polynomial):
@@ -167,6 +211,11 @@ class RealRootedPolynomial(Polynomial):
         """Return the exact coefficient ratio for a degree-one polynomial."""
         coefficients = self.coeffs
         return sp.cancel(-sp.sympify(coefficients[1]) / sp.sympify(coefficients[0]))
+
+    @property
+    def _real_roots_trusted(self) -> bool:
+        """Whether derived real-root objects may inherit this verification."""
+        return self._is_verified
 
     def verify_real_rootedness(self) -> bool:
         """
@@ -330,7 +379,8 @@ class RealRootedPolynomial(Polynomial):
         If strict=True, they strictly interlace if and only if all roots of $p(x)$
         are simple (which corresponds to the polynomial being square-free).
         """
-        self.verify_real_rootedness()
+        if not self.verify_real_rootedness():
+            raise ValueError("Root interlacing requires a real-rooted polynomial")
 
         if not strict:
             return True
@@ -547,8 +597,10 @@ class RealRootedPolynomial(Polynomial):
             return cls(flint.fmpq_poly([1]), assume_real_rooted=True)
 
         factors = []
+        exact_roots = []
         for r in roots:
             val = sympy_to_fmpq(r)
+            exact_roots.append(val)
             factors.append(flint.fmpq_poly([-val, 1]))
 
         queue = deque(factors)
@@ -560,8 +612,12 @@ class RealRootedPolynomial(Polynomial):
         poly_flint = queue[0]
         inst = cls(poly_flint, assume_real_rooted=True)
         try:
-            float_roots = [flint_to_float(r) for r in roots]
+            # Integer true division rounds the exact root correctly, so this cache
+            # is at least as accurate as Arb isolation at any working precision.
+            float_roots = [int(r.p) / int(r.q) for r in exact_roots]
             inst._roots_cached = cls._finite_float64_root_array(np.sort(float_roots))
+            inst._roots_cached_exact = True
+            inst._roots_cached_prec = sys.maxsize
         except (TypeError, ValueError, OverflowError, RuntimeError):
             pass  # Exact construction is valid even beyond the float64 range.
         return inst
@@ -636,6 +692,7 @@ class RealRootedPolynomial(Polynomial):
         supported orthogonal families and proven Hermite additive convolutions.
         Otherwise use a balanced companion matrix, or parallelized Aberth-Ehrlich
         when parallel=True, with high-precision/general numerical fallback.
+        Unconverged or non-real Aberth-Ehrlich iterates use the companion path.
         Arb validation retains isolated roots. An exact=True request bypasses
         an approximate cache or one recorded at a lower working precision.
         Nonfinite numerical results raise RuntimeError without entering the cache;
@@ -779,68 +836,12 @@ class RealRootedPolynomial(Polynomial):
                         import cupy as cp  # type: ignore[import-not-found]
 
                         # GPU Seeker via CuPy
-                        c_0 = scaled_coeffs[0]
-                        center = -scaled_coeffs[1] / (d * c_0)
-                        r_vals = [
-                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
-                            for k in range(1, d + 1)
-                        ]
-                        R = max(r_vals) * 1.5
-                        theta = (2.0 * cp.arange(d) + 0.5) * cp.pi / d
-                        z = center + R * (cp.cos(theta) + 1j * cp.sin(theta))
-                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
-
-                        for _ in range(50):
-                            P_z = cp.zeros_like(z, dtype=complex)
-                            for c in scaled_coeffs:
-                                P_z = P_z * z + c
-                            Dp_z = cp.zeros_like(z, dtype=complex)
-                            for c in dp_coeffs:
-                                Dp_z = Dp_z * z + c
-                            w = P_z / Dp_z
-                            diff = z[:, None] - z[None, :]
-                            cp.fill_diagonal(diff, 1.0)
-                            inv_diff = 1.0 / diff
-                            cp.fill_diagonal(inv_diff, 0.0)
-                            sum_diff = cp.sum(inv_diff, axis=1)
-                            update = w / (1.0 - w * sum_diff)
-                            z = z - update
-                            if cp.max(cp.abs(update)) < 1e-12:
-                                break
-                        gpu_roots = np.sort(np.real(cp.asnumpy(z)))
-                        return np.asarray(gpu_roots * S, dtype=np.float64)
+                        seeded = _aberth_ehrlich_real_roots(cp, scaled_coeffs)
                     except Exception:
                         # CPU Seeker via NumPy (Vectorized)
-                        c_0 = scaled_coeffs[0]
-                        center = -scaled_coeffs[1] / (d * c_0)
-                        r_vals = [
-                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
-                            for k in range(1, d + 1)
-                        ]
-                        R = max(r_vals) * 1.5
-                        theta = (2.0 * np.arange(d) + 0.5) * np.pi / d
-                        z = center + R * (np.cos(theta) + 1j * np.sin(theta))
-                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
-
-                        for _ in range(50):
-                            P_z = np.zeros_like(z, dtype=complex)
-                            for c in scaled_coeffs:
-                                P_z = P_z * z + c
-                            Dp_z = np.zeros_like(z, dtype=complex)
-                            for c in dp_coeffs:
-                                Dp_z = Dp_z * z + c
-                            w = P_z / Dp_z
-                            diff = z[:, None] - z[None, :]
-                            np.fill_diagonal(diff, 1.0)
-                            inv_diff = 1.0 / diff
-                            np.fill_diagonal(inv_diff, 0.0)
-                            sum_diff = np.sum(inv_diff, axis=1)
-                            update = w / (1.0 - w * sum_diff)
-                            z = z - update
-                            if np.max(np.abs(update)) < 1e-12:
-                                break
-                        cpu_roots = np.sort(np.real(z))
-                        return np.asarray(cpu_roots * S, dtype=np.float64)
+                        seeded = _aberth_ehrlich_real_roots(np, scaled_coeffs)
+                    if seeded is not None:
+                        return np.asarray(np.sort(seeded) * S, dtype=np.float64)
             except (OverflowError, ValueError):
                 pass  # Fall through to companion matrix/certified solver
 
@@ -922,7 +923,7 @@ class RealRootedPolynomial(Polynomial):
             new_asc.append(self._fmpq_poly[j] * (c_fmpq ** (d - j)))
 
         result = RealRootedPolynomial(
-            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._real_roots_trusted
         )
         if self._root_recurrence is not None:
             result._root_recurrence = self._root_recurrence
@@ -946,7 +947,9 @@ class RealRootedPolynomial(Polynomial):
         shift_poly = _get_shift_poly(c_fmpq)
         res_poly = self._fmpq_poly(shift_poly)
 
-        result = RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
+        result = RealRootedPolynomial(
+            res_poly, assume_real_rooted=self._real_roots_trusted
+        )
         if self._root_recurrence is not None:
             result._root_recurrence = self._root_recurrence
             result._root_scale = self._root_scale
@@ -1113,7 +1116,7 @@ class RealRootedPolynomial(Polynomial):
             raise ValueError("Cannot take derivative of a constant polynomial.")
         res_poly = self._fmpq_poly.derivative()
         return RealRootedPolynomial(
-            res_poly, assume_real_rooted=self._is_verified, monic=monic
+            res_poly, assume_real_rooted=self._real_roots_trusted, monic=monic
         )
 
     def projection(self, j: SupportsIndex) -> "RealRootedPolynomial":
@@ -1148,7 +1151,7 @@ class RealRootedPolynomial(Polynomial):
 
         result = RealRootedPolynomial(
             flint.fmpq_poly(list(reversed(descending))),
-            assume_real_rooted=self._is_verified,
+            assume_real_rooted=self._real_roots_trusted,
         )
         if self._hermite_variance is not None:
             result._hermite_variance = self._hermite_variance
@@ -1183,29 +1186,13 @@ class RealRootedPolynomial(Polynomial):
             )
 
         d = self.degree
-        import flint
+        from .transforms import _moments_of_scaled_cumulants
 
-        from .transforms import FiniteRTransform
-
-        kappas = FiniteRTransform(self, order=d)
-        t_fmpq = sympy_to_fmpq(t)
-        kappas_fmpq = [sympy_to_fmpq(k) for k in kappas]
-        kappas_scaled = [k * t_fmpq for k in kappas_fmpq]
-
-        c_cumulants = []
-        for n in range(1, d + 1):
-            den = flint.fmpq((-d) ** (n - 1), math.factorial(n - 1))
-            val_num = kappas_scaled[n - 1]
-            c_cumulants.append(val_num / den)
-
-        e_k = [flint.fmpq(1)]
-        for n in range(1, d + 1):
-            en = c_cumulants[n - 1]
-            for k in range(1, n):
-                en += math.comb(n - 1, k - 1) * c_cumulants[k - 1] * e_k[n - k]
-            e_k.append(en)
-
-        return RealRootedPolynomial.from_normalized_coeffs(e_k)
+        # Finite cumulants are fixed multiples of the classical cumulants of the
+        # normalized coefficients, so scaling one family by t scales the other.
+        e_k = self._normalized_coeffs_flint_prefix(d, d)
+        scaled = _moments_of_scaled_cumulants(e_k, d, sympy_to_fmpq(t))
+        return RealRootedPolynomial.from_normalized_coeffs(scaled)
 
     def is_symmetric(self) -> bool:
         """
@@ -1241,7 +1228,7 @@ class RealRootedPolynomial(Polynomial):
             new_asc.append(self._fmpq_poly[2 * j])
 
         return RealRootedPolynomial(
-            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._real_roots_trusted
         )
 
     @property
@@ -1319,6 +1306,11 @@ class UnitaryPolynomial(RealRootedPolynomial):
     ) -> None:
         # Bypasses real-rootedness verification
         super().__init__(coeffs, assume_real_rooted=True)
+
+    @property
+    def _real_roots_trusted(self) -> bool:
+        # Unit-circle trust must not certify derived real-root objects.
+        return False
 
     def verify_real_rootedness(self) -> bool:
         return False

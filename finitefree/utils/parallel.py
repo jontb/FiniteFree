@@ -6,6 +6,7 @@ import flint
 import numpy as np
 
 from .modular import (
+    _MAX_CONSECUTIVE_FAILED_PRIMES,
     _as_modular_array,
     get_inverse_vandermonde_matrices_cached,
     get_inverse_vandermonde_matrix,
@@ -29,8 +30,8 @@ def _eval_diagonal_specialization_prime_worker(
     p: int, A_int: Any, B_int: Any, n: int, deg: int
 ) -> Tuple[int, Optional[List[int]]]:
     if HAS_CYTHON:
-        A_arr = _as_modular_array(A_int, p)
-        B_arr = _as_modular_array(B_int, p)
+        A_arr = _as_modular_array(A_int, p, (n, n))
+        B_arr = _as_modular_array(B_int, p, (n, n))
         y = list(eval_diagonal_specialization_mod_p(A_arr, B_arr, p, deg))
     else:
 
@@ -53,7 +54,9 @@ def _eval_diagonal_specialization_prime_worker(
         c_mat = V_inv_mat * y_mat
         c_p = [int(c_mat[r, 0]) for r in range(deg + 1)]
         return p, c_p
-    except Exception:
+    except ZeroDivisionError:
+        # FLINT reports a singular modular Vandermonde system this way. Any
+        # other exception is a defect and must propagate, not be retried.
         return p, None
 
 
@@ -107,7 +110,7 @@ def _eval_prime_worker(
 
         if HAS_CYTHON:
             grid_pts_np = np.array([pt + (1,) for pt in full_grid_pts], dtype=np.int64)
-            matrices_np = _as_modular_array(integer_matrices, p)
+            matrices_np = _as_modular_array(integer_matrices, p, (m, n, n))
             dets = list(eval_points_grid_mod_p(matrices_np, grid_pts_np, p))
             values = dict(zip(full_grid_pts, dets))
         else:
@@ -118,8 +121,36 @@ def _eval_prime_worker(
         interpolated = interpolate_full_grid(values, m - 1, n, p, inv_vands)
         c_p = [interpolated.get(exp[:-1], 0) for exp in exps]
         return p, c_p
-    except Exception:
+    except ZeroDivisionError:
+        # Singular modular Vandermonde system; other exceptions propagate.
         return p, None
+
+
+def _accept_prime_results(
+    results: List[Tuple[int, Optional[List[int]]]],
+    primes_used: List[int],
+    coeffs_by_prime: List[List[int]],
+    consecutive_failures: int,
+) -> int:
+    """Record successful prime residues and bound consecutive failed primes.
+
+    Returns the updated consecutive failure count. Raises RuntimeError after
+    ``_MAX_CONSECUTIVE_FAILED_PRIMES`` consecutive failures instead of retrying
+    new primes indefinitely.
+    """
+    for p, c_p in results:
+        if c_p is None:
+            consecutive_failures += 1
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILED_PRIMES:
+                raise RuntimeError(
+                    f"Modular reconstruction failed for {consecutive_failures} "
+                    f"consecutive primes (last {p})"
+                )
+            continue
+        consecutive_failures = 0
+        primes_used.append(p)
+        coeffs_by_prime.append(c_p)
+    return consecutive_failures
 
 
 class ParallelScheduler:
