@@ -444,7 +444,7 @@ assert K(20.000000001, 20.0) == K(20.0, 20.000000001)
 
 `sample_discrete` uses floating-point spectral HKPV sampling for real symmetric correlation kernels. Nonprojection kernels first select eigenvectors with independent Bernoulli draws. It requires a finite square matrix matching the state-space size, symmetry, and spectrum in `[0, 1]`. Absolute roundoff up to `1e-10` is allowed; small asymmetry is symmetrized and eigenvalues are clipped only within that tolerance. Invalid kernels raise `ValueError` before sampling; loss of the projection basis raises `RuntimeError`.
 
-An ndarray is indexed in the supplied state-space order and may use arbitrary distinct hashable labels. A `BaseKernel` is evaluated on the actual states, so subsets and permutations select the corresponding principal matrix. `DiscreteFiniteKernel` accepts integer indices, including NumPy integers, and rejects fractional indices. Empty state spaces return an empty sample; an ndarray must then have shape `(0, 0)`.
+An ndarray is indexed in the supplied state-space order and may use arbitrary distinct hashable labels. A `BaseKernel` is evaluated on the actual states, so subsets and permutations select the corresponding principal matrix. `DiscreteFiniteKernel` accepts integer indices `0..M-1`, including NumPy integers, rejects fractional indices with `TypeError` and raises `IndexError` for negative or too-large indices instead of wrapping. It stores a copy of its matrix, so later edits to the caller's matrix do not change the kernel. `gap_probability_discrete` and `count_distribution_discrete` require distinct states and raise `ValueError` for repeated points. Empty state spaces return an empty sample; an ndarray must then have shape `(0, 0)`.
 
 ```python
 import numpy as np
