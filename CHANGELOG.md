@@ -5,6 +5,16 @@
 - Cache the first successful prepared-quadrature count law for repeated count
   and gap queries. Returned laws retain independent arrays and metadata;
   spectrum validation remains lazy and failed computations are retried.
+- Stop certifying real roots that do not exist. `hahn_polynomial` now trusts
+  real-rootedness only for `alpha > -1` and `beta > -1` (other parameters are
+  validated lazily, as for Jacobi) and rejects non-integer `N`, which was
+  silently truncated. `wishart_expected_poly` requires integers `d >= 0` and
+  `n >= 1`. Polynomials derived from a `UnitaryPolynomial` (`derivative`,
+  `shift`, `dilation`, `projection`, `square_roots_map` and copies made by
+  empirical comparisons or DPP kernels) no longer inherit its unit-circle
+  trust as a real-root certificate, and `verify_root_interlacing` raises
+  `ValueError` when real-rootedness does not hold. Previously these cases
+  returned `True` and reported complex roots as repeated real parts.
 
 ## 0.4.1
 

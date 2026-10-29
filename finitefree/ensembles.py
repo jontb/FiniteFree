@@ -174,11 +174,16 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
     normalized sampler, including one eigenvalue per pair for beta=4.
     The beta argument is retained but does not change this coefficient formula.
     Known Laguerre recurrence metadata is used only in its supported domain.
+    Requires integers d >= 0 and n >= 1; real roots hold for every such pair,
+    including n < d, where d - n roots are zero.
     """
     import flint
 
     from .orthogonal import laguerre_polynomial
 
+    d, n = operator.index(d), operator.index(n)
+    if d < 0 or n < 1:
+        raise ValueError("wishart_expected_poly requires integers d >= 0 and n >= 1")
     lag = laguerre_polynomial(d, n - d)
     f_poly = lag._fmpq_poly
     coeffs_list = list(f_poly)

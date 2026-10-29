@@ -146,7 +146,7 @@ class OrthogonalPolynomialKernel(BaseKernel):
         return RealRootedPolynomial(
             p._fmpq_poly if p._is_flint else p.coeffs,
             monic=False,
-            assume_real_rooted=p._is_verified,
+            assume_real_rooted=p._real_roots_trusted,
         )
 
     @property

@@ -92,7 +92,12 @@ def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomi
     r"""
     Computes the Hahn polynomial $Q_n(x; \alpha, \beta, N)$ of degree $n$
     exactly using sequential $O(n)$ running products for coefficients.
+    Real roots are assumed only for $\alpha > -1$ and $\beta > -1$, where the
+    Hahn weight is positive on $\{0, \ldots, N\}$; other parameters are
+    validated lazily.
     """
+    if N != int(N):
+        raise ValueError("N must be an integer")
     if n < 0 or n > N:
         raise ValueError("n must satisfy 0 <= n <= N")
 
@@ -119,7 +124,9 @@ def hahn_polynomial(n: int, alpha: Any, beta: Any, N: int) -> RealRootedPolynomi
 
         total_poly += coeff_fmpq * neg_x_k
 
-    return RealRootedPolynomial(total_poly, assume_real_rooted=True)
+    return RealRootedPolynomial(
+        total_poly, assume_real_rooted=bool(alpha_sym > -1 and beta_sym > -1)
+    )
 
 
 _CONJUGATE_CACHE: dict[tuple[int, ...], tuple[int, ...]] = {}

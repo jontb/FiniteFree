@@ -168,6 +168,11 @@ class RealRootedPolynomial(Polynomial):
         coefficients = self.coeffs
         return sp.cancel(-sp.sympify(coefficients[1]) / sp.sympify(coefficients[0]))
 
+    @property
+    def _real_roots_trusted(self) -> bool:
+        """Whether derived real-root objects may inherit this verification."""
+        return self._is_verified
+
     def verify_real_rootedness(self) -> bool:
         """
         Lazily verify real-rootedness using Arb isolation above degree 30 or
@@ -330,7 +335,8 @@ class RealRootedPolynomial(Polynomial):
         If strict=True, they strictly interlace if and only if all roots of $p(x)$
         are simple (which corresponds to the polynomial being square-free).
         """
-        self.verify_real_rootedness()
+        if not self.verify_real_rootedness():
+            raise ValueError("Root interlacing requires a real-rooted polynomial")
 
         if not strict:
             return True
@@ -922,7 +928,7 @@ class RealRootedPolynomial(Polynomial):
             new_asc.append(self._fmpq_poly[j] * (c_fmpq ** (d - j)))
 
         result = RealRootedPolynomial(
-            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._real_roots_trusted
         )
         if self._root_recurrence is not None:
             result._root_recurrence = self._root_recurrence
@@ -946,7 +952,9 @@ class RealRootedPolynomial(Polynomial):
         shift_poly = _get_shift_poly(c_fmpq)
         res_poly = self._fmpq_poly(shift_poly)
 
-        result = RealRootedPolynomial(res_poly, assume_real_rooted=self._is_verified)
+        result = RealRootedPolynomial(
+            res_poly, assume_real_rooted=self._real_roots_trusted
+        )
         if self._root_recurrence is not None:
             result._root_recurrence = self._root_recurrence
             result._root_scale = self._root_scale
@@ -1113,7 +1121,7 @@ class RealRootedPolynomial(Polynomial):
             raise ValueError("Cannot take derivative of a constant polynomial.")
         res_poly = self._fmpq_poly.derivative()
         return RealRootedPolynomial(
-            res_poly, assume_real_rooted=self._is_verified, monic=monic
+            res_poly, assume_real_rooted=self._real_roots_trusted, monic=monic
         )
 
     def projection(self, j: SupportsIndex) -> "RealRootedPolynomial":
@@ -1148,7 +1156,7 @@ class RealRootedPolynomial(Polynomial):
 
         result = RealRootedPolynomial(
             flint.fmpq_poly(list(reversed(descending))),
-            assume_real_rooted=self._is_verified,
+            assume_real_rooted=self._real_roots_trusted,
         )
         if self._hermite_variance is not None:
             result._hermite_variance = self._hermite_variance
@@ -1241,7 +1249,7 @@ class RealRootedPolynomial(Polynomial):
             new_asc.append(self._fmpq_poly[2 * j])
 
         return RealRootedPolynomial(
-            flint.fmpq_poly(new_asc), assume_real_rooted=self._is_verified
+            flint.fmpq_poly(new_asc), assume_real_rooted=self._real_roots_trusted
         )
 
     @property
@@ -1319,6 +1327,11 @@ class UnitaryPolynomial(RealRootedPolynomial):
     ) -> None:
         # Bypasses real-rootedness verification
         super().__init__(coeffs, assume_real_rooted=True)
+
+    @property
+    def _real_roots_trusted(self) -> bool:
+        # Unit-circle trust must not certify derived real-root objects.
+        return False
 
     def verify_real_rootedness(self) -> bool:
         return False

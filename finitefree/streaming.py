@@ -61,7 +61,7 @@ class StreamingEmpiricalComparison:
         self._polynomial = RealRootedPolynomial(
             analytical_poly.coeffs,
             monic=False,
-            assume_real_rooted=analytical_poly._is_verified,
+            assume_real_rooted=analytical_poly._real_roots_trusted,
         )
         self.d = analytical_poly.degree
         limits = np.asarray(intervals)
