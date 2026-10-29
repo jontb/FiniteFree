@@ -47,26 +47,113 @@ def _decimal_real(value: Any) -> Decimal:
         raise ValueError("Basis data must be finite real numerical values") from error
 
 
+def _decimal_sqrt_float(value: Any) -> float:
+    """Positive float sqrt of a positive fmpq, rounded after a 40-digit root."""
+    with localcontext() as context:
+        context.prec = 40
+        result = float((Decimal(int(value.p)) / Decimal(int(value.q))).sqrt())
+    if not math.isfinite(result) or result <= 0:
+        raise ValueError("Recurrence normalization exceeds float64 range")
+    return result
+
+
+def _verified_recurrence(kernel: OrthogonalPolynomialKernel) -> Any:
+    """Exact monic three-term recurrence data for the supplied basis, or None.
+
+    Checks q_{j+1} = (x - a_j) q_j - b_j q_{j-1} exactly for the monic
+    q_j = p_j / k_j through q_n, with rational a_j and b_j, and the norm ratios
+    h_j / k_j**2 = b_j h_{j-1} / k_{j-1}**2 that orthonormality implies. No
+    family provenance or caller-supplied leading coefficients are trusted.
+    Returns (signs, monic h_0, a_0..a_{n-1}, b_0..b_{n-1}) with b_0 = 0.
+    """
+    n = kernel.n
+    if n == 0:
+        return None
+    monic = []
+    signs = []
+    monic_norms = []
+    for j, polynomial in enumerate(kernel._polys[: n + 1]):
+        if not polynomial._is_flint or polynomial.degree != j:
+            return None
+        leading = polynomial._fmpq_poly[j]
+        monic.append(polynomial._fmpq_poly / leading)
+        if j < n:
+            norm = kernel._norms[j]
+            if not isinstance(norm, flint.fmpq) or norm <= 0:
+                return None
+            signs.append(1.0 if leading > 0 else -1.0)
+            monic_norms.append(norm / leading**2)
+    x = flint.fmpq_poly([0, 1])
+    shifts = []
+    products = [flint.fmpq(0)]
+    for j in range(n):
+        # Remainder a_j q_j + b_j q_{j-1}; q_j is monic, so a_j is its x**j term.
+        remainder = x * monic[j] - monic[j + 1]
+        shift = remainder[j]
+        remainder -= shift * monic[j]
+        if j == 0:
+            if not remainder.is_zero():
+                return None
+        else:
+            product = remainder[j - 1]
+            if (
+                product <= 0
+                or remainder != product * monic[j - 1]
+                or monic_norms[j] != product * monic_norms[j - 1]
+            ):
+                return None
+            products.append(product)
+        shifts.append(shift)
+    return signs, monic_norms[0], shifts, products
+
+
 class PreparedOrthogonalKernel:
     """Owned numerical basis, reusable across batches and interval restrictions.
 
-    Verified Hermite bases use the normalized recurrence. Other bases use
-    normalized polynomial coefficients and Horner evaluation. Neither path is
-    an arbitrary-precision calculation; nonfinite results raise. Underflow and
-    ill-conditioning can still lose information in finite float64 results.
+    A basis with an exactly verified monic three-term recurrence and consistent
+    norms (for example shifted/scaled/signed Hermite, Legendre, Laguerre or
+    Jacobi data) uses the orthonormal float recurrence, then applies the sign of
+    each supplied leading coefficient. Other bases use normalized polynomial
+    coefficients and Horner evaluation. Neither path is an arbitrary-precision
+    calculation; nonfinite results raise. Underflow and ill-conditioning can
+    still lose information in finite float64 results.
     """
 
     def __init__(self, kernel: OrthogonalPolynomialKernel) -> None:
         self.n = kernel.n
-        self._hermite = kernel._hermite_parameters is not None
-        self._center = kernel._hermite_center
-        self._initial = kernel._hermite_initial
-        self._steps = kernel._hermite_steps
+        if kernel._hermite_parameters is not None and kernel._hermite_range_error:
+            raise ValueError("Hermite normalization exceeds finite float64 range")
+        # psi_{j+1} = (x - shift_j) * scale_j * psi_j - ratio_j * psi_{j-1}.
+        self._recurrence = False
+        self._initial = 1.0
+        self._steps: tuple[tuple[float, float, float], ...] = ()
+        self._signs: NDArray[np.float64] = np.ones(self.n)
         self._coefficients: tuple[NDArray[np.float64], ...] = ()
-        if self._hermite:
-            if kernel._hermite_range_error:
-                raise ValueError("Hermite normalization exceeds finite float64 range")
-            return
+        verified = _verified_recurrence(kernel)
+        if verified is not None:
+            signs, mass, shifts, products = verified
+            try:
+                # Square roots of exact ratios precede float conversion, so
+                # large basis scalings and norms cancel without overflow.
+                self._initial = _decimal_sqrt_float(1 / mass)
+                self._steps = tuple(
+                    (
+                        float(_decimal_real(shifts[j])),
+                        _decimal_sqrt_float(1 / products[j + 1]),
+                        _decimal_sqrt_float(products[j] / products[j + 1])
+                        if j
+                        else 0.0,
+                    )
+                    for j in range(self.n - 1)
+                )
+                if all(math.isfinite(step[0]) for step in self._steps):
+                    self._signs = np.array(signs)
+                    self._recurrence = True
+                    return
+            except (OverflowError, ValueError):
+                pass
+            # Unrepresentable recurrence data keeps the coefficient path.
+            self._initial, self._steps = 1.0, ()
         normalized = []
         for polynomial, norm in zip(kernel.polys[: self.n], kernel.norms):
             # Rational coefficients are normalized before narrowing, so a large
@@ -90,17 +177,22 @@ class PreparedOrthogonalKernel:
             raise ValueError("Coordinates must be one-dimensional")
         result = np.empty((len(xs), self.n))
         with np.errstate(over="ignore", invalid="ignore"):
-            if self._hermite and self.n:
+            if self._recurrence:
                 previous = np.zeros(len(xs))
                 current = np.full(len(xs), self._initial)
                 result[:, 0] = current
-                shifted = xs - self._center
-                for j, (inverse_sqrt, ratio) in enumerate(self._steps, 1):
+                center = None
+                for j, (shift, scale, ratio) in enumerate(self._steps, 1):
+                    if shift != center:  # Constant for Hermite/symmetric families.
+                        center, shifted = shift, xs - shift
                     previous, current = (
                         current,
-                        shifted * inverse_sqrt * current - ratio * previous,
+                        shifted * scale * current - ratio * previous,
                     )
                     result[:, j] = current
+                # Positive-leading orthonormal columns take the supplied signs.
+                if np.any(self._signs < 0):
+                    result *= self._signs
             else:
                 for j, coefficients in enumerate(self._coefficients):
                     result[:, j] = np.polyval(coefficients, xs)

@@ -57,6 +57,17 @@
   arity and operand indices at construction, recognises any sequence equal to
   `["det"]`, and raises `NotImplementedError` for Hessians of generic programs
   instead of returning the determinant Hessian.
+- Evaluate prepared orthogonal-kernel bases by an exactly verified three-term
+  recurrence. `prepare_numeric()` used Horner's rule on monomial coefficients
+  for every family except Hermite, so Legendre bases had relative error 2.6e-7
+  at rank 30 and were wrong at rank 50, and count laws raised "eigenvalues must
+  lie in [0, 1]" from rank 30 on. Any basis whose monic recurrence and norm
+  ratios check exactly in rational arithmetic (shifted, scaled or signed
+  Hermite, Legendre, Laguerre, Jacobi) now uses the orthonormal float
+  recurrence (errors near 1e-14 through rank 50); other bases keep Horner. The
+  Hermite fast path also dropped the sign of sign-flipped basis polynomials in
+  `basis()`; every recurrence column now takes the sign of its supplied
+  leading coefficient.
 
 ## 0.4.1
 

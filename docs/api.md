@@ -8,13 +8,21 @@ For repeated numerical work, use prepared kernels or pencils, batch evaluation a
 
 `OrthogonalPolynomialKernel.prepare_numeric()` returns an owned
 `PreparedOrthogonalKernel`. `basis(points)` evaluates normalized basis rows;
-`matrix(xs, ys=None)` computes a batch kernel matrix. Verified shifted/scaled
-Hermite bases use their normalized recurrence. Other families use normalized
-coefficients with Horner evaluation, retaining the conditioning limits of that
-representation. Exact scalar calls and `BaseKernel.matrix` keep their existing
-behavior. These explicit float64 APIs reject complex/nonfinite coordinates and
-raise for nonfinite results. Finite results can still lose information through
-underflow or ill-conditioning.
+`matrix(xs, ys=None)` computes a batch kernel matrix. Preparation checks
+exactly, in rational arithmetic, that the monic polynomials `q_j = p_j/k_j`
+through `p_n` satisfy `q_{j+1} = (x - a_j) q_j - b_j q_{j-1}` with rational
+`a_j`, positive rational `b_j`, and monic norms
+`h_j/k_j**2 = b_j h_{j-1}/k_{j-1}**2`. Such bases, including shifted/scaled
+Hermite, Legendre, Laguerre and Jacobi data, are evaluated by the orthonormal
+float recurrence; each column keeps the sign of its supplied leading
+coefficient. No family name or provenance is
+trusted. Bases that fail this check use normalized coefficients with Horner
+evaluation, retaining the conditioning limits of that representation; so do
+non-Hermite bases whose recurrence data do not fit float64 (verified Hermite
+bases raise `ValueError`, as before). Exact scalar calls and
+`BaseKernel.matrix` keep their existing behavior. These explicit float64 APIs
+reject complex/nonfinite coordinates and raise for nonfinite results. Finite
+results can still lose information through underflow or ill-conditioning.
 
 | Prepared call | Input | Output |
 | :--- | :--- | :--- |
