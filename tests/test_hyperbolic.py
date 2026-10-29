@@ -3,6 +3,7 @@ from typing import Any, Callable, Sequence
 import flint
 import numpy as np
 import sympy as sp
+from numpy.typing import NDArray
 
 from finitefree.hyperbolic import MultiplicativeMatrixPencil, SymmetricMatrixPencil
 from finitefree.hyperbolic.slp import StraightLineProgram
@@ -15,7 +16,7 @@ ASYMMETRIC = [np.array([[1.0, 2.0], [3.0, 4.0]]), np.array([[0.0, 1.0], [0.0, 0.
 
 
 def _symbolic_determinant(
-    matrices: Sequence[np.ndarray], variables: Sequence[sp.Symbol]
+    matrices: Sequence[NDArray[np.float64]], variables: Sequence[sp.Symbol]
 ) -> sp.Expr:
     """Independent SymPy Berkowitz determinant of sum_i x_i A_i."""
     size = matrices[0].shape[0]
@@ -99,7 +100,7 @@ def test_multivariate_structure_of_fixed_quadratics() -> None:
     assert flint_poly(2, 3) == 69
 
 
-def _seeded_symmetric_integer_pencil(size: int, seed: int) -> list[np.ndarray]:
+def _seeded_symmetric_integer_pencil(size: int, seed: int) -> list[NDArray[np.float64]]:
     rng = np.random.default_rng(seed)
     matrices = [rng.integers(-3, 4, size=(size, size)).astype(float) for _ in range(3)]
     return [matrix + matrix.T for matrix in matrices]
