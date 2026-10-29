@@ -17,7 +17,7 @@ def _is_numerically_hermitian(sample: NDArray[np.complex128]) -> bool:
     )
 
 
-def _has_adjacent_pairs(eigenvalues: NDArray[np.float64]) -> bool:
+def _has_adjacent_pairs(eigenvalues: NDArray[np.floating[Any]]) -> bool:
     """Check sorted eigenvalues pair up to 1e-10 times the largest magnitude."""
     return np.allclose(
         eigenvalues[::2],
