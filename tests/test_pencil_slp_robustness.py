@@ -11,6 +11,7 @@ from typing import Any, Iterator
 import numpy as np
 import pytest
 import sympy as sp
+from numpy.typing import NDArray
 
 import finitefree.hyperbolic.pencils as pencils
 import finitefree.multivariate as multivariate
@@ -64,7 +65,7 @@ def _rational(value: Any) -> sp.Rational:
     return sp.Rational(int(value.p), int(value.q))
 
 
-def _as_float(values: Any) -> np.ndarray:
+def _as_float(values: Any) -> NDArray[np.float64]:
     return np.array(values, dtype=object).astype(np.float64)
 
 
@@ -109,9 +110,9 @@ def test_float_determinant_derivatives_reject_exactly_singular_points() -> None:
     method: str
     for method in ["gradient", "hessian"]:
         with case(method=method):
+            # LinAlgError subclasses ValueError only from NumPy 2.0, so callers
+            # on the supported NumPy 1.24 floor must catch LinAlgError itself.
             with pytest.raises(np.linalg.LinAlgError, match="nonsingular"):
-                getattr(slp, method)(x)
-            with pytest.raises(ValueError):
                 getattr(slp, method)(x)
     with pytest.raises(np.linalg.LinAlgError):
         pencil.prepare_numeric().factor(x).logabsdet_gradient()

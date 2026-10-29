@@ -167,7 +167,7 @@ class StraightLineProgram:
     ) -> tuple[tuple[float, float, float], list[NDArray[np.float64]]]:
         """Return (det, sign, log|det|) and ``A(x)^{-1} A_i`` from LU solves.
 
-        Raises ``numpy.linalg.LinAlgError`` (a ValueError) when LU factorization
+        Raises ``numpy.linalg.LinAlgError`` when LU factorization
         of ``A(x)`` meets an exactly zero pivot. No pseudoinverse or
         determinant-magnitude threshold is used, so tiny nonsingular determinants
         are differentiated rather than truncated.
@@ -199,7 +199,7 @@ class StraightLineProgram:
         Exact determinant gradients require a nonsingular evaluated matrix and raise
         ValueError at singular points. Numerical determinant gradients solve with
         one LU factorization of the evaluated matrix and raise
-        numpy.linalg.LinAlgError (a ValueError) at an exactly zero LU pivot; they
+        numpy.linalg.LinAlgError at an exactly zero LU pivot; they
         use no pseudoinverse or determinant threshold. Near-singular results remain
         conditioning-dependent.
         """
@@ -282,7 +282,7 @@ class StraightLineProgram:
         A determinant program with a pencil is required; generic scalar-operation
         Hessians are not implemented and raise NotImplementedError.
         Exact=True raises ValueError at singular matrices. Numerical evaluation
-        raises numpy.linalg.LinAlgError (a ValueError) at an exactly zero LU pivot
+        raises numpy.linalg.LinAlgError at an exactly zero LU pivot
         and remains conditioning-dependent near singular points.
         """
         if not self._is_determinant:
