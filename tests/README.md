@@ -34,9 +34,13 @@ oracles and edge cases when changing the suite:
 - Prepared-pencil derivatives use independent symbolic determinants, extreme
   coefficient scales, strided batches, varied block sizes, and cache reuse.
 - Prepared kernels use exact rational basis sums with signed/scaled/shifted
-  families. Count laws use exhaustive Bernoulli enumeration and analytically
-  integrated rank-two Lebesgue/Gaussian Gram matrices. The legacy continuous
-  gap path shares those references; a value merely lying in [0,1] is insufficient.
+  families. Recurrence-verified Legendre, Jacobi and Laguerre bases at ranks
+  30-50 match exact rational evaluation; Legendre/Jacobi interval count laws
+  match exact rational Gram restrictions through a characteristic polynomial,
+  and the basis error is checked separately on the same quadrature nodes.
+  Count laws use exhaustive Bernoulli enumeration and analytically integrated
+  rank-two Lebesgue/Gaussian Gram matrices. The legacy continuous gap path
+  shares those references; a value merely lying in [0,1] is insufficient.
   Tiny upper tails remain checked even when the CDF rounds to one.
   Repeated prepared queries count eigendecompositions and mutate returned law
   metadata to check lazy cache reuse and independent results.
