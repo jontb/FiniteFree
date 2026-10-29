@@ -5,6 +5,14 @@
 - Cache the first successful prepared-quadrature count law for repeated count
   and gap queries. Returned laws retain independent arrays and metadata;
   spectrum validation remains lazy and failed computations are retried.
+- Reject repeated and negative discrete DPP states. `gap_probability_discrete`
+  raised no error for repeated points and returned the determinant of a
+  duplicated principal matrix (`gap([0, 0])` gave 0 instead of `gap([0])`).
+  `DiscreteFiniteKernel` let negative indices wrap to the end of list and
+  ndarray matrices, so `[4, -1]` silently meant state 4 twice in count laws,
+  gaps and sampling. Both now raise (`ValueError` for repeated points,
+  `IndexError` for negative indices), and the kernel stores a copy of its
+  matrix so later edits to the caller's array cannot change it.
 
 ## 0.4.1
 
