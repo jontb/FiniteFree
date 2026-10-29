@@ -11,6 +11,7 @@ import sympy as sp
 from finitefree import (
     DiscreteFiniteKernel,
     PreparedDiscreteDPP,
+    count_distribution_discrete,
     gap_probability_discrete,
     sample_discrete,
 )
@@ -204,3 +205,110 @@ def test_raw_and_prepared_sampling_against_exact_subset_laws(
             np.testing.assert_allclose(
                 counts / trials, expected, rtol=0, atol=tolerance
             )
+
+
+def _discrete_representations() -> list[tuple[str, Any]]:
+    return [
+        ("list", lambda rows: [list(row) for row in rows]),
+        ("ndarray", np.array),
+        ("fmpq_mat", flint.fmpq_mat),
+    ]
+
+
+def test_discrete_gap_requires_distinct_states() -> None:
+    q = flint.fmpq
+    rows = [[q(1, 2), q(1, 4), 0], [q(1, 4), q(1, 2), 0], [0, 0, q(1, 3)]]
+    # Hand-computed det(I - K_I): 1 - K_ii on singletons, (1/2)^2 - (1/4)^2 on
+    # the dense block and a factor 1 - 1/3 = 2/3 for the independent state.
+    expected = {
+        (0,): q(1, 2),
+        (1,): q(1, 2),
+        (2,): q(2, 3),
+        (0, 1): q(3, 16),
+        (2, 0): q(1, 3),
+        (0, 1, 2): q(1, 8),
+    }
+    for name, representation in _discrete_representations():
+        kernel = DiscreteFiniteKernel(representation(rows))
+        for points, value in expected.items():
+            with case(representation=name, points=points):
+                assert gap_probability_discrete(kernel, points) == value
+        for repeated in ([0, 0], [2, 0, 2], [np.int64(1), 1]):
+            with case(representation=name, repeated=repeated):
+                # A repeated state would give det(I - K) of a singular duplicate.
+                with pytest.raises(ValueError, match="distinct"):
+                    gap_probability_discrete(kernel, repeated)
+
+
+def test_discrete_kernel_rejects_negative_indices_for_every_caller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("Invalid state index consumed randomness")
+
+    diagonal = [0.2, 0.3, 0.4, 0.5, 0.4468]
+    q = flint.fmpq
+    exact_diagonal = [q(2, 10), q(3, 10), q(4, 10), q(5, 10), q(4468, 10000)]
+    for name, representation in _discrete_representations():
+        values = exact_diagonal if name == "fmpq_mat" else diagonal
+        rows = [[values[i] if i == j else 0 for j in range(5)] for i in range(5)]
+        kernel = DiscreteFiniteKernel(representation(rows))
+        for i, j in [(-1, 0), (0, -1), (-5, -5), (np.int64(-1), 4), (5, 0), (0, 5)]:
+            with case(representation=name, index=(i, j)):
+                with pytest.raises(IndexError):
+                    kernel(i, j)
+        for points in ([4, -1], [-1], [0, -5]):
+            with case(representation=name, points=points):
+                # -1 must not alias state 4 and yield its duplicated law.
+                with pytest.raises(IndexError):
+                    count_distribution_discrete(kernel, points)
+                with pytest.raises(IndexError):
+                    gap_probability_discrete(kernel, points)
+                with monkeypatch.context() as patch:
+                    patch.setattr(np.random, "rand", unexpected)
+                    patch.setattr(np.random, "choice", unexpected)
+                    with pytest.raises(IndexError):
+                        sample_discrete(kernel, points)
+        with case(representation=name, points=[4, 3]):
+            # Independent Bernoulli enumeration for the diagonal restriction.
+            p = [diagonal[4], diagonal[3]]
+            expected = np.zeros(3)
+            for occupied in itertools.product((0, 1), repeat=2):
+                expected[sum(occupied)] += math.prod(
+                    p[k] if bit else 1 - p[k] for k, bit in enumerate(occupied)
+                )
+            np.testing.assert_allclose(
+                count_distribution_discrete(kernel, [4, 3]).pmf(),
+                expected,
+                rtol=0,
+                atol=1e-15,
+            )
+            assert gap_probability_discrete(kernel, [4]) == 1 - values[4]
+
+
+def test_discrete_kernel_owns_a_snapshot_of_its_matrix() -> None:
+    q = flint.fmpq
+    rows = [[q(1, 2), q(1, 4)], [q(1, 4), q(1, 2)]]
+    float_rows = [[0.5, 0.25], [0.25, 0.5]]
+    sources: list[tuple[str, Any]] = [
+        ("list", [list(row) for row in float_rows]),
+        ("ndarray", np.array(float_rows)),
+        ("object ndarray", np.array(rows, dtype=object)),
+        ("fmpq_mat", flint.fmpq_mat(rows)),
+    ]
+    for name, source in sources:
+        with case(representation=name):
+            entry = source[0, 0] if name == "fmpq_mat" else source[0][0]
+            off_diagonal = source[0, 1] if name == "fmpq_mat" else source[0][1]
+            kernel = DiscreteFiniteKernel(source)
+            if name == "fmpq_mat":
+                source[0, 0] = q(9, 10)
+                source[0, 1] = q(0)
+            else:
+                source[0][0] = 0.9
+                source[0][1] = 0
+            # Entry types are unchanged and caller edits do not reach the kernel.
+            assert type(kernel(0, 0)) is type(entry)
+            assert kernel(0, 0) == entry and kernel(0, 1) == off_diagonal
+            # 1/2 * 1/2 - 1/4 * 1/4 is exact in binary floating point too.
+            assert float(gap_probability_discrete(kernel, [0, 1])) == 3 / 16
