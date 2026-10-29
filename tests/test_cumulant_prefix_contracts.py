@@ -1,4 +1,5 @@
 from fractions import Fraction
+from typing import Any
 
 import flint
 import numpy as np
@@ -169,3 +170,30 @@ def test_affine_cumulants_against_logarithm_after_cache_reordering() -> None:
                 atol=2e-12,
             )
             assert list(p.coeffs) == stored
+
+
+def test_series_cumulants_exceed_the_default_flint_cap_and_restore_it() -> None:
+    from finitefree.convolutions import symmetric_additive
+
+    saved = flint.ctx.cap
+    # Degree 14 exceeds FLINT's default series length of 10; the formal-log
+    # reference expands in SymPy without the production series code.
+    p = RealRootedPolynomial.from_roots(
+        [-3, -1, 0, 2, 5, 7, 8, 11, 12, 13, sp.Rational(17, 2), 20, 21, 30]
+    )
+    reference = assert_cumulants(p, p.degree, rtol=1e-12, atol=1e-9)
+    assert flint.ctx.cap == saved
+
+    t: Any
+    for t in [3, sp.Rational(3, 7)]:
+        with case(t=t):
+            power = p.additive_power(t)
+            assert flint.ctx.cap == saved
+            assert logarithm_reference(power, p.degree, p.degree) == [
+                t * value for value in reference
+            ]
+            if t == 3:
+                repeated = symmetric_additive(
+                    p, symmetric_additive(p, p, p.degree), p.degree
+                )
+                assert list(power.coeffs) == list(repeated.coeffs)

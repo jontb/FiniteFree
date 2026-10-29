@@ -2,6 +2,7 @@ import abc
 import functools
 import math
 import operator
+import sys
 import warnings
 from typing import Any, List, Sequence, SupportsIndex, Union
 
@@ -547,8 +548,10 @@ class RealRootedPolynomial(Polynomial):
             return cls(flint.fmpq_poly([1]), assume_real_rooted=True)
 
         factors = []
+        exact_roots = []
         for r in roots:
             val = sympy_to_fmpq(r)
+            exact_roots.append(val)
             factors.append(flint.fmpq_poly([-val, 1]))
 
         queue = deque(factors)
@@ -560,8 +563,12 @@ class RealRootedPolynomial(Polynomial):
         poly_flint = queue[0]
         inst = cls(poly_flint, assume_real_rooted=True)
         try:
-            float_roots = [flint_to_float(r) for r in roots]
+            # Integer true division rounds the exact root correctly, so this cache
+            # is at least as accurate as Arb isolation at any working precision.
+            float_roots = [int(r.p) / int(r.q) for r in exact_roots]
             inst._roots_cached = cls._finite_float64_root_array(np.sort(float_roots))
+            inst._roots_cached_exact = True
+            inst._roots_cached_prec = sys.maxsize
         except (TypeError, ValueError, OverflowError, RuntimeError):
             pass  # Exact construction is valid even beyond the float64 range.
         return inst
@@ -1183,29 +1190,13 @@ class RealRootedPolynomial(Polynomial):
             )
 
         d = self.degree
-        import flint
+        from .transforms import _moments_of_scaled_cumulants
 
-        from .transforms import FiniteRTransform
-
-        kappas = FiniteRTransform(self, order=d)
-        t_fmpq = sympy_to_fmpq(t)
-        kappas_fmpq = [sympy_to_fmpq(k) for k in kappas]
-        kappas_scaled = [k * t_fmpq for k in kappas_fmpq]
-
-        c_cumulants = []
-        for n in range(1, d + 1):
-            den = flint.fmpq((-d) ** (n - 1), math.factorial(n - 1))
-            val_num = kappas_scaled[n - 1]
-            c_cumulants.append(val_num / den)
-
-        e_k = [flint.fmpq(1)]
-        for n in range(1, d + 1):
-            en = c_cumulants[n - 1]
-            for k in range(1, n):
-                en += math.comb(n - 1, k - 1) * c_cumulants[k - 1] * e_k[n - k]
-            e_k.append(en)
-
-        return RealRootedPolynomial.from_normalized_coeffs(e_k)
+        # Finite cumulants are fixed multiples of the classical cumulants of the
+        # normalized coefficients, so scaling one family by t scales the other.
+        e_k = self._normalized_coeffs_flint_prefix(d, d)
+        scaled = _moments_of_scaled_cumulants(e_k, d, sympy_to_fmpq(t))
+        return RealRootedPolynomial.from_normalized_coeffs(scaled)
 
     def is_symmetric(self) -> bool:
         """
