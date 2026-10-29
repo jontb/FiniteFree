@@ -13,7 +13,12 @@ def _sample_observations(
     matrix: Any, degree: int
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Apply the retained comparison's Hermitian/paired-eigenvalue contract."""
-    sample = np.asarray(matrix, dtype=np.complex128)
+    raw = np.asarray(matrix)
+    # Real samples keep the real symmetric eigensolver; complex/object input is
+    # converted as before.
+    sample: NDArray[Any] = np.asarray(
+        raw, dtype=np.float64 if raw.dtype.kind in "biuf" else np.complex128
+    )
     if sample.shape not in [(degree, degree), (2 * degree, 2 * degree)]:
         raise ValueError("Sample matrices must have shape (d, d) or (2d, 2d).")
     if not np.all(np.isfinite(sample)):

@@ -22,6 +22,16 @@
   trust as a real-root certificate, and `verify_root_interlacing` raises
   `ValueError` when real-rootedness does not hold. Previously these cases
   returned `True` and reported complex roots as repeated real parts.
+- Speed up exact cumulant and transform paths without changing results.
+  `FiniteRTransform` (exact) and `additive_power` take classical cumulants from
+  a FLINT series logarithm instead of a quadratic Python recurrence (order 400:
+  1.07 s to 0.06 s; `additive_power(3/7)` at degree 250: 0.69 s to 0.026 s).
+  `FiniteCauchyTransform` reads coefficients once (degree 400: 1.19 s to
+  0.07 s). `from_roots` caches correctly rounded roots as exact, so the default
+  `exact=True` call no longer isolates known roots again (degree 200: 0.76 s
+  to under 1 ms). Real empirical samples keep the real symmetric eigensolver
+  (GOE, degree 500: 39.5 ms to 15.4 ms per sample). Timings are single-thread
+  measurements on one Linux machine; outputs were checked identical.
 
 ## 0.4.1
 
