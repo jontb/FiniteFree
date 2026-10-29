@@ -172,7 +172,7 @@ For generic compound-Wishart convolutions, `PYTHONPATH=. python scripts/benchmar
 
 Coefficient sequences are descending; FLINT polynomials use ascending storage. Construction defaults to monic normalization. On a rational polynomial, integer/rational `evaluate(x)` arguments use exact FLINT evaluation, while Python/NumPy floating arguments select float64 Horner arithmetic. That numerical path can overflow or underflow even when exact coefficients are valid. `to_numpy_poly1d()` directly casts stored coefficients and warns above degree 20; it does not rescale or certify them.
 
-`PrecisionContext` changes FLINT's process-wide precision to the requested bits, defaulting to `max(53, int(2.5*degree))`, and restores the old value on exit. It does not provide thread-local isolation or a memory pool. Concurrent code that changes FLINT precision needs coordination.
+`PrecisionContext` changes FLINT's process-wide precision to the requested bits, defaulting to `max(53, int(2.5*degree))`, and restores the value current at entry when that entry exits; one context object may be reused sequentially or nested. It does not provide thread-local isolation or a memory pool. Concurrent code that changes FLINT precision needs coordination.
 
 Positive integer `power(c)` uses exact rational operations and requires non-negative roots. Noninteger root powers reconstruct from numerical roots and inherit their float64 limits. `additive_power(t)` scales cumulants for positive rational `t`; fractional powers are formal coefficient constructions with lazy geometry validation, not an unconditional real-root preservation guarantee.
 
