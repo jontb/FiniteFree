@@ -1,5 +1,6 @@
 import functools
 import math
+import os
 from typing import Any, Sequence
 
 import flint
@@ -40,49 +41,89 @@ __all__ = [
     "get_inverse_vandermonde_matrices_cached",
 ]
 
-try:
-    import importlib
+# Largest modulus m = isqrt(2**63 - 1): residue products and sums stay in int64.
+_INT64_SAFE_MODULUS = math.isqrt(2**63 - 1)
 
-    _modular_fast = importlib.import_module(".modular_fast", package=__package__)
-    modular_det = _modular_fast.modular_det
-except ImportError:
 
-    def modular_det(A: list[list[int]], p: int) -> int:
-        """Computes the determinant of a matrix A modulo prime p in O(n^3) time."""
-        n = len(A)
-        det = 1
-        M = [[A[i][j] % p for j in range(n)] for i in range(n)]
-        for i in range(n):
-            pivot = -1
-            for r in range(i, n):
-                if M[r][i] != 0:
-                    pivot = r
-                    break
-            if pivot == -1:
-                return 0
-            if pivot != i:
-                M[i], M[pivot] = M[pivot], M[i]
-                det = (p - det) % p
-            val = M[i][i]
-            det = (det * val) % p
-            inv = pow(val, -1, p)
-            for r in range(i + 1, n):
-                factor = (M[r][i] * inv) % p
-                for c in range(i, n):
-                    M[r][c] = (M[r][c] - factor * M[i][c]) % p
-        return det
+def _compiled_modulus(p: Any) -> bool:
+    """Whether p fits the int64 residue arithmetic of the compiled kernels."""
+    try:
+        return bool(2 <= p <= _INT64_SAFE_MODULUS)
+    except TypeError:
+        return False
+
+
+def _modular_det_python(A: Sequence[Sequence[Any]], p: int) -> int:
+    """Computes the determinant of a matrix A modulo prime p in O(n^3) time."""
+    n = len(A)
+    det = 1
+    M = [[A[i][j] % p for j in range(n)] for i in range(n)]
+    for i in range(n):
+        pivot = -1
+        for r in range(i, n):
+            if M[r][i] != 0:
+                pivot = r
+                break
+        if pivot == -1:
+            return 0
+        if pivot != i:
+            M[i], M[pivot] = M[pivot], M[i]
+            det = (p - det) % p
+        val = M[i][i]
+        det = (det * val) % p
+        inv = pow(val, -1, p)
+        for r in range(i + 1, n):
+            factor = (M[r][i] * inv) % p
+            for c in range(i, n):
+                M[r][c] = (M[r][c] - factor * M[i][c]) % p
+    return det
+
+
+_modular_det_fast: Any = None
+if os.environ.get("PYFFP_DISABLE_CYTHON") != "1":
+    try:
+        import importlib
+
+        _modular_det_fast = importlib.import_module(
+            ".modular_fast", package=__package__
+        ).modular_det
+    except ImportError:
+        pass
+
+
+def modular_det(A: Sequence[Sequence[Any]], p: int) -> int:
+    """Determinant of the integer matrix A modulo prime p, in [0, p).
+
+    Entries may be negative or exceed int64; both implementations reduce them
+    with Python integer arithmetic. The compiled kernel handles list inputs and
+    primes up to isqrt(2**63 - 1) unless PYFFP_DISABLE_CYTHON=1 was set at
+    import; other inputs use the Python implementation.
+    """
+    if _modular_det_fast is not None and isinstance(A, list) and _compiled_modulus(p):
+        return int(_modular_det_fast(A, p))
+    return _modular_det_python(A, p)
 
 
 def crt(modulo_values: list[int], primes: list[int]) -> int:
-    import os
+    """Return x with x = modulo_values[i] (mod primes[i]) and |x| <= M // 2.
 
-    if os.environ.get("PYFFP_DISABLE_CYTHON") != "1":
+    Residues may be any integers. The compiled kernel is used when every prime
+    is at most isqrt(2**63 - 1) unless PYFFP_DISABLE_CYTHON=1; larger primes
+    use exact Python integer arithmetic.
+    """
+    if (
+        os.environ.get("PYFFP_DISABLE_CYTHON") != "1"
+        and len(modulo_values) == len(primes)
+        and all(_compiled_modulus(p) for p in primes)
+    ):
         try:
-            import numpy as np
-
             from .modular_fast import crt as crt_fast
 
-            mix_np = np.array(modulo_values, dtype=np.int64)
+            # Reduce with Python integers before narrowing to int64.
+            mix_np = np.array(
+                [int(v) % int(p) for v, p in zip(modulo_values, primes)],
+                dtype=np.int64,
+            )
             primes_np = np.array(primes, dtype=np.int64)
             return int(crt_fast(mix_np, primes_np))
         except (ImportError, AttributeError, ValueError):

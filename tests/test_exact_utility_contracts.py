@@ -15,6 +15,7 @@ import pytest
 import sympy as sp
 
 from finitefree import PrecisionContext
+from finitefree.utils import modular
 from finitefree.utils.conversion import flint_to_float
 from tests._cases import case
 
@@ -132,3 +133,104 @@ def test_flint_to_float_keeps_documented_range_limits() -> None:
     assert negative_tiny == 0.0 and math.copysign(1.0, negative_tiny) == -1.0
     assert flint_to_float(flint.fmpz(-12)) == -12.0
     assert flint_to_float(flint.arb(0.25)) == 0.25
+
+
+def _sympy_det_mod(matrix: list[list[int]], p: int) -> int:
+    return int(sp.Matrix(matrix).det()) % p if matrix else 1 % p
+
+
+def test_modular_det_reduces_signed_and_large_entries() -> None:
+    rng = random.Random(7)
+    matrices = [
+        [[-2, 1], [1, 1]],
+        [[-1]],
+        [[3, -5], [2, 4]],
+        [[0, -1], [-2, 3]],
+        [[2**70, 1], [1, 1]],
+        [[-(2**64) - 3, 5], [2**63, -(2**80)]],
+        [[1, 2], [2, 4]],
+    ]
+    for size in (3, 4, 5):
+        matrices.append(
+            [
+                [
+                    rng.choice([-1, 1]) * rng.getrandbits(rng.choice([4, 40, 90]))
+                    for _ in range(size)
+                ]
+                for _ in range(size)
+            ]
+        )
+    moduli = [7, 1000000007, 3037000493, 3037000507, 2**61 - 1, 2**89 - 1]
+    for p in moduli:
+        for matrix in matrices:
+            with case(p=p, matrix=matrix):
+                expected = _sympy_det_mod(matrix, p)
+                result = modular.modular_det([list(row) for row in matrix], p)
+                assert result == expected
+                assert 0 <= result < p
+    assert modular.modular_det([[-2, 1], [1, 1]], 7) == 4
+    assert modular.modular_det([[-1]], 7) == 6
+    assert modular.modular_det([[2**70, 1], [1, 1]], 1000000007) == 270016252
+
+
+def test_compiled_modular_kernels_reduce_and_validate_inputs() -> None:
+    fast = pytest.importorskip("finitefree.utils.modular_fast")
+    assert fast.modular_det([[-2, 1], [1, 1]], 7) == 4
+    assert fast.modular_det([[-1]], 7) == 6
+    assert fast.modular_det([[2**70, 1], [1, 1]], 1000000007) == 270016252
+    for p in (1, 0, -7, INT64_SAFE_MODULUS + 1):
+        with case(p=p):
+            with pytest.raises(ValueError):
+                fast.modular_det([[1]], p)
+    import numpy as np
+
+    primes = np.array([3037000493, 1000000007], dtype=np.int64)
+    x_true = -123456789012345678
+    residues = np.array([x_true, x_true], dtype=np.int64)  # unreduced, negative
+    assert int(fast.crt(residues, primes)) == x_true
+    residues = np.array([-(2**63), 2**63 - 1], dtype=np.int64)
+    result = int(fast.crt(residues, primes))
+    assert (result - -(2**63)) % 3037000493 == 0
+    assert (result - (2**63 - 1)) % 1000000007 == 0
+    with pytest.raises(ValueError):
+        fast.crt(
+            np.array([1, 2], dtype=np.int64),
+            np.array([3037000507, 1000000007], dtype=np.int64),
+        )
+
+
+def test_modular_det_honors_the_fallback_flag() -> None:
+    import os
+
+    if os.environ.get("PYFFP_DISABLE_CYTHON") == "1":
+        assert modular._modular_det_fast is None
+    else:
+        fast = pytest.importorskip("finitefree.utils.modular_fast")
+        assert modular._modular_det_fast is fast.modular_det
+
+
+def test_crt_reconstructs_symmetric_values_for_large_primes() -> None:
+    prime_sets = [
+        [3, 5, 7],
+        [1000000007, 1000000009, 1000000021],
+        [3037000493, 1000000007],
+        [3037000507, 1000000007],
+        [4294967311, 4294967357, 4294967371],
+        [2**61 - 1, 2**89 - 1],
+    ]
+    rng = random.Random(11)
+    for primes in prime_sets:
+        modulus = math.prod(primes)
+        values = [0, 1, -1, modulus // 2, -(modulus // 2)]
+        values += [rng.randrange(-(modulus // 2), modulus // 2 + 1) for _ in range(20)]
+        for x_true in values:
+            for residues in (
+                [x_true % p for p in primes],
+                [x_true for _ in primes],  # unreduced and possibly negative
+                [x_true + (2**80) * p for p in primes],
+            ):
+                with case(primes=primes, x_true=x_true, residues=residues):
+                    result = modular.crt(residues, primes)
+                    assert all((result - r) % p == 0 for r, p in zip(residues, primes))
+                    assert -(modulus // 2) <= result <= modulus // 2
+                    assert result == x_true
