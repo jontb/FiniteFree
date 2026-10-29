@@ -32,6 +32,18 @@
   to under 1 ms). Real empirical samples keep the real symmetric eigensolver
   (GOE, degree 500: 39.5 ms to 15.4 ms per sample). Timings are single-thread
   measurements on one Linux machine; outputs were checked identical.
+- Fix exact-arithmetic utility defects. `PrecisionContext` restored the
+  precision seen at construction rather than at entry, so a precision change in
+  between, or nested reuse, was lost on exit. `flint_to_float` rounded twice and
+  was one ulp off for about a third of large ratios; it now rounds once. The
+  compiled `modular_det` gave wrong results for negative entries and overflowed
+  above int64, the compiled `crt` overflowed for primes above about 3.04e9, and
+  `PYFFP_DISABLE_CYTHON=1` did not disable the compiled `modular_det`; entries
+  are now reduced exactly before narrowing, large primes use Python arithmetic,
+  and the flag is honoured. Internal callers did not reach these inputs. The
+  exact Sturm fallback used when Arb cannot certify degrees 15-30 raised or
+  miscounted for abnormal remainder sequences; it now uses a sign-correct
+  integer Sturm sequence and raises `ValueError` for non-real-rooted inputs.
 
 ## 0.4.1
 

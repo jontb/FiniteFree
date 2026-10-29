@@ -75,8 +75,8 @@ Then build the source extension and run both source suites, examples and the ins
 The installed-wheel helper runs compiled and flag-fallback library suites explicitly
 in a temporary directory and confirms that the compiled extension is present.
 Documentation-tool tests require the source tree. `PYFFP_DISABLE_CYTHON=1` selects
-Python grid evaluation and CRT reconstruction; it does not remove the built
-extension, and `modular_det` can still use it. A focused fresh-process test blocks
+Python grid evaluation, determinants modulo primes and CRT reconstruction; it does
+not remove the built extension. A focused fresh-process test blocks
 the extension import separately and checks determinant, CRT and specialization
 results against independent values. It does not recursively launch pytest or
 claim an extension-free distribution. In PowerShell, set the corresponding

@@ -80,7 +80,7 @@ After a standard installation of the current candidate, add `--installed-wheel`
 to test the installed package outside the source tree. Reinstall after source
 changes; an earlier installation does not validate the current candidate.
 The installed-wheel helper runs both compiled and flag-fallback suites explicitly.
-`PYFFP_DISABLE_CYTHON=1` selects the documented grid/CRT fallback paths, rather
+`PYFFP_DISABLE_CYTHON=1` selects the documented grid/determinant/CRT fallback paths, rather
 than simulating an extension-free installation. Focused subprocess tests separately
 block the extension import and exercise the actual Python determinant fallback.
 See the
