@@ -31,6 +31,49 @@ def _get_shift_poly(c_fmpq: Any) -> Any:
     return flint.fmpq_poly([-c_fmpq, 1])
 
 
+def _aberth_ehrlich_real_roots(
+    xp: Any, scaled_coeffs: NDArray[np.float64]
+) -> Union[NDArray[np.float64], None]:
+    """Run at most 50 Aberth-Ehrlich steps on monic float64 coefficients.
+
+    Return host real parts only after the final correction falls below 1e-12
+    and every iterate passes the companion path's real-root test. Otherwise
+    return None so callers fall through to the companion/certified solvers.
+    """
+    d = len(scaled_coeffs) - 1
+    c_0 = scaled_coeffs[0]
+    center = -scaled_coeffs[1] / (d * c_0)
+    r_vals = [abs(scaled_coeffs[k] / c_0) ** (1.0 / k) for k in range(1, d + 1)]
+    R = max(r_vals) * 1.5
+    theta = (2.0 * xp.arange(d) + 0.5) * xp.pi / d
+    z = center + R * (xp.cos(theta) + 1j * xp.sin(theta))
+    dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
+
+    for _ in range(50):
+        P_z = xp.zeros_like(z, dtype=complex)
+        for c in scaled_coeffs:
+            P_z = P_z * z + c
+        Dp_z = xp.zeros_like(z, dtype=complex)
+        for c in dp_coeffs:
+            Dp_z = Dp_z * z + c
+        w = P_z / Dp_z
+        diff = z[:, None] - z[None, :]
+        xp.fill_diagonal(diff, 1.0)
+        inv_diff = 1.0 / diff
+        xp.fill_diagonal(inv_diff, 0.0)
+        sum_diff = xp.sum(inv_diff, axis=1)
+        update = w / (1.0 - w * sum_diff)
+        z = z - update
+        if xp.max(xp.abs(update)) < 1e-12:
+            break
+    else:
+        return None
+    roots = np.asarray(xp.asnumpy(z) if hasattr(xp, "asnumpy") else z)
+    if not np.all(np.abs(roots.imag) < 1e-10 * (np.abs(roots.real) + 1)):
+        return None
+    return np.asarray(roots.real, dtype=np.float64)
+
+
 class RealRootedPolynomial(Polynomial):
     def __init__(
         self,
@@ -636,6 +679,7 @@ class RealRootedPolynomial(Polynomial):
         supported orthogonal families and proven Hermite additive convolutions.
         Otherwise use a balanced companion matrix, or parallelized Aberth-Ehrlich
         when parallel=True, with high-precision/general numerical fallback.
+        Unconverged or non-real Aberth-Ehrlich iterates use the companion path.
         Arb validation retains isolated roots. An exact=True request bypasses
         an approximate cache or one recorded at a lower working precision.
         Nonfinite numerical results raise RuntimeError without entering the cache;
@@ -779,68 +823,12 @@ class RealRootedPolynomial(Polynomial):
                         import cupy as cp  # type: ignore[import-not-found]
 
                         # GPU Seeker via CuPy
-                        c_0 = scaled_coeffs[0]
-                        center = -scaled_coeffs[1] / (d * c_0)
-                        r_vals = [
-                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
-                            for k in range(1, d + 1)
-                        ]
-                        R = max(r_vals) * 1.5
-                        theta = (2.0 * cp.arange(d) + 0.5) * cp.pi / d
-                        z = center + R * (cp.cos(theta) + 1j * cp.sin(theta))
-                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
-
-                        for _ in range(50):
-                            P_z = cp.zeros_like(z, dtype=complex)
-                            for c in scaled_coeffs:
-                                P_z = P_z * z + c
-                            Dp_z = cp.zeros_like(z, dtype=complex)
-                            for c in dp_coeffs:
-                                Dp_z = Dp_z * z + c
-                            w = P_z / Dp_z
-                            diff = z[:, None] - z[None, :]
-                            cp.fill_diagonal(diff, 1.0)
-                            inv_diff = 1.0 / diff
-                            cp.fill_diagonal(inv_diff, 0.0)
-                            sum_diff = cp.sum(inv_diff, axis=1)
-                            update = w / (1.0 - w * sum_diff)
-                            z = z - update
-                            if cp.max(cp.abs(update)) < 1e-12:
-                                break
-                        gpu_roots = np.sort(np.real(cp.asnumpy(z)))
-                        return np.asarray(gpu_roots * S, dtype=np.float64)
+                        seeded = _aberth_ehrlich_real_roots(cp, scaled_coeffs)
                     except Exception:
                         # CPU Seeker via NumPy (Vectorized)
-                        c_0 = scaled_coeffs[0]
-                        center = -scaled_coeffs[1] / (d * c_0)
-                        r_vals = [
-                            abs(scaled_coeffs[k] / c_0) ** (1.0 / k)
-                            for k in range(1, d + 1)
-                        ]
-                        R = max(r_vals) * 1.5
-                        theta = (2.0 * np.arange(d) + 0.5) * np.pi / d
-                        z = center + R * (np.cos(theta) + 1j * np.sin(theta))
-                        dp_coeffs = [scaled_coeffs[i] * (d - i) for i in range(d)]
-
-                        for _ in range(50):
-                            P_z = np.zeros_like(z, dtype=complex)
-                            for c in scaled_coeffs:
-                                P_z = P_z * z + c
-                            Dp_z = np.zeros_like(z, dtype=complex)
-                            for c in dp_coeffs:
-                                Dp_z = Dp_z * z + c
-                            w = P_z / Dp_z
-                            diff = z[:, None] - z[None, :]
-                            np.fill_diagonal(diff, 1.0)
-                            inv_diff = 1.0 / diff
-                            np.fill_diagonal(inv_diff, 0.0)
-                            sum_diff = np.sum(inv_diff, axis=1)
-                            update = w / (1.0 - w * sum_diff)
-                            z = z - update
-                            if np.max(np.abs(update)) < 1e-12:
-                                break
-                        cpu_roots = np.sort(np.real(z))
-                        return np.asarray(cpu_roots * S, dtype=np.float64)
+                        seeded = _aberth_ehrlich_real_roots(np, scaled_coeffs)
+                    if seeded is not None:
+                        return np.asarray(np.sort(seeded) * S, dtype=np.float64)
             except (OverflowError, ValueError):
                 pass  # Fall through to companion matrix/certified solver
 

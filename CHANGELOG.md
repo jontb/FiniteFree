@@ -5,6 +5,13 @@
 - Cache the first successful prepared-quadrature count law for repeated count
   and gap queries. Returned laws retain independent arrays and metadata;
   spectrum validation remains lazy and failed computations are retried.
+- Fix `RealRootedPolynomial.evaluate_roots_float64(parallel=True, exact=False)`
+  returning unconverged Aberth–Ehrlich real parts. Ill-conditioned generic
+  coefficients, such as roots 1..32, previously produced errors above 20 on
+  both the CuPy and NumPy seekers. Seeker results are now accepted only after
+  convergence and the companion path's real-root test; otherwise the call
+  continues with the existing companion and Arb fallbacks. Converged results,
+  defaults and signatures are unchanged.
 
 ## 0.4.1
 
