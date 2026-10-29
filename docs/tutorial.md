@@ -99,4 +99,56 @@ assert pencil.characteristic_polynomial([1])[0] == -large
 assert pencil.evaluate([1])[0, 0] == float(large)
 ```
 
+## Finite-state DPP samples and counts
+
+A discrete DPP here is specified by a real symmetric *correlation* kernel $K$ with spectrum in $[0,1]$. Row and column $i$ of the matrix belong to the $i$-th entry of the supplied state space, so with labels `[101, -7]` the first row is state `101`. The kernel gives inclusion probabilities $P(S\subseteq X)=\det K_S$, not the probability $P(X=S)$ of observing exactly $S$. Those follow by inclusion-exclusion.
+
+Take $K=\begin{pmatrix}3/5&1/5\\1/5&2/5\end{pmatrix}$. Its trace is $1$ and its determinant is $1/5$, so its eigenvalues $(1\pm 1/\sqrt5)/2$ lie strictly inside $(0,1)$. Principal minors give $P(101\in X)=3/5$, $P(-7\in X)=2/5$ and $P(\{101,-7\}\subseteq X)=1/5$. Hence
+
+- $P(X=\{101,-7\})=1/5$,
+- $P(X=\{101\})=3/5-1/5=2/5$,
+- $P(X=\{-7\})=2/5-1/5=1/5$,
+- $P(X=\varnothing)=1-3/5-2/5+1/5=1/5$.
+
+The cardinality $N=|X|$ therefore has PMF $[1/5,3/5,1/5]$ and mean $\operatorname{tr}K=1$. The two states are dependent: $P(\text{both})=1/5$ differs from the product $6/25$ of the diagonal entries, so the diagonal is not a list of independent Bernoulli probabilities. Instead, $N$ is a sum of independent Bernoulli variables with the kernel's *eigenvalues* as success probabilities. That describes the count only, not which states are included.
+
+```python
+from fractions import Fraction
+
+import numpy as np
+from finitefree import DPPCountDistribution, PreparedDiscreteDPP
+
+labels = [101, -7]  # matrix order: row/column 0 is state 101, 1 is state -7
+K = np.array([[3, 1], [1, 2]]) / 5
+assert np.all((np.linalg.eigvalsh(K) > 0) & (np.linalg.eigvalsh(K) < 1))
+
+# Independent exact law from principal minors and inclusion-exclusion.
+first, second = Fraction(3, 5), Fraction(2, 5)
+both = first * second - Fraction(1, 5) ** 2
+exact = {
+    (): 1 - first - second + both,
+    (101,): first - both,
+    (-7,): second - both,
+    (101, -7): both,
+}
+fifth = Fraction(1, 5)
+assert exact == {(): fifth, (101,): 2 * fifth, (-7,): fifth, (101, -7): fifth}
+exact_pmf = [sum(p for s, p in exact.items() if len(s) == n) for n in range(3)]
+assert exact_pmf == [fifth, 3 * fifth, fifth]
+
+prepared = PreparedDiscreteDPP(K, labels)
+rng = np.random.default_rng(37)
+for _ in range(5):
+    sample = prepared.sample(rng=rng)
+    assert len(set(sample)) == len(sample) and set(sample) <= set(labels)
+
+law = DPPCountDistribution(K)  # the whole two-state space
+expected = [float(p) for p in exact_pmf]
+np.testing.assert_allclose(law.pmf(), expected, rtol=0, atol=1e-15)
+assert abs(law.mean - 1) < 1e-15
+assert abs(law.sf(0) - (expected[1] + expected[2])) < 1e-15  # strict: P(N > 0)
+```
+
+The sampled sets are checked for validity only; the exact sequence depends on the NumPy version. `DPPCountDistribution(K)` uses the kernel restricted to the region of interest, here the whole state space; `count_distribution_discrete(kernel, points)` builds the same law for chosen states of a `BaseKernel`. The upper tail is strict: `sf(k)` is $P(N>k)$, summed directly rather than computed as `1 - cdf(k)`. The count law is a float64 calculation from the kernel's eigenvalues; the fractions above are the independent reference.
+
 For kernels, continuous gap approximations and sampling domains, see the [DPP contracts](api.md#orthogonal-polynomial-kernel-evaluation). Coefficient agreement and sampling smoke tests are diagnostics, not proofs of a distribution.
