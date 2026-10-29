@@ -1,3 +1,5 @@
+from typing import Any, Callable
+
 import pytest
 import sympy as sp
 
@@ -12,57 +14,79 @@ from finitefree import (
     laguerre_polynomial,
     legendre_polynomial,
 )
+from tests._cases import case
 
 
-def test_jacobi_polynomials() -> None:
-    # Degree 0
-    p0 = jacobi_polynomial(0, 1, 1)
-    assert p0.degree == 0
-    assert p0.coeffs[0] == 1
+def test_univariate_families_match_monic_closed_forms() -> None:
+    half = sp.Rational(1, 2)
+    families: dict[str, tuple[Callable[[], Any], list[Any]]] = {
+        "Jacobi degree 0": (lambda: jacobi_polynomial(0, 1, 1), [1]),
+        # P_1^(1,2)(x) = -1/2 + 5x/2, monic x - 1/5.
+        "Jacobi P_1^(1,2)": (
+            lambda: jacobi_polynomial(1, 1, 2),
+            [1, sp.Rational(-1, 5)],
+        ),
+        # P_2^(0,0)(x) = (3x^2 - 1)/2, monic x^2 - 1/3.
+        "Jacobi P_2^(0,0)": (
+            lambda: jacobi_polynomial(2, 0, 0),
+            [1, 0, sp.Rational(-1, 3)],
+        ),
+        "Hahn degree 0": (lambda: hahn_polynomial(0, 1, 1, 5), [1]),
+        # Q_1(x; a, b, N) = 1 - (a + b + 2) x / ((a + 1) N) = 1 - x/2, monic x - 2.
+        "Hahn Q_1(1, 1, 4)": (lambda: hahn_polynomial(1, 1, 1, 4), [1, -2]),
+        # Physicist H_2(x) = 4x^2 - 2, monic x^2 - 1/2.
+        "physicist Hermite H_2": (
+            lambda: hermite_polynomial(2, physicist=True),
+            [1, 0, -half],
+        ),
+        # Probabilist He_3(x) = x^3 - 3x is already monic.
+        "probabilist Hermite He_3": (
+            lambda: hermite_polynomial(3, physicist=False),
+            [1, 0, -3, 0],
+        ),
+        # L_2^(1)(x) = x^2/2 - 3x + 3, monic x^2 - 6x + 6.
+        "Laguerre L_2^(1)": (lambda: laguerre_polynomial(2, 1), [1, -6, 6]),
+        # K_2(x; 1/2, 4) = 2F1(-2, -x; -4; 2) = x^2/3 - 4x/3 + 1, monic x^2 - 4x + 3.
+        "Krawtchouk K_2(1/2, 4)": (
+            lambda: krawtchouk_polynomial(2, half, 4),
+            [1, -4, 3],
+        ),
+        # T_2(x) = 2x^2 - 1 and U_2(x) = 4x^2 - 1.
+        "Chebyshev T_2": (lambda: chebyshev_t_polynomial(2), [1, 0, -half]),
+        "Chebyshev U_2": (
+            lambda: chebyshev_u_polynomial(2),
+            [1, 0, sp.Rational(-1, 4)],
+        ),
+        # P_3(x) = (5x^3 - 3x)/2, monic x^3 - 3x/5.
+        "Legendre P_3": (
+            lambda: legendre_polynomial(3),
+            [1, 0, sp.Rational(-3, 5), 0],
+        ),
+    }
+    for name, (construct, expected) in families.items():
+        with case(family=name):
+            p = construct()
+            assert p.degree == len(expected) - 1
+            assert list(p.coeffs) == expected
 
-    # Degree 1
-    # P_1^(a, b)(x) = (a - b)/2 + (a + b + 2)/2 * x
-    # For a = 1, b = 2: (1 - 2)/2 + (1 + 2 + 2)/2 * x = -1/2 + 5/2 * x
-    # Monic version: x - 1/5. Descending coefficients: [1, -1/5]
-    p1 = jacobi_polynomial(1, 1, 2)
-    assert p1.degree == 1
-    assert p1.coeffs[0] == 1
-    assert p1.coeffs[1] == sp.Rational(-1, 5)
 
-    # Degree 2
-    # For a = 0, b = 0 (Legendre Polynomials P_2(x) = 1/2 * (3x^2 - 1))
-    # Monic: x^2 - 1/3. Descending coefficients: [1, 0, -1/3]
-    p2 = jacobi_polynomial(2, 0, 0)
-    assert p2.degree == 2
-    assert p2.coeffs[0] == 1
-    assert p2.coeffs[1] == 0
-    assert p2.coeffs[2] == sp.Rational(-1, 3)
-
-
-def test_hahn_polynomials() -> None:
-    # Degree 0
-    h0 = hahn_polynomial(0, 1, 1, 5)
-    assert h0.degree == 0
-    assert h0.coeffs[0] == 1
-
-    # Degree 1
-    # Q_1(x; a, b, N) = 1 - (a + b + 2)/((a + 1)*N) * x
-    # For a=1, b=1, N=4: 1 - (1 + 1 + 2)/((1 + 1)*4) * x = 1 - 4/8 * x = 1 - 1/2 * x
-    # Monic: x - 2. Descending coeffs: [1, -2]
-    h1 = hahn_polynomial(1, 1, 1, 4)
-    assert h1.degree == 1
-    assert h1.coeffs[0] == 1
-    assert h1.coeffs[1] == -2
+def test_univariate_families_reject_invalid_parameters() -> None:
+    invalid: dict[str, Callable[[], Any]] = {
+        "Laguerre negative degree": lambda: laguerre_polynomial(-1, 1),
+        "Krawtchouk negative degree": lambda: krawtchouk_polynomial(-1, 0.5, 4),
+        "Krawtchouk degree above N": lambda: krawtchouk_polynomial(5, 0.5, 4),
+        "Krawtchouk zero probability": lambda: krawtchouk_polynomial(2, 0.0, 4),
+        "Chebyshev T negative degree": lambda: chebyshev_t_polynomial(-1),
+        "Chebyshev U negative degree": lambda: chebyshev_u_polynomial(-1),
+        "Legendre negative degree": lambda: legendre_polynomial(-1),
+    }
+    for name, construct in invalid.items():
+        with case(parameters=name):
+            with pytest.raises(ValueError):
+                construct()
 
 
 def test_jack_polynomials() -> None:
-    import flint
-
-    if not hasattr(flint, "fmpq_mpoly_ctx"):
-        pytest.skip(
-            "flint.fmpq_mpoly_ctx is not available in the installed python-flint version"
-        )
-
     # m = 3 variables, partition [1], alpha = 2
     # J_[1]^(2)(x1, x2, x3) = x1 + x2 + x3
     p1 = jack_polynomial(3, [1], 2)
@@ -81,93 +105,3 @@ def test_jack_polynomials() -> None:
     p3 = jack_polynomial(2, [1, 1], 1)
     vy1, vy2 = p3.variables
     assert sp.simplify(p3.expr - 2 * vy1 * vy2) == 0
-
-
-def test_hermite_polynomials() -> None:
-    # 1. Physicist Hermite H_2(x) = 4x^2 - 2
-    # Monic version: x^2 - 1/2. Descending coeffs: [1, 0, -1/2]
-    h2 = hermite_polynomial(2, physicist=True)
-    assert h2.degree == 2
-    assert h2.coeffs[0] == 1
-    assert h2.coeffs[1] == 0
-    assert h2.coeffs[2] == sp.Rational(-1, 2)
-
-    # 2. Probabilist Hermite He_3(x) = x^3 - 3x
-    # Monic version is the same. Descending coeffs: [1, 0, -3, 0]
-    he3 = hermite_polynomial(3, physicist=False)
-    assert he3.degree == 3
-    assert he3.coeffs[0] == 1
-    assert he3.coeffs[1] == 0
-    assert he3.coeffs[2] == -3
-    assert he3.coeffs[3] == 0
-
-
-def test_laguerre_polynomials() -> None:
-    # Generalized Laguerre L_2^(1)(x) = x^2/2 - 3x + 3
-    # Monic version: x^2 - 6x + 6. Descending coeffs: [1, -6, 6]
-    lag2 = laguerre_polynomial(2, 1)
-    assert lag2.degree == 2
-    assert lag2.coeffs[0] == 1
-    assert lag2.coeffs[1] == -6
-    assert lag2.coeffs[2] == 6
-
-    # Test error cases
-    with pytest.raises(ValueError):
-        laguerre_polynomial(-1, 1)
-
-
-def test_krawtchouk_polynomials() -> None:
-    # Krawtchouk polynomial K_2(x; 1/2, 4)
-    # Hypergeometric definition:
-    # 2F1(-2, -x; -4; 2) = 1 + (-2)*(-x)/(-4)*2 + (-2)*(-1)*(-x)*(-x+1)/((-4)*(-3))*4
-    # = 1 - x + x(x-1)/3 = 1 - x + x^2/3 - x/3 = x^2/3 - 4x/3 + 1
-    # Monic version: x^2 - 4x + 3. Descending coeffs: [1, -4, 3]
-    import pytest
-
-    k2 = krawtchouk_polynomial(2, sp.Rational(1, 2), 4)
-    assert k2.degree == 2
-    assert k2.coeffs[0] == 1
-    assert k2.coeffs[1] == -4
-    assert k2.coeffs[2] == 3
-
-    # Test error cases
-    with pytest.raises(ValueError):
-        krawtchouk_polynomial(-1, 0.5, 4)
-    with pytest.raises(ValueError):
-        krawtchouk_polynomial(5, 0.5, 4)
-    with pytest.raises(ValueError):
-        krawtchouk_polynomial(2, 0.0, 4)
-
-
-def test_chebyshev_polynomials() -> None:
-    # 1. T_2(x) = 2x^2 - 1. Monic: x^2 - 1/2. Descending: [1, 0, -1/2]
-    t2 = chebyshev_t_polynomial(2)
-    assert t2.degree == 2
-    assert t2.coeffs[0] == 1
-    assert t2.coeffs[1] == 0
-    assert t2.coeffs[2] == sp.Rational(-1, 2)
-
-    # 2. U_2(x) = 4x^2 - 1. Monic: x^2 - 1/4. Descending: [1, 0, -1/4]
-    u2 = chebyshev_u_polynomial(2)
-    assert u2.degree == 2
-    assert u2.coeffs[0] == 1
-    assert u2.coeffs[1] == 0
-    assert u2.coeffs[2] == sp.Rational(-1, 4)
-
-    with pytest.raises(ValueError):
-        chebyshev_t_polynomial(-1)
-    with pytest.raises(ValueError):
-        chebyshev_u_polynomial(-1)
-
-
-def test_legendre_polynomials() -> None:
-    # P_3(x) = 1/2 * (5x^3 - 3x). Monic: x^3 - 3/5 x. Descending: [1, 0, -3/5, 0]
-    leg3 = legendre_polynomial(3)
-    assert leg3.degree == 3
-    assert leg3.coeffs[0] == 1
-    assert leg3.coeffs[1] == 0
-    assert leg3.coeffs[2] == sp.Rational(-3, 5)
-    assert leg3.coeffs[3] == 0
-
-    with pytest.raises(ValueError):
-        legendre_polynomial(-1)

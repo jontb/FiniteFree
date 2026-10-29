@@ -45,13 +45,6 @@ def test_polynomial_owns_native_input_and_exports() -> None:
     assert p.expr == 2 * x and p.variables == [x, y]
 
 
-def test_negative_derivative_order_is_rejected() -> None:
-    x, y = sp.symbols("x y")
-    p = MultivariatePolynomial(x**2 * y + x, [x, y])
-    with pytest.raises(ValueError, match="nonnegative"):
-        p.mixed_partial_derivative([-1, 0])
-
-
 def test_normalized_coefficients_require_homogeneity() -> None:
     x, y = sp.symbols("x y")
     p = MultivariatePolynomial(x**2 * y + x, [x, y])
@@ -76,13 +69,19 @@ def test_invalid_variable_contexts() -> None:
 
 def test_invalid_derivative_counts() -> None:
     order: Any
-    for order in [-1, 0.5, True, np.bool_(True)]:
+    error: type[Exception]
+    for order, error, message in [
+        (-1, ValueError, "nonnegative"),
+        (0.5, TypeError, "integer"),
+        (True, TypeError, "boolean"),
+        (np.bool_(True), TypeError, "boolean"),
+    ]:
         with case(order=order):
             x, y = sp.symbols("x y")
-            p = MultivariatePolynomial(x**2 + y, [x, y])
-            with pytest.raises((ValueError, TypeError)):
+            p = MultivariatePolynomial(x**2 * y + x, [x, y])
+            with pytest.raises(error, match=message):
                 p.mixed_partial_derivative([order, 0])
-            with pytest.raises((ValueError, TypeError)):
+            with pytest.raises(error, match=message):
                 p.partial_derivative(x, order)
 
 
