@@ -28,9 +28,24 @@ def _determinant_coefficient_bound(
     )
 
 
-def _as_modular_array(values: Any, p: int) -> NDArray[np.int64]:
-    """Reduce Python integers before narrowing them for Cython arithmetic."""
-    return np.asarray(np.asarray(values, dtype=object) % p, dtype=np.int64)
+def _as_modular_array(
+    values: Any, p: int, shape: tuple[int, ...] | None = None
+) -> NDArray[np.int64]:
+    """Reduce Python integers before narrowing them for Cython arithmetic.
+
+    Nested lists cannot record trailing zero dimensions: an empty ``(m, 0, 0)``
+    stack becomes shape ``(m, 0)``. Pass ``shape`` to restore it exactly.
+    """
+    reduced = np.asarray(np.asarray(values, dtype=object) % p, dtype=np.int64)
+    if shape is not None:
+        reduced = reduced.reshape(shape)
+    return reduced
+
+
+# Dense modular reconstruction has no expected unlucky primes: Vandermonde
+# nodes 0..n are distinct modulo every prime used. Bound retries anyway, as the
+# sparse path does, so a persistent per-prime failure surfaces as an error.
+_MAX_CONSECUTIVE_FAILED_PRIMES = 8
 
 
 __all__ = [

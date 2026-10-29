@@ -11,6 +11,7 @@ from ..utils.conversion import flint_to_float, sympy_to_fmpq
 from ..utils.modular import _determinant_coefficient_bound, crt, prime_generator
 from ..utils.parallel import (
     ParallelScheduler,
+    _accept_prime_results,
     _eval_diagonal_specialization_prime_worker,
 )
 
@@ -211,6 +212,10 @@ class SymmetricMatrixPencil:
         except (TypeError, ValueError, OverflowError) as error:
             raise ValueError(message) from error
 
+        if self.n == 0:
+            # det(z A + B) of an empty matrix is the constant 1.
+            return RealRootedPolynomial([1])
+
         exact_matrices = self._get_matrices_sympy()
 
         A_exact = [[sp.Integer(0) for _ in range(self.n)] for _ in range(self.n)]
@@ -245,8 +250,9 @@ class SymmetricMatrixPencil:
         coefficient_bound = _determinant_coefficient_bound([A_int, B_int])
         modulus = 1
         reconstructed = None
-        primes_used = []
-        coeffs_by_prime = []
+        primes_used: List[int] = []
+        coeffs_by_prime: List[List[int]] = []
+        consecutive_failures = 0
 
         deg = self.n
 
@@ -266,11 +272,10 @@ class SymmetricMatrixPencil:
                     self.n,
                     deg,
                 )
-                for p_res, c_p in results:
-                    if c_p is not None:
-                        coeffs_by_prime.append(c_p)
-                        primes_used.append(p_res)
-                        modulus *= p_res
+                consecutive_failures = _accept_prime_results(
+                    results, primes_used, coeffs_by_prime, consecutive_failures
+                )
+                modulus = math.prod(primes_used)
 
                 if primes_used:
                     current_reconstruction = []

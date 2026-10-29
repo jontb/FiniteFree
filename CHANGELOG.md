@@ -44,6 +44,19 @@
   exact Sturm fallback used when Arb cannot certify degrees 15-30 raised or
   miscounted for abnormal remainder sequences; it now uses a sign-correct
   integer Sturm sequence and raises `ValueError` for non-real-rooted inputs.
+- Fix float straight-line-program derivatives, empty pencils and operation
+  validation. Float determinant gradients and Hessians switched to a
+  pseudoinverse whenever `|det| < 1e-15`, returning wrong derivatives at
+  nonsingular points such as `diag(x1, x2)` at `(1, 1e-16)`; they now use LU
+  solves with log-scaled products and, as prepared pencils do, raise
+  `numpy.linalg.LinAlgError` at an exactly singular point instead of returning
+  zeros. An empty 0x0 pencil made the interpolated constructor loop forever
+  with the compiled extension; it and `diagonal_specialization` now return 1,
+  per-prime workers retry only singular modular systems, and repeated failures
+  stop after eight primes. `StraightLineProgram` validates operation codes,
+  arity and operand indices at construction, recognises any sequence equal to
+  `["det"]`, and raises `NotImplementedError` for Hessians of generic programs
+  instead of returning the determinant Hessian.
 
 ## 0.4.1
 
