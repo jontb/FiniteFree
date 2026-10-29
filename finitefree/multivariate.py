@@ -26,7 +26,11 @@ from .utils.modular import (
 from .utils.modular import (
     _determinant_coefficient_bound as _determinant_coefficient_bound,
 )
-from .utils.parallel import ParallelScheduler, _eval_prime_worker
+from .utils.parallel import (
+    ParallelScheduler,
+    _accept_prime_results,
+    _eval_prime_worker,
+)
 
 _FloatTerms = Tuple[Tuple[Tuple[Tuple[int, int], ...], float], ...]
 _MAX_FLOAT64_POWER_CACHE = 64
@@ -826,6 +830,9 @@ class MultivariatePolynomial(Polynomial):
         m = pencil.m
         variables = [sp.Symbol(f"x{i}") for i in range(1, m + 1)]
 
+        if n == 0:
+            # An empty matrix has determinant 1, as in the sparse constructor.
+            return cls(sp.Integer(1), variables)
         if m == 1:
             exact_A = pencil._get_matrices_sympy()[0]
             det_val = sp.Matrix(exact_A).det()
@@ -872,8 +879,9 @@ class MultivariatePolynomial(Polynomial):
         coefficient_bound = _determinant_coefficient_bound(integer_matrices)
         modulus = 1
         reconstructed = None
-        primes_used = []
-        coeffs_by_prime = []
+        primes_used: list[int] = []
+        coeffs_by_prime: list[list[int]] = []
+        consecutive_failures = 0
 
         effective_backend = backend if parallel else "sequential"
         if pencil.n <= 3:
@@ -892,11 +900,10 @@ class MultivariatePolynomial(Polynomial):
                     m,
                     exps,
                 )
-                for p_res, c_p in results:
-                    if c_p is not None:
-                        coeffs_by_prime.append(c_p)
-                        primes_used.append(p_res)
-                        modulus *= p_res
+                consecutive_failures = _accept_prime_results(
+                    results, primes_used, coeffs_by_prime, consecutive_failures
+                )
+                modulus = math.prod(primes_used)
 
                 if primes_used:
                     current_reconstruction = []
@@ -1081,7 +1088,7 @@ class MultivariatePolynomial(Polynomial):
                             test_pts[r_idx] + tuple(t) + (1,) for r_idx in range(K)
                         ]
                         grid_pts_np = np.array(grid_pts, dtype=np.int64)
-                        matrices_np = _as_modular_array(integer_matrices, p)
+                        matrices_np = _as_modular_array(integer_matrices, p, (m, n, n))
                         dets = eval_points_grid_mod_p(matrices_np, grid_pts_np, p)
                         for r_idx in range(K):
                             y[r_idx, 0] = dets[r_idx]

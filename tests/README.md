@@ -33,6 +33,9 @@ oracles and edge cases when changing the suite:
   imaginary parts, without conversion warnings or consuming randomness.
 - Prepared-pencil derivatives use independent symbolic determinants, extreme
   coefficient scales, strided batches, varied block sizes, and cache reuse.
+  Numerical SLP determinant derivatives are checked against SymPy at tiny and
+  underflowing nonsingular determinants. Dense CRT loops run under a prime
+  generator that fails the test, so a retry regression cannot hang CI.
 - Prepared kernels use exact rational basis sums with signed/scaled/shifted
   families. Count laws use exhaustive Bernoulli enumeration and analytically
   integrated rank-two Lebesgue/Gaussian Gram matrices. The legacy continuous
