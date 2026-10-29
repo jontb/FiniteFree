@@ -37,7 +37,7 @@ agreement; opening an issue does not mark the feature implemented.
 
 | Phase | Feature | Issue | Coordination or prerequisite |
 | --- | --- | --- | --- |
-| 1 | Exact and empirical moments (P01) | [#41](https://github.com/jontb/FiniteFree/issues/41) | Settle moment/input conventions in the issue |
+| 1 | Exact and empirical moments (P01) | [#41](https://github.com/jontb/FiniteFree/issues/41) | Scope accepted in the issue; implemented |
 | 1 | Full inverse finite R (P02) | [#42](https://github.com/jontb/FiniteFree/issues/42) | P01 moment/dimension and empirical-input contract |
 | 1 | Compact beta-Hermite sampler (P03) | [#43](https://github.com/jontb/FiniteFree/issues/43) | Independent of other new samplers/transforms |
 | 1 | Compact beta-Laguerre sampler (P04) | [#44](https://github.com/jontb/FiniteFree/issues/44) | P03 compact-output/RNG contract |
@@ -57,7 +57,7 @@ this table does not reserve them or require one contributor to finish a phase.
 | ID | Deliverable | Hard prerequisites | State |
 | --- | --- | --- | --- |
 | [P00](packets/p00-baseline.md) | Baseline evidence and scope decisions | None | Ready for review |
-| [P01](packets/p01-exact-moments.md) | Exact root moments and empirical matrix moments | P00 | Planned |
+| [P01](packets/p01-exact-moments.md) | Exact root moments and empirical matrix moments | P00 | Implemented on develop |
 | [P02](packets/p02-inverse-finite-r.md) | Full inverse finite R for algebraic and empirical inputs | P01 | Planned |
 | [P03](packets/p03-beta-hermite.md) | Compact beta-Hermite sampler | P00 | Planned |
 | [P04](packets/p04-beta-laguerre.md) | Compact beta-Laguerre sampler | P03 | Planned |

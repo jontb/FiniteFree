@@ -1,4 +1,5 @@
-from typing import Any, List, Literal, Optional
+import operator
+from typing import Any, List, Literal, Optional, SupportsIndex
 
 import numpy as np
 import sympy as sp
@@ -236,6 +237,82 @@ def _moments_of_scaled_cumulants(moments: List[Any], count: int, t: Any) -> List
         value = coefficients[n] if n < len(coefficients) else 0
         result.append(flint.fmpq(value) * factorial)
     return result
+
+
+def _moment_index(value: Any, name: str, *, positive: bool = False) -> int:
+    """Return a moment order or dimension accepted by the integer-index protocol."""
+    bound = "positive" if positive else "nonnegative"
+    message = f"{name} must be a {bound} integer."
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(message)
+    try:
+        index = operator.index(value)
+    except TypeError as error:
+        raise ValueError(message) from error
+    if index < (1 if positive else 0):
+        raise ValueError(message)
+    return index
+
+
+def root_moments(
+    p: RealRootedPolynomial,
+    order: SupportsIndex,
+    *,
+    d: Optional[SupportsIndex] = None,
+) -> List[sp.Rational]:
+    r"""
+    Return normalized root moments $m_0,\ldots,m_{\mathrm{order}}$ exactly.
+    For degree n and ambient dimension d >= n (default n), d-n zero roots are
+    embedded: $m_0=1$ and $m_k=\frac{1}{d}\sum_{j=1}^{n}\lambda_j^k$ for k >= 1.
+    Power sums come from Newton identities on the rational coefficients, so the
+    result is invariant under a nonzero common coefficient scalar and orders
+    above the degree remain meaningful. No roots are extracted and neither
+    real-rootedness nor positivity is checked or certified: for a polynomial
+    with nonreal roots the values are power sums over its complex roots, not
+    moments of a spectral measure. A nonzero constant requires an explicit d.
+    Rational coefficients are required. Returns a new list of SymPy rationals.
+    """
+    import flint
+
+    count = _moment_index(order, "order")
+    if not p._is_flint:
+        raise ValueError("Root moments require rational coefficients.")
+    n = p.degree
+    if d is None:
+        if n == 0:
+            raise ValueError(
+                "A constant polynomial requires an explicit positive dimension d."
+            )
+        dimension = n
+    else:
+        dimension = _moment_index(d, "d", positive=True)
+        if dimension < n:
+            raise ValueError(
+                f"Ambient dimension d ({dimension}) cannot be less than polynomial "
+                f"degree ({n})."
+            )
+
+    # e[k] is the k-th elementary symmetric polynomial of the roots.
+    poly = p._fmpq_poly
+    leading = poly[n]
+    e = [(-1) ** k * poly[n - k] / leading for k in range(min(count, n) + 1)]
+
+    # Newton: s_k = sum_{i=1}^{min(k-1,n)} (-1)^(i-1) e_i s_{k-i} + (-1)^(k-1) k e_k.
+    sums: List[Any] = [flint.fmpq(n)]
+    for k in range(1, count + 1):
+        total = k * e[k] if k <= n else flint.fmpq(0)
+        if k <= n and k % 2 == 0:
+            total = -total
+        for i in range(1, min(k - 1, n) + 1):
+            term = e[i] * sums[k - i]
+            total = total + term if i % 2 == 1 else total - term
+        sums.append(total)
+
+    moments: List[sp.Rational] = [sp.Integer(1)]
+    for k in range(1, count + 1):
+        value = sums[k] / dimension
+        moments.append(sp.Rational(int(value.p), int(value.q)))
+    return moments
 
 
 class FiniteTTransform:

@@ -65,6 +65,27 @@ assert T(0.6) == sp.Rational(45, 17)  # The stored float is below 3/5.
 assert T(sp.Rational(3, 5)) == sp.Rational(17, 6)
 ```
 
+## Exact and sampled moments
+
+`root_moments` and `matrix_moments` share one normalization, so exact root moments and sampled spectra can be compared directly. Compute the moments of each actual draw, then average them. The matrix-level standard error describes sampling spread across independent draws. The per-draw agreement with direct traces is the numerical check. Neither is a deterministic accuracy bound, and expected-polynomial roots do not replace sampled spectra.
+
+```python
+import numpy as np
+from finitefree import matrix_moments, sample_gue
+
+rng = np.random.default_rng(862)
+draws = [sample_gue(4, rng=rng) for _ in range(16)]
+moments = np.array([matrix_moments(m, 4) for m in draws])
+traces = np.array(
+    [[1.0] + [np.trace(np.linalg.matrix_power(m, k)).real / 4 for k in range(1, 5)]
+     for m in draws]
+)
+np.testing.assert_allclose(moments, traces, rtol=1e-12, atol=1e-13)
+mean = moments.mean(axis=0)
+standard_error = moments.std(axis=0, ddof=1) / np.sqrt(len(draws))
+print(np.round(mean, 3), np.round(standard_error, 3))
+```
+
 ## Exact matrix inputs
 
 Pencils copy rational entries before making separate float64 views. Exact methods preserve values beyond float64's integer precision. Symmetry is checked on supplied values; exact determinant derivatives require a nonsingular evaluated matrix.

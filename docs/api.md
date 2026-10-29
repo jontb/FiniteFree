@@ -336,6 +336,30 @@ np.testing.assert_allclose(values[1:], [1, 0, 0], rtol=0, atol=1e-28)
 
 For repeatable accuracy and timing checks, run `PYTHONPATH=. python scripts/benchmark_transforms.py --output transform-benchmark.json`. The default cases use degrees 60, 150 and 300, order 12, a shift of $10^{50}$ and 128-bit working precision. Hermite and Wishart analytic cumulants supply the reference. Transform times are best of three with normalized coefficients already cached; construction is reported separately. These cases test stability under translation, not arbitrary high-order inputs.
 
+### Root and matrix moments
+
+`root_moments(p, order, *, d=None)` returns the normalized root moments $m_0=1$ and $m_k=\frac{1}{d}\sum_{j=1}^{n}\lambda_j^k$ for a degree-$n$ polynomial and ambient dimension $d\ge n$ (default $n$), embedding $d-n$ zero roots. Power sums come from Newton identities on the exact rational coefficients, so the leading coefficient does not matter and orders above the degree are not truncated. This differs from `FiniteRTransform`, which returns zero above the ambient dimension. The function reads coefficients only. It does not validate real-rootedness, extract roots, or certify positivity: a polynomial with nonreal roots is accepted and its values are power sums over its complex roots, not moments of a spectral measure. A nonzero constant requires an explicit `d` and returns `[1, 0, ..., 0]`. `order` and `d` accept integer-index objects; booleans, fractional values and out-of-range values raise `ValueError`, as do symbolic non-rational coefficients. Each call returns a new list of SymPy rationals.
+
+`matrix_moments(matrix, order, *, d=None, paired=False)` is the float64 counterpart for one finite, nonempty, square, numerically Hermitian sample, using the same Hermitian tolerance as the empirical comparisons. It returns a new array $m_k=\operatorname{tr}(M^k)/d$ computed from eigenvalue power sums, never from characteristic coefficients, so coefficient overflow does not reject representable low-order moments. `paired=True` requires an even size $2n$ whose sorted eigenvalues pair within $10^{-10}$ times the largest eigenvalue magnitude. It counts one eigenvalue per pair, giving $\operatorname{tr}(M^k)/(2d)$; even size alone never implies pairing. The default effective dimension is the physical size, or half of it when paired. The input is not modified. Nonfinite moments raise `RuntimeError`. Results are floating estimates without enclosures, and high orders amplify eigenvalue error.
+
+To estimate the moments of the mean spectral measure, average the vectors of independent samples. These generally differ from the root moments of the mean characteristic polynomial:
+
+```python
+import numpy as np
+import sympy as sp
+from finitefree import RealRootedPolynomial, matrix_moments, root_moments
+
+p = RealRootedPolynomial([2, -8, 6], monic=False)  # 2(x-1)(x-3)
+assert root_moments(p, 4) == [1, 2, 5, 14, 41]
+assert root_moments(p, 2, d=4) == [1, 1, sp.Rational(5, 2)]
+np.testing.assert_allclose(matrix_moments([[2, 1j], [-1j, 2]], 4), [1, 2, 5, 14, 41])
+assert matrix_moments(np.diag([1.0, 1.0, 3.0, 3.0]), 2, paired=True).tolist() == [1, 2, 5]
+
+draws = [np.diag([1.0, 3.0]), np.diag([3.0, 5.0])]
+assert np.mean([matrix_moments(m, 2) for m in draws], axis=0)[2] == 11
+assert root_moments(RealRootedPolynomial([1, -6, 9]), 2)[2] == 9  # mean polynomial
+```
+
 ### Finite T-transform
 
 `FiniteTTransform(p)` requires positive degree and non-negative roots. Its input must be a finite real value in $(0,1)$. It uses the right-continuous intervals in [Definition 6.3 and Remark 6.4](https://arxiv.org/html/2408.09337v2#S6.SS1), including the boundary of an atom at zero. Rational inputs and stored binary float values select intervals exactly, without a float multiplication that could round onto a neighboring grid boundary. Real symbolic constants are also supported. A float approximation to $k/d$ can lie on either side of that rational number; supply the rational value to select the exact boundary.
