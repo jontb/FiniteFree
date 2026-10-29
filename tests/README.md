@@ -31,6 +31,11 @@ oracles and edge cases when changing the suite:
   retaining their seeded trials, legacy RNG coverage, and probability bounds.
   Their shared validation rejects Python/NumPy complex entries, including zero
   imaginary parts, without conversion warnings or consuming randomness.
+- Pencil determinant constructions (default, sparse, sequential and parallel
+  interpolation) and both diagonal-specialization paths are each compared
+  with closed forms or an independent SymPy determinant on seeded pencils;
+  agreement between two constructions is not used as the reference. Low-degree
+  convolutions and orthogonal families use hand-expanded coefficients.
 - Prepared-pencil derivatives use independent symbolic determinants, extreme
   coefficient scales, strided batches, varied block sizes, and cache reuse.
 - Prepared kernels use exact rational basis sums with signed/scaled/shifted

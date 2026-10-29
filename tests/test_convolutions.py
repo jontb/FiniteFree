@@ -1,4 +1,8 @@
+from dataclasses import dataclass
+from typing import Any, Callable
+
 import numpy as np
+import pytest
 import sympy as sp
 
 from finitefree import (
@@ -13,81 +17,82 @@ from finitefree.convolutions import (
     symmetric_additive,
 )
 from finitefree.core import RealRootedPolynomial
+from tests._cases import case
 
 
-def test_symmetric_additive_basic() -> None:
-    # p(x) = x^2 - 3x + 2, roots are 1, 2
-    # q(x) = x^2 - 4x + 3, roots are 1, 3
-    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
-    q = RealRootedPolynomial([1, -4, 3], assume_real_rooted=True)
-
-    # Expected analytical convolution result: x^2 - 7x + 11
-    res = symmetric_additive(p, q, 2)
-    assert list(res.coeffs) == [1, -7, 11]
-
-
-def test_multiplicative_basic() -> None:
-    # p(x) = x^2 - 1 = (x-1)(x+1) -> not strictly positive roots, but fine for formula
-    p = RealRootedPolynomial([1, 0, -1], assume_real_rooted=True)
-    q = RealRootedPolynomial([1, 0, -1], assume_real_rooted=True)
-
-    res = multiplicative(p, q, 2)
-    assert res.degree == 2
-    assert list(res.coeffs) == [1, 0, 1]
-    import pytest
-
-    with pytest.raises(ValueError, match="not real-rooted"):
-        res.verify_real_rootedness()
+@dataclass(frozen=True)
+class _Convolution:
+    operation: Callable[..., RealRootedPolynomial]
+    p: list[int]
+    q: list[int]
+    d: int
+    expected: list[Any]
+    weights: list[float] | None = None
+    real_rooted: bool | None = None
+    interlacing: bool | None = None  # strict flag; None skips the check
 
 
-def test_asymmetric_additive_basic() -> None:
-    p = RealRootedPolynomial([1, -2, 1], assume_real_rooted=True)  # (x-1)^2
-    q = RealRootedPolynomial([1, 2, 1], assume_real_rooted=True)  # (x+1)^2
-
-    res = asymmetric_additive(p, q, 2)
-    assert res.degree == 2
-    assert list(res.coeffs) == [1, 0, 1]
-
-
-def test_asymmetric_additive_suite() -> None:
-    # Asymmetric additive convolution validates distinct combinatorial weights
-    from finitefree.convolutions import asymmetric_additive
-
-    p = RealRootedPolynomial([1, -5, 6], assume_real_rooted=True)  # roots: 2, 3
-    q = RealRootedPolynomial([1, -1, -2], assume_real_rooted=True)  # roots: 2, -1
-
-    d = 2
-    res_asym = asymmetric_additive(p, q, d)
-    assert res_asym.degree == 2
-    res_asym.verify_root_interlacing()  # Ensure it outputs hyperbolic polynomials
-
-
-def test_symmetric_additive_interlacing() -> None:
-    from finitefree.convolutions import symmetric_additive
-
-    # p(x) = x^2 - 1, roots -1, 1
-    p = RealRootedPolynomial([1, 0, -1], assume_real_rooted=True)
-    # q(x) = x^2 - 4, roots -2, 2
-    q = RealRootedPolynomial([1, 0, -4], assume_real_rooted=True)
-
-    res = symmetric_additive(p, q, d=2)
-    # The result (x^2 - 5) should strictly interlace its derivative
-    assert res.verify_root_interlacing(strict=True)
-
-
-def test_ambient_dimension_mismatch() -> None:
-    from finitefree.convolutions import symmetric_additive
-
-    # p(x) = x^2 - 3x + 2 (roots: 1, 2)
-    p = RealRootedPolynomial([1, -3, 2], assume_real_rooted=True)
-    # q(x) = x^4 (roots: 0, 0, 0, 0)
-    q = RealRootedPolynomial([1, 0, 0, 0, 0], assume_real_rooted=True)
-
-    # Convolve in ambient dimension d=4
-    res = symmetric_additive(p, q, d=4)
-
-    # Reconstructed polynomial must preserve real-rootedness
-    assert res.verify_real_rootedness()
+def test_low_degree_convolutions_against_hand_expansions() -> None:
+    # Write p = sum_i (-1)^i a_i x^(d-i) and q likewise with b_j. The coefficient
+    # of (-1)^k x^(d-k) is sum_(i+j=k) w a_i b_j, where the symmetric weight is
+    # w = (d-i)!(d-j)!/(d!(d-k)!) and the asymmetric weight is w**2; the
+    # multiplicative coefficient is a_k b_k / binomial(d, k). Weights dilate the
+    # asymmetric inputs first. Each expected value is expanded from these sums.
+    cases = {
+        "symmetric roots (1,2) and (1,3)": _Convolution(
+            symmetric_additive, [1, -3, 2], [1, -4, 3], 2, [1, -7, 11]
+        ),
+        "symmetric roots (-1,1) and (-2,2)": _Convolution(
+            symmetric_additive, [1, 0, -1], [1, 0, -4], 2, [1, 0, -5], interlacing=True
+        ),
+        # x^4 is the identity at d=4, so p acquires two ambient zero roots.
+        "symmetric ambient identity": _Convolution(
+            symmetric_additive,
+            [1, -3, 2],
+            [1, 0, 0, 0, 0],
+            4,
+            [1, -3, 2, 0, 0],
+            real_rooted=True,
+        ),
+        # Real-rooted inputs with mixed signs give the formal result x^2 + 1.
+        "multiplicative x^2 - 1": _Convolution(
+            multiplicative, [1, 0, -1], [1, 0, -1], 2, [1, 0, 1], real_rooted=False
+        ),
+        "asymmetric (x-1)^2 and (x+1)^2": _Convolution(
+            asymmetric_additive, [1, -2, 1], [1, 2, 1], 2, [1, 0, 1]
+        ),
+        "asymmetric dilated by 1/2": _Convolution(
+            asymmetric_additive,
+            [1, -2, 1],
+            [1, 2, 1],
+            2,
+            [1, 0, sp.Rational(1, 4)],
+            weights=[0.5, 0.5],
+        ),
+        "asymmetric roots (2,3) and (2,-1)": _Convolution(
+            asymmetric_additive,
+            [1, -5, 6],
+            [1, -1, -2],
+            2,
+            [1, -6, sp.Rational(21, 4)],
+            interlacing=False,
+        ),
+    }
+    for name, c in cases.items():
+        with case(convolution=name):
+            p = RealRootedPolynomial(c.p, assume_real_rooted=True)
+            q = RealRootedPolynomial(c.q, assume_real_rooted=True)
+            kwargs = {} if c.weights is None else {"weights": c.weights}
+            res = c.operation(p, q, c.d, **kwargs)
+            assert res.degree == len(c.expected) - 1
+            assert list(res.coeffs) == c.expected
+            if c.real_rooted is True:
+                assert res.verify_real_rootedness()
+            elif c.real_rooted is False:
+                with pytest.raises(ValueError, match="not real-rooted"):
+                    res.verify_real_rootedness()
+            if c.interlacing is not None:
+                assert res.verify_root_interlacing(strict=c.interlacing)
 
 
 def test_symmetric_multiplicative_invariance() -> None:
@@ -148,8 +153,6 @@ def test_unitary_hermite() -> None:
 
 
 def test_convolution_degree_validation() -> None:
-    import pytest
-
     # Degree 3 polynomial
     p = RealRootedPolynomial([1, -6, 11, -6], assume_real_rooted=True)
     # Degree 2 polynomial
@@ -170,16 +173,3 @@ def test_convolution_degree_validation() -> None:
         ValueError, match="Polynomial degrees cannot exceed dimension d"
     ):
         asymmetric_additive(p, q, d=2)
-
-
-def test_asymmetric_additive_weights() -> None:
-    p = RealRootedPolynomial([1, -2, 1], assume_real_rooted=True)  # (x-1)^2
-    q = RealRootedPolynomial([1, 2, 1], assume_real_rooted=True)  # (x+1)^2
-
-    # Verify asymmetric convolution with weights dilates the roots accordingly
-    # weights = [0.5, 0.5] -> p dilated by 0.5: (x - 0.5)^2 = x^2 - x + 0.25
-    # q dilated by 0.5: (x + 0.5)^2 = x^2 + x + 0.25
-    # Asymmetric convolution of these two should result in x^2 + 0.25
-    res = asymmetric_additive(p, q, d=2, weights=[0.5, 0.5])
-    assert res.degree == 2
-    assert list(res.coeffs) == [1, 0, sp.Rational(1, 4)]
