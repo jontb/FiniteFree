@@ -16,7 +16,7 @@ def _sample_observations(
     raw = np.asarray(matrix)
     # Real samples keep the real symmetric eigensolver; complex/object input is
     # converted as before.
-    sample = np.asarray(
+    sample: NDArray[Any] = np.asarray(
         raw, dtype=np.float64 if raw.dtype.kind in "biuf" else np.complex128
     )
     if sample.shape not in [(degree, degree), (2 * degree, 2 * degree)]:
