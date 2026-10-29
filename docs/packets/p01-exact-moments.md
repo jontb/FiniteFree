@@ -1,6 +1,6 @@
 # P01: Exact normalized root moments
 
-**State:** planned. **Phase:** 1. **Roadmap:** T1.
+**State:** implemented as `root_moments` and `matrix_moments`. **Phase:** 1. **Roadmap:** T1.
 
 **Feature issue:** [#41](https://github.com/jontb/FiniteFree/issues/41).
 

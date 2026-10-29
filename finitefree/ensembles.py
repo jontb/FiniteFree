@@ -6,7 +6,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .core import RealRootedPolynomial
-from .streaming import _sample_observations
+from .streaming import (
+    _has_adjacent_pairs,
+    _is_numerically_hermitian,
+    _sample_observations,
+)
+from .transforms import _moment_index
 from .utils.roots import _gaussian_roots, _laguerre_roots
 
 
@@ -205,6 +210,70 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
     if result._root_recurrence is not None:
         result._root_dilation = flint.fmpq(1, n)
     return result
+
+
+def matrix_moments(
+    matrix: Any,
+    order: SupportsIndex,
+    *,
+    d: Optional[SupportsIndex] = None,
+    paired: bool = False,
+) -> NDArray[np.float64]:
+    r"""
+    Return normalized spectral moments $m_0,\ldots,m_{\mathrm{order}}$ of one sample.
+    The matrix must be finite, nonempty, square and numerically Hermitian (absolute
+    tolerance 1e-10 times the largest entry magnitude); it is not modified. With
+    effective dimension n, ambient d >= n (default n) embeds d-n zero eigenvalues:
+    $m_0=1$ and $m_k=\operatorname{tr}(M^k)/d$. paired=True requires an even size
+    2n with sorted eigenvalues in adjacent pairs (tolerance 1e-10 times the
+    largest eigenvalue magnitude), counts one eigenvalue per pair and gives
+    $m_k=\operatorname{tr}(M^k)/(2d)$. Even size alone never implies pairing.
+    Uses float64 eigenvalue power sums, not characteristic coefficients, so
+    coefficient overflow does not affect representable low orders. Results are
+    floating estimates with no enclosure; nonfinite moments raise RuntimeError.
+    Average the vectors of independent samples to estimate moments of the mean
+    spectral measure, which generally differ from the root moments of the mean
+    characteristic polynomial. Returns a new float64 array.
+    """
+    count = _moment_index(order, "order")
+    if not isinstance(paired, (bool, np.bool_)):
+        raise ValueError("paired must be a boolean.")
+    sample = np.array(matrix, dtype=np.complex128)
+    if sample.ndim != 2 or sample.shape[0] != sample.shape[1] or sample.size == 0:
+        raise ValueError("matrix must be a nonempty square matrix.")
+    if not np.all(np.isfinite(sample)):
+        raise ValueError("matrix must contain finite entries.")
+    if not _is_numerically_hermitian(sample):
+        raise ValueError("matrix must be numerically Hermitian.")
+    eigenvalues = np.linalg.eigvalsh(sample)
+    if not np.all(np.isfinite(eigenvalues)):
+        raise ValueError("matrix eigenvalues must be finite.")
+    if paired:
+        if sample.shape[0] % 2 or not _has_adjacent_pairs(eigenvalues):
+            raise ValueError("paired matrices must have adjacent eigenvalue pairs.")
+        eigenvalues = eigenvalues[::2]
+
+    n = eigenvalues.shape[0]
+    if d is None:
+        dimension = n
+    else:
+        dimension = _moment_index(d, "d", positive=True)
+        if dimension < n:
+            raise ValueError(
+                f"Ambient dimension d ({dimension}) cannot be less than the "
+                f"effective matrix dimension ({n})."
+            )
+
+    moments = np.empty(count + 1, dtype=np.float64)
+    moments[0] = 1.0
+    powers = np.ones_like(eigenvalues)
+    with np.errstate(over="ignore", invalid="ignore"):
+        for k in range(1, count + 1):
+            powers = powers * eigenvalues
+            moments[k] = np.sum(powers) / dimension
+    if not np.all(np.isfinite(moments)):
+        raise RuntimeError("Matrix moments exceed the finite float64 range.")
+    return moments
 
 
 class EmpiricalComparison:

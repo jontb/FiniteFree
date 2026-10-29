@@ -1,13 +1,12 @@
 # P01 scope proposal: exact and empirical moments
 
-**State: proposed for review; no implementation.** Selected by the
+**State: accepted in [#41](https://github.com/jontb/FiniteFree/issues/41) and implemented as `root_moments` and `matrix_moments`; see the [API contract](api.md#root-and-matrix-moments).** Selected by the
 [P00 audit](p00-baseline-report.md). This is the concrete scope record for
-[P01](packets/p01-exact-moments.md), to carry into the required API discussion.
-Public names and signatures below are proposals, not available imports.
-
-The public feature/API discussion is now
-[#41](https://github.com/jontb/FiniteFree/issues/41). Its creation does not mark
-these proposed signatures accepted or the feature implemented.
+[P01](packets/p01-exact-moments.md). The names and signatures below were
+accepted as written; the issue added two clarifications. `root_moments` reads
+coefficients only, without triggering lazy root validation or certifying
+real-rootedness. Polynomials with nonreal roots are accepted, and their values
+are complex-root power sums rather than spectral moments.
 
 ## Mathematical target
 
@@ -143,5 +142,3 @@ This scope excludes inverse finite-R, empirical Cauchy/S/T/symmetric-S adapters,
 new samplers, arbitrary-precision empirical moments, general streaming APIs,
 certification guarantees and performance studies. Their assigned packets are
 recorded in the [P00 inventory](p00-baseline-report.md#empirical-transform-inventory-and-assigned-gaps).
-The next decision is acceptance of these names, dimensions, pairing and output
-types in the required API discussion before P01 runtime work begins.

@@ -9,6 +9,24 @@ from numpy.typing import NDArray
 from .core import RealRootedPolynomial
 
 
+def _is_numerically_hermitian(sample: NDArray[np.complex128]) -> bool:
+    """Check Hermitian symmetry up to 1e-10 times the largest entry magnitude."""
+    scale = np.max(np.abs(sample), initial=0.0)
+    return bool(np.isfinite(scale)) and np.allclose(
+        sample, sample.conj().T, rtol=0, atol=1e-10 * scale
+    )
+
+
+def _has_adjacent_pairs(eigenvalues: NDArray[np.floating[Any]]) -> bool:
+    """Check sorted eigenvalues pair up to 1e-10 times the largest magnitude."""
+    return np.allclose(
+        eigenvalues[::2],
+        eigenvalues[1::2],
+        rtol=0,
+        atol=1e-10 * np.max(np.abs(eigenvalues)),
+    )
+
+
 def _sample_observations(
     matrix: Any, degree: int
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -23,21 +41,13 @@ def _sample_observations(
         raise ValueError("Sample matrices must have shape (d, d) or (2d, 2d).")
     if not np.all(np.isfinite(sample)):
         raise ValueError("Sample matrices must contain finite entries.")
-    scale = np.max(np.abs(sample), initial=0.0)
-    if not np.isfinite(scale) or not np.allclose(
-        sample, sample.conj().T, rtol=0, atol=1e-10 * scale
-    ):
+    if not _is_numerically_hermitian(sample):
         raise ValueError("Sample matrices must be numerically Hermitian.")
     eigenvalues = np.linalg.eigvalsh(sample)
     if not np.all(np.isfinite(eigenvalues)):
         raise ValueError("Sample eigenvalues must be finite.")
     if degree and sample.shape[0] == 2 * degree:
-        if not np.allclose(
-            eigenvalues[::2],
-            eigenvalues[1::2],
-            rtol=0,
-            atol=1e-10 * np.max(np.abs(eigenvalues)),
-        ):
+        if not _has_adjacent_pairs(eigenvalues):
             raise ValueError("Doubled-size samples must have paired eigenvalues.")
         eigenvalues = eigenvalues[::2]
     with np.errstate(over="ignore", invalid="ignore"):

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `root_moments` for exact normalized root moments with ambient zero roots,
+  computed from rational coefficients by Newton identities without root
+  validation. Add `matrix_moments` for the float64 moments of one Hermitian
+  sample, with explicit paired representations. Existing transforms,
+  comparisons and defaults are unchanged.
 - Cache the first successful prepared-quadrature count law for repeated count
   and gap queries. Returned laws retain independent arrays and metadata;
   spectrum validation remains lazy and failed computations are retried.
