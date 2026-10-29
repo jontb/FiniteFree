@@ -471,7 +471,7 @@ else:
 
 For repeated samples from the same kernel, `PreparedDiscreteDPP(kernel, state_space)` validates and decomposes it once. It owns immutable array storage and a tuple of the supplied hashable labels; mutable label objects themselves are not deep-copied. `kernel_matrix` and `eigenvalues` return independent read-only copies. Preparation consumes no random numbers. Each `sample()` owns its working projection basis.
 
-Both `prepared.sample(rng=generator)` and `sample_discrete(kernel, states, rng=generator)` accept a NumPy `Generator`. Omitting `rng` preserves the legacy global NumPy RNG. `sample_discrete(prepared)` reuses the prepared state; an explicitly supplied state space must exactly match its stored order. Construct a new prepared object when the kernel or state space changes.
+Both `prepared.sample(rng=generator)` and `sample_discrete(kernel, states, rng=generator)` accept a NumPy `Generator`. Omitting `rng` preserves the legacy global NumPy RNG. `sample_discrete(prepared)` reuses the prepared state; an explicitly supplied state space must exactly match its stored order. Construct a new prepared object when the kernel or state space changes. The [finite-state tutorial](tutorial.md#finite-state-dpp-samples-and-counts) works through a two-state kernel, its exact subset law, labeled samples and count PMF.
 
 ```python
 import numpy as np
