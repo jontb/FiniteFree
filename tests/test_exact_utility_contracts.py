@@ -14,9 +14,10 @@ import flint
 import pytest
 import sympy as sp
 
-from finitefree import PrecisionContext
+from finitefree import PrecisionContext, RealRootedPolynomial
 from finitefree.utils import modular
 from finitefree.utils.conversion import flint_to_float
+from finitefree.utils.prs import sturm_subresultant_prs
 from tests._cases import case
 
 # Largest modulus whose residue products and sums stay below 2**63.
@@ -234,3 +235,86 @@ def test_crt_reconstructs_symmetric_values_for_large_primes() -> None:
                     assert all((result - r) % p == 0 for r, p in zip(residues, primes))
                     assert -(modulus // 2) <= result <= modulus // 2
                     assert result == x_true
+
+
+def _independent_real_root_count(poly: sp.Poly) -> int:
+    return int(poly.count_roots())
+
+
+def _sturm_real_root_count(sequence: list[flint.fmpq_poly]) -> int:
+    def changes(at_negative_infinity: bool) -> int:
+        signs = []
+        for term in sequence:
+            if term.is_zero():
+                continue
+            sign = 1 if term.coeffs()[-1] > 0 else -1
+            if at_negative_infinity and term.degree() % 2:
+                sign = -sign
+            signs.append(sign)
+        return sum(a * b < 0 for a, b in zip(signs, signs[1:]))
+
+    return changes(True) - changes(False)
+
+
+x = sp.Symbol("x")
+
+
+def _prs_cases() -> list[sp.Expr]:
+    rng = random.Random(1)
+    cases: list[sp.Expr] = [
+        x**17 + 3 * x**16 + 7,
+        x**22 + 5 * x**19 - x**3 + 6,
+        x**15 - 7 * x**10 - x**3 - 6,
+        x**15 + 5 * x**13 + 6 * x**8 + 3,
+        x * sp.prod([x**2 - k**2 for k in range(1, 9)]),
+        sp.prod([x - r for r in range(-7, 9)]),
+        sp.prod([2 * x - r for r in range(-9, 11, 2)]) * (x**5 - 3),
+    ]
+    for degree in range(15, 23):
+        for _ in range(4):
+            k, j = sorted(rng.sample(range(1, degree), 2), reverse=True)
+            a, b, c = (rng.randint(-9, 9) for _ in range(3))
+            cases.append(x**degree + a * x**k + b * x**j + c)
+    return cases
+
+
+def test_sturm_subresultant_prs_counts_real_roots_of_abnormal_sequences() -> None:
+    tested = 0
+    for expression in _prs_cases():
+        poly = sp.Poly(sp.expand(expression), x)
+        if sp.degree(sp.gcd(poly, poly.diff(x))) > 0:
+            continue
+        tested += 1
+        coefficients = [sp.Rational(c) for c in reversed(poly.all_coeffs())]
+        f = flint.fmpq_poly([flint.fmpq(int(c.p), int(c.q)) for c in coefficients])
+        with case(expression=expression):
+            sequence = sturm_subresultant_prs(f, f.derivative())
+            assert _sturm_real_root_count(sequence) == _independent_real_root_count(
+                poly
+            )
+            assert all(term.denom() == 1 for term in sequence)
+            assert sequence[-1].degree() == 0
+    assert tested >= 30
+
+
+def test_exact_sturm_fallback_never_certifies_complex_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(self: RealRootedPolynomial) -> bool:
+        raise RuntimeError("simulated Arb isolation failure")
+
+    monkeypatch.setattr(
+        RealRootedPolynomial, "_verify_real_rootedness_arb", unavailable
+    )
+    for expression in _prs_cases():
+        poly = sp.Poly(sp.expand(expression), x)
+        if not 15 <= poly.degree() <= 30:
+            continue
+        real_rooted = _independent_real_root_count(poly) == poly.degree()
+        with case(expression=expression, real_rooted=real_rooted):
+            p = RealRootedPolynomial([sp.Rational(c) for c in poly.all_coeffs()])
+            if real_rooted:
+                assert p.verify_real_rootedness() is True
+            else:
+                with pytest.raises(ValueError, match="not real-rooted"):
+                    p.verify_real_rootedness()
