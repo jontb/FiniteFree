@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `sample_beta_hermite` for the compact Dumitriu-Edelman tridiagonal model
+  at any positive real beta, returning diagonal and off-diagonal arrays. Its
+  scale matches the GOE, GUE and GSE samplers at beta 1, 2 and 4, and its
+  expected characteristic polynomial is `gue_expected_poly(d)`. Existing
+  samplers, formulas and draw order are unchanged.
 - Add `root_moments` for exact normalized root moments with ambient zero roots,
   computed from rational coefficients by Newton identities without root
   validation. Add `matrix_moments` for the float64 moments of one Hermitian
