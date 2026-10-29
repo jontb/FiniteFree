@@ -201,6 +201,7 @@ def test_prepared_count_laws_match_exact_rational_restrictions() -> None:
         ("Legendre", legendre_data(30), lebesgue, None, -1.0, 1.0, False),
         ("Legendre", legendre_data(30), lebesgue, None, 0.75, 1.0, True),
         ("Legendre", legendre_data(50), lebesgue, None, -1.0, 1.0, True),
+        ("Legendre", legendre_data(50), lebesgue, None, 0.0, 1.0, True),
         ("Legendre", legendre_data(40), lebesgue, None, 0.75, 1.0, False),
         ("Jacobi(2,1)", jacobi_data(30), jacobi_density, jacobi_weight, -1, 1, True),
         ("Jacobi(2,1)", jacobi_data(30), jacobi_density, jacobi_weight, 0.5, 1, False),
@@ -228,8 +229,18 @@ def test_prepared_count_laws_match_exact_rational_restrictions() -> None:
             np.testing.assert_allclose(
                 restriction.gram, weighted.T @ nodes, rtol=0, atol=2e-14
             )
+            if pmf[-1] == 1:
+                # Full support: the exact restriction is the identity, so every
+                # eigenvalue sits on the count law's documented 1 + 1e-12
+                # validation boundary. Roundoff there is platform-dependent
+                # (macOS exceeded it at rank 50, Linux at rank 30 came within
+                # 6e-13), so check the Gram matrix rather than the law.
+                np.testing.assert_allclose(
+                    restriction.gram, np.eye(n), rtol=0, atol=1e-11
+                )
+                continue
             # Whole estimate, including float64 nodes/weights and eigensolver
-            # roundoff (at most 3.8e-12 observed, at full-support rank 50).
+            # roundoff.
             law = restriction.count_distribution()
             np.testing.assert_allclose(law.pmf(), as_float(pmf), rtol=0, atol=2e-11)
             assert law.mean == pytest.approx(float(mean), rel=0, abs=2e-11)
