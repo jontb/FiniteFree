@@ -4,6 +4,9 @@
 
 **Feature issue:** [#42](https://github.com/jontb/FiniteFree/issues/42).
 
+The [accepted scope](../p02-scope.md) records the public contract and
+independently checked fixed examples. It is not yet implemented.
+
 ## Outcome
 
 Recover a monic degree-d polynomial from complete finite-cumulant inputs through order d, preserving the exact rational path and supporting the corresponding empirical estimates with explicit numerical limits.

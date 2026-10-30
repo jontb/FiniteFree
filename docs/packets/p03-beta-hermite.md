@@ -1,8 +1,11 @@
 # P03: Compact beta-Hermite sampling
 
-**State:** planned. **Phase:** 1. **Roadmap:** E1.
+**State:** implemented as `sample_beta_hermite`. **Phase:** 1. **Roadmap:** E1.
 
 **Feature issue:** [#43](https://github.com/jontb/FiniteFree/issues/43).
+
+The [accepted scope](../p03-scope.md) records the model, scale, compact output
+and RNG contract with independently checked identities.
 
 ## Outcome
 

@@ -404,8 +404,8 @@ assert SymmetricFiniteSTransform(p, exact=False, convention="standard")[0] == 1j
 
 ### Ensemble random streams
 
-`sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart` and all three
-`sample_haar_*` functions accept keyword-only `rng=None` or a
+`sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart`, `sample_beta_hermite` and
+all three `sample_haar_*` functions accept keyword-only `rng=None` or a
 `numpy.random.Generator`, matching the discrete DPP sampling convention.
 Omitting `rng` or passing `None` preserves the legacy global NumPy RNG, draw order,
 ensemble normalization and positional arguments. An explicit generator is
@@ -424,6 +424,41 @@ np.testing.assert_array_equal(
 )
 np.testing.assert_allclose(matrix, matrix.conj().T)
 ```
+
+### Compact beta-Hermite sampling
+
+`sample_beta_hermite(d, beta, scale=1.0, *, rng=None)` samples the [Dumitriu–Edelman](https://arxiv.org/abs/math-ph/0206043) tridiagonal model for any finite real `beta > 0`. It returns new float64 arrays `(diagonal, off_diagonal)` of lengths `d` and `d-1`: diagonal entries are $N(0, 2\,\mathrm{scale}^2/(\beta d))$ and the off-diagonal holds $\mathrm{scale}\,\chi_{\beta(d-1)},\ldots,\mathrm{scale}\,\chi_\beta$ divided by $\sqrt{\beta d}$, from the top. Storage is $O(d)$; no dense matrix or eigenvalues are formed, so call `scipy.linalg.eigvalsh_tridiagonal` or build `np.diag(...)` explicitly when needed.
+
+The scale gives $E[\operatorname{tr}H^2/d]=1+(2/\beta-1)/d$, the value of the existing GOE, GUE and GSE samplers (one eigenvalue per pair) at `beta=1, 2, 4`. Entries are independent and centered, so the expected characteristic polynomial is `gue_expected_poly(d)` for every `beta`. The compact model has the same eigenvalue law as the dense samplers at those `beta` values, not the same entry law or the same draws.
+
+`d` must be a positive integer index, `beta` a finite positive real and `scale` a finite nonzero real; `ValueError` is raised before any random number is drawn. `rng` follows the ensemble convention below. The draw order is `d` standard normals, then `d-1` chi-square variates with shapes `beta*(d-1), ..., beta`. Entries that overflow float64 raise `RuntimeError`.
+
+```python
+import numpy as np
+from scipy.linalg import eigvalsh_tridiagonal
+from finitefree import matrix_moments, sample_beta_hermite, sample_goe, sample_gse, sample_gue
+
+diagonal, off = sample_beta_hermite(4, 2.5, rng=np.random.default_rng(7))
+assert diagonal.shape == (4,) and off.shape == (3,)
+eigenvalues = eigvalsh_tridiagonal(diagonal, off)
+dense = np.diag(diagonal) + np.diag(off, 1) + np.diag(off, -1)
+np.testing.assert_allclose(matrix_moments(dense, 2)[2], np.mean(eigenvalues**2))
+
+# Seeded descriptive comparison of spectral moments with the dense samplers.
+rng = np.random.default_rng(2026)
+for beta, sampler, paired in [(1, sample_goe, False), (2, sample_gue, False), (4, sample_gse, True)]:
+    compact = []
+    for _ in range(400):
+        a, b = sample_beta_hermite(4, beta, rng=rng)
+        compact.append(matrix_moments(np.diag(a) + np.diag(b, 1) + np.diag(b, -1), 4))
+    classical = [matrix_moments(sampler(4, rng=rng), 4, paired=paired) for _ in range(400)]
+    for name, values in [("compact", compact), ("dense", classical)]:
+        values = np.array(values)
+        error = values.std(axis=0, ddof=1) / np.sqrt(len(values))
+        print(beta, name, np.round(values.mean(axis=0)[[2, 4]], 3), np.round(error[[2, 4]], 3))
+```
+
+The printed means and standard errors are descriptive estimates from independent draws; the exact second moment `1+(2/beta-1)/4` is the reference.
 
 ### Empirical coefficient comparison
 

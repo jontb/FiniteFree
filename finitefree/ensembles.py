@@ -1,6 +1,7 @@
 import math
+import numbers
 import operator
-from typing import Any, Callable, Optional, SupportsIndex
+from typing import Any, Callable, Optional, SupportsFloat, SupportsIndex
 
 import numpy as np
 from numpy.typing import NDArray
@@ -98,6 +99,62 @@ def sample_wishart(
     else:
         raise ValueError("beta must be 1, 2, or 4")
     return W * scale
+
+
+def _positive_real(value: Any, name: str, *, nonzero_only: bool = False) -> float:
+    """Return a finite real parameter, rejecting booleans and complex values."""
+    bound = "nonzero" if nonzero_only else "positive"
+    message = f"{name} must be a finite {bound} real number."
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        raise ValueError(message)
+    result = float(value)
+    if not math.isfinite(result) or (result == 0 if nonzero_only else result <= 0):
+        raise ValueError(message)
+    return result
+
+
+def sample_beta_hermite(
+    d: SupportsIndex,
+    beta: SupportsFloat,
+    scale: SupportsFloat = 1.0,
+    *,
+    rng: Optional[np.random.Generator] = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    r"""
+    Sample the Dumitriu-Edelman beta-Hermite tridiagonal model in compact form.
+    Returns new float64 arrays (diagonal, off_diagonal) of lengths d and d-1 for
+    $H = \mathrm{scale}\cdot T/\sqrt{\beta d}$, where T has independent
+    $N(0,2)$ diagonal entries and off-diagonal entries
+    $\chi_{\beta(d-1)},\ldots,\chi_\beta$ from the top. The eigenvalue density of T
+    is proportional to $\prod_{i<j}|\lambda_i-\lambda_j|^\beta e^{-\sum\lambda_i^2/4}$.
+    This scale gives $E[\operatorname{tr}H^2/d]=1+(2/\beta-1)/d$, matching the GOE,
+    GUE and GSE samplers at beta=1, 2, 4, and an expected characteristic
+    polynomial equal to gue_expected_poly(d) for every beta. beta may be any
+    finite positive real; scale is a finite nonzero real.
+    Arguments are validated before any draw. rng=None uses the legacy global
+    NumPy RNG; a Generator is advanced in place. Draw order: d standard normals,
+    then d-1 chi-square variates with shapes beta*(d-1),...,beta. No dense matrix
+    or eigenvalues are formed; use scipy.linalg.eigvalsh_tridiagonal explicitly.
+    """
+    dimension = _moment_index(d, "d", positive=True)
+    shape = _positive_real(beta, "beta")
+    factor = _positive_real(scale, "scale", nonzero_only=True) / math.sqrt(
+        shape * dimension
+    )
+    if rng is not None and not isinstance(rng, np.random.Generator):
+        raise TypeError("rng must be a numpy.random.Generator or None")
+    source: Any = np.random if rng is None else rng
+    normals = np.asarray(source.standard_normal(dimension), dtype=np.float64)
+    degrees = shape * np.arange(dimension - 1, 0, -1, dtype=np.float64)
+    chi_squares = np.asarray(
+        source.chisquare(degrees) if dimension > 1 else np.empty(0), dtype=np.float64
+    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        diagonal = np.sqrt(2.0) * factor * normals
+        off_diagonal = factor * np.sqrt(chi_squares)
+    if not (np.all(np.isfinite(diagonal)) and np.all(np.isfinite(off_diagonal))):
+        raise RuntimeError("beta-Hermite entries exceed the finite float64 range.")
+    return diagonal, off_diagonal
 
 
 def sample_haar_unitary(d: int, *, rng: Optional[np.random.Generator] = None) -> Any:

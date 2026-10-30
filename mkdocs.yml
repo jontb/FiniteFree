@@ -53,7 +53,9 @@ nav:
           - P01 Exact Moments: packets/p01-exact-moments.md
           - P01 Scope Proposal: p01-scope.md
           - P02 Inverse Finite R: packets/p02-inverse-finite-r.md
+          - P02 Scope Proposal: p02-scope.md
           - P03 Beta Hermite: packets/p03-beta-hermite.md
+          - P03 Scope Proposal: p03-scope.md
           - P04 Beta Laguerre: packets/p04-beta-laguerre.md
           - P16 Existing Empirical Transforms: packets/p16-empirical-legacy-transforms.md
       - Phase 2:
