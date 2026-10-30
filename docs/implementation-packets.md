@@ -60,7 +60,7 @@ this table does not reserve them or require one contributor to finish a phase.
 | [P01](packets/p01-exact-moments.md) | Exact root moments and empirical matrix moments | P00 | Implemented on develop |
 | [P02](packets/p02-inverse-finite-r.md) | Full inverse finite R for algebraic and empirical inputs | P01 | Implemented on develop |
 | [P03](packets/p03-beta-hermite.md) | Compact beta-Hermite sampler | P00 | Implemented on develop |
-| [P04](packets/p04-beta-laguerre.md) | Compact beta-Laguerre sampler | P03 | Planned |
+| [P04](packets/p04-beta-laguerre.md) | Compact beta-Laguerre sampler | P03 | Implemented on develop |
 | [P05](packets/p05-rectangular-convolution.md) | Rectangular coefficient convolution | P00 | Planned |
 | [P06](packets/p06-rectangular-cumulants.md) | Algebraic and empirical rectangular cumulants/finite R | P05 | Planned |
 | [P07](packets/p07-jacobi-manova.md) | Real/complex Jacobi–MANOVA workflow | P00 | Planned |

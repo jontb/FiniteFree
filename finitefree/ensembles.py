@@ -203,6 +203,64 @@ def sample_beta_hermite(
     return diagonal, off_diagonal
 
 
+def sample_beta_laguerre(
+    d: SupportsIndex,
+    n: SupportsFloat,
+    beta: SupportsFloat,
+    scale: SupportsFloat = 1.0,
+    *,
+    rng: Optional[np.random.Generator] = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    r"""
+    Sample the Dumitriu-Edelman beta-Laguerre bidiagonal factor in compact form.
+    Returns new float64 arrays (diagonal, subdiagonal) of lengths d and d-1 of a
+    lower bidiagonal B with $W = BB^T$. Before scaling by
+    $\sqrt{\mathrm{scale}/(\beta n)}$, the diagonal holds
+    $\chi_{\beta n},\chi_{\beta(n-1)},\ldots,\chi_{\beta(n-d+1)}$ and the
+    subdiagonal $\chi_{\beta(d-1)},\ldots,\chi_\beta$. W has eigenvalue density
+    proportional to $\prod_{i<j}|\lambda_i-\lambda_j|^\beta
+    \prod\lambda_i^{\beta(n-d+1)/2-1}e^{-\beta n\sum\lambda_i/(2\,\mathrm{scale})}$,
+    $E[W]=\mathrm{scale}\,I$ and, for every beta, the expected characteristic
+    polynomial $n^{-d}d!(-1)^dL_d^{(n-d)}(nx)$ (wishart_expected_poly at integer
+    n, scale one). At integer n >= d and beta=1, 2, 4 the spectrum has the law of
+    sample_wishart(d, n, beta), one eigenvalue per pair at beta=4.
+    n is a finite real shape with n > d-1; beta and scale are finite positive
+    reals. Arguments are validated before any draw. rng=None uses the legacy
+    global NumPy RNG; a Generator is advanced in place. Draw order: the d
+    diagonal chi-squares, then the d-1 subdiagonal chi-squares, in the orders
+    above. Eigenvalues of W are the squared singular values of B; no Gram matrix
+    or eigenvalues are formed here.
+    """
+    dimension = _moment_index(d, "d", positive=True)
+    shape = _positive_real(n, "n")
+    if not shape > dimension - 1:
+        raise ValueError(f"n must exceed d - 1 = {dimension - 1}.")
+    index = _positive_real(beta, "beta")
+    factor = math.sqrt(_positive_real(scale, "scale") / (index * shape))
+    if not math.isfinite(factor) or factor == 0:
+        raise ValueError("scale/(beta n) must be a finite positive float64 value.")
+    if rng is not None and not isinstance(rng, np.random.Generator):
+        raise TypeError("rng must be a numpy.random.Generator or None")
+    diagonal_degrees = index * (shape - np.arange(dimension, dtype=np.float64))
+    subdiagonal_degrees = index * np.arange(dimension - 1, 0, -1, dtype=np.float64)
+    if not np.all(np.isfinite(diagonal_degrees)) or not np.all(diagonal_degrees > 0):
+        raise ValueError(
+            "beta-Laguerre chi degrees of freedom must be finite and positive."
+        )
+    source: Any = np.random if rng is None else rng
+    diagonal_squares = np.asarray(source.chisquare(diagonal_degrees), dtype=np.float64)
+    subdiagonal_squares = np.asarray(
+        source.chisquare(subdiagonal_degrees) if dimension > 1 else np.empty(0),
+        dtype=np.float64,
+    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        diagonal = factor * np.sqrt(diagonal_squares)
+        subdiagonal = factor * np.sqrt(subdiagonal_squares)
+    if not (np.all(np.isfinite(diagonal)) and np.all(np.isfinite(subdiagonal))):
+        raise RuntimeError("beta-Laguerre entries exceed the finite float64 range.")
+    return diagonal, subdiagonal
+
+
 def sample_haar_unitary(d: int, *, rng: Optional[np.random.Generator] = None) -> Any:
     """Generates a Haar-distributed random unitary matrix."""
     normal = _normal_draw(rng)

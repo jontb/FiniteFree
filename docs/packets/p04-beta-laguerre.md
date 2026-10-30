@@ -1,8 +1,12 @@
 # P04: Compact beta-Laguerre sampling
 
-**State:** planned. **Phase:** 1. **Roadmap:** E1.
+**State:** implemented as `sample_beta_laguerre`. **Phase:** 1. **Roadmap:** E1.
 
 **Feature issue:** [#44](https://github.com/jontb/FiniteFree/issues/44).
+
+The [accepted scope](../p04-scope.md) records the parameter dictionary,
+expected polynomial and compact-output contract with independently checked
+identities.
 
 ## Outcome
 
