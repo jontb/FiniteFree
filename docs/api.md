@@ -432,8 +432,8 @@ assert SymmetricFiniteSTransform(p, exact=False, convention="standard")[0] == 1j
 
 ### Ensemble random streams
 
-`sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart`, `sample_beta_hermite` and
-all three `sample_haar_*` functions accept keyword-only `rng=None` or a
+`sample_gue`, `sample_goe`, `sample_gse`, `sample_wishart`, `sample_beta_hermite`,
+`sample_beta_laguerre` and all three `sample_haar_*` functions accept keyword-only `rng=None` or a
 `numpy.random.Generator`, matching the discrete DPP sampling convention.
 Omitting `rng` or passing `None` preserves the legacy global NumPy RNG, draw order,
 ensemble normalization and positional arguments. An explicit generator is
@@ -487,6 +487,49 @@ for beta, sampler, paired in [(1, sample_goe, False), (2, sample_gue, False), (4
 ```
 
 The printed means and standard errors are descriptive estimates from independent draws; the exact second moment `1+(2/beta-1)/4` is the reference.
+
+### Compact beta-Laguerre sampling
+
+`sample_beta_laguerre(d, n, beta, scale=1.0, *, rng=None)` samples the [Dumitriu–Edelman](https://arxiv.org/abs/math-ph/0206043) bidiagonal Laguerre model. It returns new float64 arrays `(diagonal, subdiagonal)` of lengths `d` and `d-1` of a lower bidiagonal factor $B$ with $W=BB^T$. Before the common factor $\sqrt{\mathrm{scale}/(\beta n)}$, the diagonal holds $\chi_{\beta n},\chi_{\beta(n-1)},\ldots,\chi_{\beta(n-d+1)}$ and the subdiagonal $\chi_{\beta(d-1)},\ldots,\chi_\beta$.
+
+| Quantity | Value |
+| --- | --- |
+| Shape | real `n > d - 1`, the `sample_wishart` sample size extended to real values |
+| Density | $\prod_{i<j}\lvert\lambda_i-\lambda_j\rvert^\beta\prod\lambda_i^{\beta(n-d+1)/2-1}e^{-\beta n\sum\lambda_i/(2\,\mathrm{scale})}$ |
+| Mean | $E[W]=\mathrm{scale}\,I$ |
+| Second moment (scale one) | $E[\operatorname{tr}W^2/d]=1+(d+2/\beta-1)/n$ |
+| Expected characteristic polynomial (scale one) | $n^{-d}d!(-1)^dL_d^{(n-d)}(nx)$ for every beta; `wishart_expected_poly(d, n)` at integer `n` |
+
+At integer `n >= d` and `beta = 1, 2, 4` the spectrum has the law of `sample_wishart(d, n, beta)`, with one eigenvalue per pair at `beta=4`; the entries and draws differ. Integer `n < d` (singular Wishart) is outside this model and remains with `sample_wishart`.
+
+The factor is returned, not its Gram matrix or eigenvalues. Eigenvalues of `W` are the squared singular values of the factor, or the eigenvalues of the tridiagonal Gram matrix with diagonal `diagonal**2 + [0, *subdiagonal**2]` and off-diagonal `diagonal[:-1] * subdiagonal`. `d` must be a positive integer index, `n` a finite real above `d - 1`, and `beta` and `scale` finite positive reals; `ValueError` is raised before any draw. `rng` follows the ensemble convention below. The draw order is the `d` diagonal chi-squares, then the `d-1` subdiagonal chi-squares, in the orders above. No normal variates are drawn.
+
+```python
+import numpy as np
+from scipy.linalg import eigvalsh_tridiagonal
+from finitefree import matrix_moments, sample_beta_laguerre, sample_wishart
+
+diagonal, sub = sample_beta_laguerre(3, 3.5, 0.8, rng=np.random.default_rng(7))
+gram_eigenvalues = eigvalsh_tridiagonal(diagonal**2 + np.r_[0, sub**2], diagonal[:-1] * sub)
+factor = np.diag(diagonal) + np.diag(sub, -1)
+np.testing.assert_allclose(np.sort(np.linalg.svd(factor, compute_uv=False) ** 2), gram_eigenvalues)
+
+# Seeded descriptive comparison with the dense Wishart sampler at d=3, n=5.
+rng = np.random.default_rng(2026)
+for beta in [1, 2, 4]:
+    compact = []
+    for _ in range(400):
+        a, b = sample_beta_laguerre(3, 5, beta, rng=rng)
+        f = np.diag(a) + np.diag(b, -1)
+        compact.append(matrix_moments(f @ f.T, 2))
+    dense = [matrix_moments(sample_wishart(3, 5, beta, rng=rng), 2, paired=beta == 4) for _ in range(400)]
+    for name, values in [("compact", compact), ("dense", dense)]:
+        values = np.array(values)
+        error = values.std(axis=0, ddof=1) / np.sqrt(len(values))
+        print(beta, name, np.round(values.mean(axis=0)[1:], 3), np.round(error[1:], 3))
+```
+
+The printed means and standard errors are descriptive; the exact values are $1$ and $1+(3+2/\beta-1)/5$.
 
 ### Empirical coefficient comparison
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `sample_beta_laguerre` for the compact Dumitriu-Edelman bidiagonal
+  Laguerre factor at any positive real beta and real shape `n > d - 1`. Its
+  normalization matches `sample_wishart` at beta 1, 2 and 4, and its expected
+  characteristic polynomial is the generalized Laguerre form of
+  `wishart_expected_poly`. Existing Wishart behavior is unchanged.
 - Add `inverse_finite_r`, reconstructing the monic polynomial from a complete
   finite-cumulant sequence exactly (rational inputs) or as float64
   coefficients, and `matrix_finite_cumulants` for the float64 finite cumulants

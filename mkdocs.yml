@@ -57,6 +57,7 @@ nav:
           - P03 Beta Hermite: packets/p03-beta-hermite.md
           - P03 Scope Proposal: p03-scope.md
           - P04 Beta Laguerre: packets/p04-beta-laguerre.md
+          - P04 Scope Proposal: p04-scope.md
           - P16 Existing Empirical Transforms: packets/p16-empirical-legacy-transforms.md
       - Phase 2:
           - P05 Rectangular Convolution: packets/p05-rectangular-convolution.md
