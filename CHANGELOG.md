@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add `inverse_finite_r`, reconstructing the monic polynomial from a complete
+  finite-cumulant sequence exactly (rational inputs) or as float64
+  coefficients, and `matrix_finite_cumulants` for the float64 finite cumulants
+  of one Hermitian sample. `FiniteRTransform` is unchanged.
 - Add `sample_beta_hermite` for the compact Dumitriu-Edelman tridiagonal model
   at any positive real beta, returning diagonal and off-diagonal arrays. Its
   scale matches the GOE, GUE and GSE samplers at beta 1, 2 and 4, and its

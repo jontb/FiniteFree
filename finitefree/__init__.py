@@ -14,6 +14,7 @@ from .dpp import (
 from .ensembles import (
     EmpiricalComparison,
     gue_expected_poly,
+    matrix_finite_cumulants,
     matrix_moments,
     sample_beta_hermite,
     sample_goe,
@@ -51,6 +52,7 @@ from .transforms import (
     FiniteSTransform,
     FiniteTTransform,
     SymmetricFiniteSTransform,
+    inverse_finite_r,
     root_moments,
 )
 from .utils.precision import PrecisionContext
@@ -76,6 +78,8 @@ __all__ = [
     "SymmetricFiniteSTransform",
     "root_moments",
     "matrix_moments",
+    "inverse_finite_r",
+    "matrix_finite_cumulants",
     "sample_gue",
     "sample_beta_hermite",
     "sample_goe",

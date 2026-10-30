@@ -1,11 +1,11 @@
 # P02: Full inverse finite-R reconstruction
 
-**State:** planned. **Phase:** 1. **Roadmap:** T1.
+**State:** implemented as `inverse_finite_r` and `matrix_finite_cumulants`. **Phase:** 1. **Roadmap:** T1.
 
 **Feature issue:** [#42](https://github.com/jontb/FiniteFree/issues/42).
 
 The [accepted scope](../p02-scope.md) records the public contract and
-independently checked fixed examples. It is not yet implemented.
+independently checked fixed examples.
 
 ## Outcome
 

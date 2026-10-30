@@ -86,6 +86,18 @@ standard_error = moments.std(axis=0, ddof=1) / np.sqrt(len(draws))
 print(np.round(mean, 3), np.round(standard_error, 3))
 ```
 
+Finite cumulants have the same per-draw structure. `matrix_finite_cumulants` gives each draw's cumulants and `inverse_finite_r(..., numerical=True)` maps them back to that draw's characteristic coefficients:
+
+```python
+import numpy as np
+from finitefree import inverse_finite_r, matrix_finite_cumulants, sample_gue
+
+draw = sample_gue(4, rng=np.random.default_rng(862))
+cumulants = matrix_finite_cumulants(draw)
+coefficients = inverse_finite_r(cumulants, numerical=True)
+np.testing.assert_allclose(coefficients, np.poly(np.linalg.eigvalsh(draw)), atol=1e-12)
+```
+
 ## Exact matrix inputs
 
 Pencils copy rational entries before making separate float64 views. Exact methods preserve values beyond float64's integer precision. Symmetry is checked on supplied values; exact determinant derivatives require a nonsingular evaluated matrix.

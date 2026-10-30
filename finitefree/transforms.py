@@ -1,5 +1,7 @@
+import math
+import numbers
 import operator
-from typing import Any, List, Literal, Optional, SupportsIndex
+from typing import Any, List, Literal, Optional, Sequence, SupportsIndex, Union
 
 import numpy as np
 import sympy as sp
@@ -313,6 +315,105 @@ def root_moments(
         value = sums[k] / dimension
         moments.append(sp.Rational(int(value.p), int(value.q)))
     return moments
+
+
+def _normalized_from_cumulants(cumulants: List[Any], d: int, one: Any) -> List[Any]:
+    """Invert kappa_n = (-d)^(n-1) c_n/(n-1)! and the moment-cumulant recurrence."""
+    classical = []
+    factor = one  # (n-1)!/(-d)^(n-1)
+    for n, kappa in enumerate(cumulants, start=1):
+        if n > 1:
+            factor = factor * (n - 1) / (-d)
+        classical.append(kappa * factor)
+    # m_n = sum_{k=1}^{n} C(n-1, k-1) c_k m_{n-k}, with m_0 = 1.
+    moments = [one]
+    for n in range(1, d + 1):
+        total = one * 0
+        for k in range(1, n + 1):
+            total = total + math.comb(n - 1, k - 1) * classical[k - 1] * moments[n - k]
+        moments.append(total)
+    return moments
+
+
+def inverse_finite_r(
+    cumulants: Union[Sequence[Any], NDArray[Any]],
+    *,
+    d: Optional[SupportsIndex] = None,
+    numerical: bool = False,
+) -> Any:
+    r"""
+    Reconstruct the monic degree-d polynomial with finite cumulants
+    $\kappa_1,\ldots,\kappa_d$, the inverse of FiniteRTransform(p, order=d, d=d).
+    The complete sequence is required: d defaults to its length and, if given,
+    must equal it; missing cumulants are never filled with zeros. A degree-n
+    source in ambient dimension d reconstructs $x^{d-n}p(x)$ monic.
+    Exact mode requires rational values (integers, rationals, FLINT values) and
+    rejects floats, so observations are not silently promoted to exact data.
+    It returns a new RealRootedPolynomial with lazy validation: arbitrary
+    cumulants need not give a real-rooted polynomial, and none is asserted.
+    numerical=True takes finite real values and returns a new float64 array of
+    descending coefficients, without a conditioning bound; nonfinite
+    coefficients raise RuntimeError.
+    """
+    if not isinstance(numerical, (bool, np.bool_)):
+        raise ValueError("numerical must be a boolean.")
+    if isinstance(cumulants, (str, bytes)):
+        raise ValueError("cumulants must be a sequence of values.")
+    values = list(cumulants)
+    if not values:
+        raise ValueError("cumulants must contain at least one value.")
+    dimension = len(values)
+    if d is not None and _moment_index(d, "d", positive=True) != dimension:
+        raise ValueError(
+            f"Full reconstruction requires exactly d cumulants; got {dimension} "
+            f"for d={operator.index(d)}."
+        )
+
+    if numerical:
+        real = []
+        for value in values:
+            if isinstance(value, (bool, np.bool_)) or not isinstance(
+                value, numbers.Real
+            ):
+                raise ValueError("Numerical cumulants must be finite real numbers.")
+            real.append(float(value))
+        if not all(math.isfinite(value) for value in real):
+            raise ValueError("Numerical cumulants must be finite real numbers.")
+        try:
+            with np.errstate(over="ignore", invalid="ignore"):
+                normalized = _normalized_from_cumulants(real, dimension, 1.0)
+                result = np.array(
+                    [
+                        (-1) ** k * math.comb(dimension, k) * normalized[k]
+                        for k in range(dimension + 1)
+                    ],
+                    dtype=np.float64,
+                )
+        except OverflowError:
+            result = np.array([np.inf])
+        if not np.all(np.isfinite(result)):
+            raise RuntimeError(
+                "Reconstructed coefficients exceed the finite float64 range."
+            )
+        return result
+
+    import flint
+
+    exact = []
+    for value in values:
+        if isinstance(value, (bool, np.bool_, float, np.floating, sp.Float)):
+            raise ValueError(
+                "Exact reconstruction requires rational cumulants; convert floats "
+                "explicitly or use numerical=True."
+            )
+        try:
+            exact.append(sympy_to_fmpq(value))
+        except (TypeError, ValueError, sp.SympifyError) as error:
+            raise ValueError(
+                "Exact reconstruction requires rational cumulants."
+            ) from error
+    normalized = _normalized_from_cumulants(exact, dimension, flint.fmpq(1))
+    return RealRootedPolynomial.from_normalized_coeffs(normalized)
 
 
 class FiniteTTransform:

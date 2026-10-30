@@ -1,9 +1,9 @@
 # P02 scope proposal: full inverse finite R
 
-**State: accepted for implementation; not yet implemented.** This is the concrete scope
+**State: accepted and implemented as `inverse_finite_r` and `matrix_finite_cumulants`; see the [API contract](api.md#finite-cumulant-reconstruction).** This is the concrete scope
 record for [P02](packets/p02-inverse-finite-r.md), to carry into
 [#42](https://github.com/jontb/FiniteFree/issues/42). The names and
-signatures below were accepted as written; they are not yet available imports. It builds on the
+signatures below were accepted as written. It builds on the
 accepted [P01 contract](p01-scope.md) and the released `FiniteRTransform`
 normalization.
 
