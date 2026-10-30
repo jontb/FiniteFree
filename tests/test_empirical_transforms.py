@@ -7,6 +7,8 @@ import sympy as sp
 from finitefree import (
     FiniteRTransform,
     RealRootedPolynomial,
+    inverse_finite_r,
+    matrix_finite_cumulants,
     matrix_moments,
     root_moments,
     sample_goe,
@@ -15,6 +17,7 @@ from finitefree import (
 )
 from finitefree.streaming import _sample_observations
 from tests._cases import case
+from tests._cumulants import logarithm_reference
 
 
 def trace_moments(matrix: Any, order: int, denominator: int) -> Any:
@@ -200,3 +203,114 @@ def test_seeded_gue_example_uses_the_same_draws() -> None:
     standard_error = routed.std(axis=0, ddof=1) / np.sqrt(len(draws))
     assert routed[:, 0].tolist() == [1.0] * 16
     assert standard_error[0] == 0 and np.all(standard_error[1:] > 0)
+
+
+def exact_cumulants(matrix: Any, d: int) -> list[Any]:
+    """Independent oracle: exact determinant coefficients, then a formal logarithm."""
+    rows = np.asarray(matrix, dtype=np.complex128)
+    exact = sp.Matrix(
+        [
+            [
+                sp.Rational(float(v.real)) + sp.I * sp.Rational(float(v.imag))
+                for v in row
+            ]
+            for row in rows
+        ]
+    )
+    coefficients = [sp.expand(c) for c in exact.charpoly().all_coeffs()]
+    assert all(sp.im(c) == 0 for c in coefficients)
+    p = RealRootedPolynomial([sp.re(c) for c in coefficients], assume_real_rooted=True)
+    return logarithm_reference(p, d, d)
+
+
+def test_matrix_cumulants_match_exact_determinant_references() -> None:
+    rng = np.random.default_rng(42)
+    matrices = [
+        np.array([[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 4.0]]),
+        np.array([[2, 1 + 1j], [1 - 1j, 3]]),
+        sample_goe(4, rng=rng),
+        sample_gue(4, scale=2.0, rng=rng),
+    ]
+    for index, matrix in enumerate(matrices):
+        n = matrix.shape[0]
+        for dimension in [n, n + 2]:
+            with case(matrix=index, d=dimension):
+                expected = [float(v) for v in exact_cumulants(matrix, n)]
+                if dimension > n:
+                    padded = np.zeros((dimension, dimension), dtype=matrix.dtype)
+                    padded[:n, :n] = matrix
+                    expected = [float(v) for v in exact_cumulants(padded, dimension)]
+                np.testing.assert_allclose(
+                    matrix_finite_cumulants(matrix, d=dimension),
+                    expected,
+                    rtol=1e-10,
+                    atol=1e-12,
+                )
+
+
+def test_matrix_cumulant_fixed_values_and_pairing() -> None:
+    np.testing.assert_allclose(matrix_finite_cumulants([[2, 1j], [-1j, 2]]), [2, 2])
+    paired = np.diag([1.0, 1.0, 3.0, 3.0])
+    np.testing.assert_allclose(matrix_finite_cumulants(paired, paired=True), [2, 2])
+    np.testing.assert_allclose(
+        matrix_finite_cumulants(paired, d=4, paired=True), [1, 2, 4, 8]
+    )
+    # Without explicit pairing all four eigenvalues count: roots [1,1,3,3].
+    expected = logarithm_reference(RealRootedPolynomial.from_roots([1, 1, 3, 3]), 4, 4)
+    np.testing.assert_allclose(
+        matrix_finite_cumulants(paired), [float(v) for v in expected], atol=1e-13
+    )
+    gse = sample_gse(3, rng=np.random.default_rng(9))
+    half = np.linalg.eigvalsh(gse)[::2]
+    np.testing.assert_allclose(
+        matrix_finite_cumulants(gse, paired=True),
+        matrix_finite_cumulants(np.diag(half)),
+        rtol=1e-10,
+        atol=1e-12,
+    )
+
+
+def test_matrix_cumulants_center_large_offsets() -> None:
+    offset = 1e8
+    result = matrix_finite_cumulants(np.diag([offset + 1, offset + 3, offset + 8]))
+    exact = logarithm_reference(RealRootedPolynomial.from_roots([1, 3, 8]), 3, 3)
+    assert result[0] == offset + 4
+    np.testing.assert_allclose(result[1:], [float(v) for v in exact[1:]], rtol=1e-9)
+
+
+def test_cumulant_targets_and_empirical_round_trip() -> None:
+    draws = [np.diag([1.0, 3.0]), np.diag([3.0, 5.0])]
+    per_draw = [matrix_finite_cumulants(draw) for draw in draws]
+    np.testing.assert_allclose(per_draw, [[2, 2], [4, 2]])
+    mean_cumulants = np.mean(per_draw, axis=0)
+    np.testing.assert_allclose(
+        inverse_finite_r(mean_cumulants, numerical=True), [1, -6, 8]
+    )  # (x-2)(x-4)
+    assert FiniteRTransform(RealRootedPolynomial([1, -6, 9]), order=2) == [3, 0]
+
+    rng = np.random.default_rng(862)
+    for draw in [sample_gue(5, rng=rng) for _ in range(4)]:
+        reconstructed = inverse_finite_r(matrix_finite_cumulants(draw), numerical=True)
+        np.testing.assert_allclose(
+            reconstructed,
+            np.poly(np.linalg.eigvalsh(draw)),
+            rtol=1e-10,
+            atol=1e-12,
+        )
+
+
+def test_matrix_cumulant_validation_overflow_and_ownership() -> None:
+    with pytest.raises(ValueError, match="nonempty square"):
+        matrix_finite_cumulants(np.zeros((2, 3)))
+    with pytest.raises(ValueError, match="adjacent eigenvalue pairs"):
+        matrix_finite_cumulants(np.diag([1.0, 2.0]), paired=True)
+    with pytest.raises(ValueError, match="effective matrix dimension"):
+        matrix_finite_cumulants(np.diag([1.0, 2.0]), d=1)
+    with pytest.raises(RuntimeError, match="finite float64 range"):
+        matrix_finite_cumulants(np.diag([1e200, -1e200]))
+    view = sample_gue(6, rng=np.random.default_rng(3))[::2, ::2]
+    before = view.copy()
+    first = matrix_finite_cumulants(view)
+    np.testing.assert_array_equal(view, before)
+    first[:] = 0
+    assert np.any(matrix_finite_cumulants(view) != 0)

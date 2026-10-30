@@ -336,6 +336,34 @@ np.testing.assert_allclose(values[1:], [1, 0, 0], rtol=0, atol=1e-28)
 
 For repeatable accuracy and timing checks, run `PYTHONPATH=. python scripts/benchmark_transforms.py --output transform-benchmark.json`. The default cases use degrees 60, 150 and 300, order 12, a shift of $10^{50}$ and 128-bit working precision. Hermite and Wishart analytic cumulants supply the reference. Transform times are best of three with normalized coefficients already cached; construction is reported separately. These cases test stability under translation, not arbitrary high-order inputs.
 
+### Finite cumulant reconstruction
+
+`inverse_finite_r(cumulants, *, d=None, numerical=False)` inverts `FiniteRTransform(p, order=d, d=d)`. It sets $c_n=\kappa_n(n-1)!/(-d)^{n-1}$, rebuilds the normalized coefficients from these classical cumulants and returns the monic degree-$d$ polynomial. The sequence must be complete: `d` defaults to its length and, if supplied, must equal it. Missing cumulants are never filled with zeros. A degree-$n$ source in ambient dimension $d$ reconstructs $x^{d-n}p(x)$.
+
+Exact mode accepts integers, rationals and FLINT values and rejects floats, so floating observations are never silently promoted to exact data; convert explicitly when that is intended. It returns a new `RealRootedPolynomial` with lazy validation. The reconstruction is formal: cumulants with a negative second cumulant, for example, need not give a real-rooted polynomial, and no root property is asserted. `numerical=True` takes finite real values and returns a new float64 array of descending coefficients, with no conditioning bound; nonfinite coefficients raise `RuntimeError`.
+
+`matrix_finite_cumulants(matrix, *, d=None, paired=False)` is the float64 per-sample forward map, with the validation, pairing and ambient-dimension rules of `matrix_moments`. It centers the spectrum at $\kappa_1$ before forming normalized coefficients from the eigenvalues, so higher cumulants are unaffected by large offsets. Per-sample cumulants, the average of per-sample cumulants and the cumulants of an averaged characteristic polynomial are three different targets, and none identifies a matrix ensemble:
+
+```python
+import numpy as np
+import sympy as sp
+from finitefree import FiniteRTransform, RealRootedPolynomial, inverse_finite_r, matrix_finite_cumulants
+from finitefree.convolutions import symmetric_additive
+
+assert list(inverse_finite_r([2, 2]).coeffs) == [1, -4, 3]
+p = RealRootedPolynomial.from_roots([1, 2, 6])
+q = RealRootedPolynomial.from_roots([-1, 0, 4])
+summed = [a + b for a, b in zip(FiniteRTransform(p, 3), FiniteRTransform(q, 3))]
+assert inverse_finite_r(summed).coeffs.tolist() == symmetric_additive(p, q, 3).coeffs.tolist()
+assert inverse_finite_r([0, -1]).coeffs.tolist() == [1, 0, sp.Rational(1, 2)]  # not real-rooted
+
+draws = [np.diag([1.0, 3.0]), np.diag([3.0, 5.0])]
+per_draw = [matrix_finite_cumulants(m) for m in draws]                 # [2, 2], [4, 2]
+np.testing.assert_allclose(per_draw, [[2, 2], [4, 2]])
+np.testing.assert_allclose(inverse_finite_r(np.mean(per_draw, axis=0), numerical=True), [1, -6, 8])
+assert FiniteRTransform(RealRootedPolynomial([1, -6, 9]), 2) == [3, 0]  # mean polynomial
+```
+
 ### Root and matrix moments
 
 `root_moments(p, order, *, d=None)` returns the normalized root moments $m_0=1$ and $m_k=\frac{1}{d}\sum_{j=1}^{n}\lambda_j^k$ for a degree-$n$ polynomial and ambient dimension $d\ge n$ (default $n$), embedding $d-n$ zero roots. Power sums come from Newton identities on the exact rational coefficients, so the leading coefficient does not matter and orders above the degree are not truncated. This differs from `FiniteRTransform`, which returns zero above the ambient dimension. The function reads coefficients only. It does not validate real-rootedness, extract roots, or certify positivity: a polynomial with nonreal roots is accepted and its values are power sums over its complex roots, not moments of a spectral measure. A nonzero constant requires an explicit `d` and returns `[1, 0, ..., 0]`. `order` and `d` accept integer-index objects; booleans, fractional values and out-of-range values raise `ValueError`, as do symbolic non-rational coefficients. Each call returns a new list of SymPy rationals.

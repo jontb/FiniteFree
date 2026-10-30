@@ -101,6 +101,52 @@ def sample_wishart(
     return W * scale
 
 
+def matrix_finite_cumulants(
+    matrix: Any,
+    *,
+    d: Optional[SupportsIndex] = None,
+    paired: bool = False,
+) -> NDArray[np.float64]:
+    r"""
+    Return the float64 finite cumulants $\kappa_1,\ldots,\kappa_d$ of one sample.
+    Validation, pairing and the ambient dimension follow matrix_moments: d-n zero
+    eigenvalues are embedded, and the result matches FiniteRTransform(p, order=d,
+    d=d) for the effective characteristic polynomial p. The spectrum is centered
+    at $\kappa_1$ (the mean over d) before forming normalized coefficients from
+    eigenvalues, so higher cumulants are unaffected by large offsets; $\kappa_1$
+    is restored. Results are float64 estimates without enclosures; high orders
+    are ill-conditioned. Nonfinite cumulants raise RuntimeError. Per-sample
+    cumulants, their average and cumulants of an averaged polynomial are
+    different targets. Returns a new array.
+    """
+    eigenvalues, dimension = _sample_spectrum(matrix, d, paired)
+    roots = np.zeros(dimension, dtype=np.float64)
+    roots[: eigenvalues.shape[0]] = eigenvalues
+    mean = math.fsum(roots) / dimension
+    with np.errstate(over="ignore", invalid="ignore"):
+        coefficients = np.poly(roots - mean)
+        # Normalized elementary coefficients of the centered roots.
+        normalized = [
+            (-1) ** k * coefficients[k] / math.comb(dimension, k)
+            for k in range(dimension + 1)
+        ]
+        cumulants = np.empty(dimension, dtype=np.float64)
+        classical: list[float] = []
+        factor = 1.0  # (-d)^(n-1)/(n-1)!
+        for n in range(1, dimension + 1):
+            value = normalized[n]
+            for k in range(1, n):
+                value -= math.comb(n - 1, k - 1) * classical[k - 1] * normalized[n - k]
+            classical.append(value)
+            if n > 1:
+                factor *= -dimension / (n - 1)
+            cumulants[n - 1] = value * factor
+    cumulants[0] = mean
+    if not np.all(np.isfinite(cumulants)):
+        raise RuntimeError("Matrix finite cumulants exceed the finite float64 range.")
+    return cumulants
+
+
 def _positive_real(value: Any, name: str, *, nonzero_only: bool = False) -> float:
     """Return a finite real parameter, rejecting booleans and complex values."""
     bound = "nonzero" if nonzero_only else "positive"
@@ -269,6 +315,39 @@ def wishart_expected_poly(d: int, n: int, beta: int = 2) -> RealRootedPolynomial
     return result
 
 
+def _sample_spectrum(
+    matrix: Any, d: Optional[SupportsIndex], paired: bool
+) -> tuple[NDArray[np.float64], int]:
+    """Validate one Hermitian sample; return effective eigenvalues and ambient d."""
+    if not isinstance(paired, (bool, np.bool_)):
+        raise ValueError("paired must be a boolean.")
+    sample = np.array(matrix, dtype=np.complex128)
+    if sample.ndim != 2 or sample.shape[0] != sample.shape[1] or sample.size == 0:
+        raise ValueError("matrix must be a nonempty square matrix.")
+    if not np.all(np.isfinite(sample)):
+        raise ValueError("matrix must contain finite entries.")
+    if not _is_numerically_hermitian(sample):
+        raise ValueError("matrix must be numerically Hermitian.")
+    eigenvalues = np.asarray(np.linalg.eigvalsh(sample), dtype=np.float64)
+    if not np.all(np.isfinite(eigenvalues)):
+        raise ValueError("matrix eigenvalues must be finite.")
+    if paired:
+        if sample.shape[0] % 2 or not _has_adjacent_pairs(eigenvalues):
+            raise ValueError("paired matrices must have adjacent eigenvalue pairs.")
+        eigenvalues = eigenvalues[::2]
+
+    n = eigenvalues.shape[0]
+    if d is None:
+        return eigenvalues, n
+    dimension = _moment_index(d, "d", positive=True)
+    if dimension < n:
+        raise ValueError(
+            f"Ambient dimension d ({dimension}) cannot be less than the "
+            f"effective matrix dimension ({n})."
+        )
+    return eigenvalues, dimension
+
+
 def matrix_moments(
     matrix: Any,
     order: SupportsIndex,
@@ -293,34 +372,7 @@ def matrix_moments(
     characteristic polynomial. Returns a new float64 array.
     """
     count = _moment_index(order, "order")
-    if not isinstance(paired, (bool, np.bool_)):
-        raise ValueError("paired must be a boolean.")
-    sample = np.array(matrix, dtype=np.complex128)
-    if sample.ndim != 2 or sample.shape[0] != sample.shape[1] or sample.size == 0:
-        raise ValueError("matrix must be a nonempty square matrix.")
-    if not np.all(np.isfinite(sample)):
-        raise ValueError("matrix must contain finite entries.")
-    if not _is_numerically_hermitian(sample):
-        raise ValueError("matrix must be numerically Hermitian.")
-    eigenvalues = np.linalg.eigvalsh(sample)
-    if not np.all(np.isfinite(eigenvalues)):
-        raise ValueError("matrix eigenvalues must be finite.")
-    if paired:
-        if sample.shape[0] % 2 or not _has_adjacent_pairs(eigenvalues):
-            raise ValueError("paired matrices must have adjacent eigenvalue pairs.")
-        eigenvalues = eigenvalues[::2]
-
-    n = eigenvalues.shape[0]
-    if d is None:
-        dimension = n
-    else:
-        dimension = _moment_index(d, "d", positive=True)
-        if dimension < n:
-            raise ValueError(
-                f"Ambient dimension d ({dimension}) cannot be less than the "
-                f"effective matrix dimension ({n})."
-            )
-
+    eigenvalues, dimension = _sample_spectrum(matrix, d, paired)
     moments = np.empty(count + 1, dtype=np.float64)
     moments[0] = 1.0
     powers = np.ones_like(eigenvalues)
