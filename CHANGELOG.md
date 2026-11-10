@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Add certified root refinement from a starting point.
+  `RealRootedPolynomial.evaluate_roots_float64(initial=...)` runs Arb
+  Aberth-Ehrlich iteration from the supplied values and accepts the result only
+  when strict sign changes prove one simple real root per bracket; otherwise
+  evaluation proceeds as before. Add `sample_convolution_spectrum`, which
+  estimates the roots of a multiplicative or symmetric additive convolution from
+  Haar-rotated matrices for use as that starting point, and
+  `PreparedConvolution`, which reuses one fixed polynomial and warm-starts
+  repeated root evaluations with an exact-isolation fallback. Calls without
+  `initial` and the existing convolution functions are unchanged.
+- Certify the `parallel=True` root seeker (#67). A converged float64
+  Aberth-Ehrlich result is now used only as the starting point of the certified
+  refinement above and is returned when the sign-change certificate accepts it;
+  otherwise the companion and Arb paths answer as before. The balanced companion
+  path no longer leaks SciPy's `RuntimeWarning: invalid value encountered in
+  cast` for extreme coefficient ranges.
 - Add `sample_beta_laguerre` for the compact Dumitriu-Edelman bidiagonal
   Laguerre factor at any positive real beta and real shape `n > d - 1`. Its
   normalization matches `sample_wishart` at beta 1, 2 and 4, and its expected

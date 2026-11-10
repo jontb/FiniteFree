@@ -55,6 +55,11 @@ oracles and edge cases when changing the suite:
 - Streaming coefficient bands use closed-form t quantiles at extreme scales;
   moments/counts agree with retained samples across update order and rescaling.
   Invalid updates preserve state and stored array shapes do not grow with samples.
+- Certified refinement, sampled seeds and prepared convolutions
+  (`test_seeded_roots.py`) are compared with independent 192-bit Arb isolation
+  of the exact rational polynomial, never with a second run of the refined
+  path. Poor, tied and far starts, repeated roots, non-real-rooted inputs and a
+  subset of the roots must fail the certificate and leave results unchanged.
 - Root, CRT, matrix-input, and derivative cases retain range, ownership, and
   invalid-input checks alongside their exact or analytic references.
   All ten recurrence families retain degrees 2, 17 and 64, independently isolated

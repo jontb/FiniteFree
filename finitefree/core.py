@@ -680,7 +680,10 @@ class RealRootedPolynomial(Polynomial):
         return PolynomialRootDist(roots)
 
     def evaluate_roots_float64(
-        self, parallel: bool = False, exact: bool = True
+        self,
+        parallel: bool = False,
+        exact: bool = True,
+        initial: Union[Sequence[Any], NDArray[Any], None] = None,
     ) -> NDArray[Any]:
         """
         Return sorted float64 roots with multiplicities after domain validation.
@@ -692,20 +695,45 @@ class RealRootedPolynomial(Polynomial):
         supported orthogonal families and proven Hermite additive convolutions.
         Otherwise use a balanced companion matrix, or parallelized Aberth-Ehrlich
         when parallel=True, with high-precision/general numerical fallback.
-        Unconverged or non-real Aberth-Ehrlich iterates use the companion path.
+        Unconverged or non-real Aberth-Ehrlich iterates use the companion path;
+        converged ones are returned only after the certified refinement described
+        under initial accepts them.
         Arb validation retains isolated roots. An exact=True request bypasses
         an approximate cache or one recorded at a lower working precision.
         Nonfinite numerical results raise RuntimeError without entering the cache;
         exact construction and real-rootedness certification remain available.
         Nonfinite/underflowed recurrences fall back; extreme affine scales or
         shifts remain limited by float64 representability and conditioning.
+        initial, when given for rational coefficients, supplies one finite starting
+        value per root. Before any other solver, Arb Aberth-Ehrlich refinement runs
+        from it and is accepted only if the polynomial changes sign strictly
+        between the sorted results, which proves simple real roots, one per
+        bracket, and therefore real-rootedness. Accepted results are cached as an
+        exact-path result at the current precision. If refinement or the
+        certificate fails (for example at a repeated root or from a poor start),
+        evaluation continues exactly as without initial. A cached result that
+        already satisfies the request is returned without using initial.
         """
-        self.verify_real_rootedness()
+        if initial is not None and len(initial) != self.degree:
+            raise ValueError("initial must supply one starting value per root.")
         if self._roots_cached is not None and (
             not exact
             or (self._roots_cached_exact and self._roots_cached_prec >= flint.ctx.prec)
         ):
+            self.verify_real_rootedness()
             return self._roots_cached
+        if initial is not None and self._is_flint and self.degree >= 1:
+            from .utils.refine import certified_real_roots_from
+
+            refined = certified_real_roots_from(self._fmpq_poly, initial)
+            if refined is not None:
+                res = self._finite_float64_root_array(refined)
+                self._is_verified = True
+                self._roots_cached = res
+                self._roots_cached_exact = True
+                self._roots_cached_prec = flint.ctx.prec
+                return res
+        self.verify_real_rootedness()
         res = self._evaluate_roots_float64_uncached(parallel=parallel, exact=exact)
         res = self._finite_float64_root_array(res)
         self._roots_cached = res
@@ -841,7 +869,16 @@ class RealRootedPolynomial(Polynomial):
                         # CPU Seeker via NumPy (Vectorized)
                         seeded = _aberth_ehrlich_real_roots(np, scaled_coeffs)
                     if seeded is not None:
-                        return np.asarray(np.sort(seeded) * S, dtype=np.float64)
+                        # A converged float64 iteration is still only a candidate
+                        # (issue #67). Use it as the start of the certified Arb
+                        # refinement and return nothing the certificate rejects.
+                        from .utils.refine import certified_real_roots_from
+
+                        certified = certified_real_roots_from(
+                            self._fmpq_poly, np.sort(seeded) * S
+                        )
+                        if certified is not None:
+                            return certified
             except (OverflowError, ValueError):
                 pass  # Fall through to companion matrix/certified solver
 
@@ -859,9 +896,14 @@ class RealRootedPolynomial(Polynomial):
             # Balance companion matrix to minimize floating-point errors
             from scipy.linalg import matrix_balance
 
-            balanced_companion, _ = matrix_balance(companion, permute=False)
-
-            raw_roots = np.linalg.eigvals(balanced_companion)
+            with warnings.catch_warnings():
+                # Extreme coefficient ranges make SciPy's balancing cast NaN
+                # exponents; the result is then rejected by the real-root test.
+                warnings.simplefilter("ignore", RuntimeWarning)
+                balanced_companion, _ = matrix_balance(companion, permute=False)
+                if not np.all(np.isfinite(balanced_companion)):
+                    raise ValueError("Balanced companion matrix is not finite")
+                raw_roots = np.linalg.eigvals(balanced_companion)
             # Check if all roots are real (imaginary parts negligible)
             if np.all(np.abs(raw_roots.imag) < 1e-10 * (np.abs(raw_roots.real) + 1)):
                 return np.sort(raw_roots.real) * S
@@ -1316,16 +1358,24 @@ class UnitaryPolynomial(RealRootedPolynomial):
         return False
 
     def evaluate_roots_float64(
-        self, parallel: bool = False, gpu: bool = False
+        self,
+        parallel: bool = False,
+        gpu: bool = False,
+        initial: Union[Sequence[Any], NDArray[Any], None] = None,
     ) -> NDArray[Any]:
         r"""
         Return read-only complex128 roots ordered by angle in [-pi, pi].
+        initial is accepted for signature compatibility only: certified refinement
+        from a starting point applies to real roots, so a value other than None
+        raises ValueError.
         Coefficients are numerically evaluated using SymPy and passed to a companion
         eigensolver. gpu=True attempts CuPy and falls back to NumPy on failure.
         parallel is retained in the signature but does not change this implementation.
         No Arb working-precision path, modulus certification or final-finiteness check
         is provided here. Results retain complex128 conditioning and range limits.
         """
+        if initial is not None:
+            raise ValueError("initial is not supported for unitary polynomials.")
         if self._roots_cached is not None:
             return self._roots_cached
 
