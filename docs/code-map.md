@@ -7,8 +7,8 @@ before moving code or changing ownership of cached state.
 
 | Area | Sources | Contract to preserve |
 | --- | --- | --- |
-| Polynomial objects and roots | `core.py`, `utils/roots.py`, `utils/prs.py` | Exact coefficient storage, lazy real-root certification, owned inputs, cache precision and numerical output limits |
-| Convolutions and transforms | `convolutions.py`, `transforms.py` | Coefficient normalization, ambient dimension, transform conventions, domains and explicit options |
+| Polynomial objects and roots | `core.py`, `utils/roots.py`, `utils/prs.py`, `utils/refine.py` | Exact coefficient storage, lazy real-root certification, owned inputs, cache precision and numerical output limits; refinement from a starting point is accepted only with the sign-change certificate and restores the working precision |
+| Convolutions and transforms | `convolutions.py`, `transforms.py` | Coefficient normalization, ambient dimension, transform conventions, domains and explicit options; sampled spectra are estimates used only as starting points, and prepared convolutions return route-independent roots |
 | Orthogonal families | `orthogonal.py` | Family parameters, normalization, exact recurrences and supported certification domains |
 | Multivariate polynomials | `multivariate.py` | Ordered symbol contexts, exact sparse algebra, derivative shapes, owned exports and explicit numerical limits |
 | Matrix pencils and SLPs | `hyperbolic/pencils.py`, `hyperbolic/slp.py` | Rational input preservation, determinant conventions and the documented singular-point derivative limits |
