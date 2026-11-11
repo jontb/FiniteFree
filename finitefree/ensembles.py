@@ -569,3 +569,45 @@ class EmpiricalComparison:
         if show:
             plt.show()
         return fig
+
+
+def matrix_rectangular_cumulants(matrix: Any) -> NDArray[np.float64]:
+    r"""
+    Return the float64 rectangular cumulants $K_2,\ldots,K_{2d}$ of one sample.
+    matrix is a finite real or complex $d\times m$ array with $d\le m$; its d
+    squared singular values are the roots, and the result estimates
+    `rectangular_cumulants(p, columns=m)` for $p=\chi(AA^*)$. Values are float64
+    without enclosures and high orders are ill-conditioned; nonfinite cumulants
+    raise RuntimeError. Per-sample cumulants, their average and the cumulants of
+    an averaged polynomial are different targets. Returns a new array.
+    """
+    sample = np.array(matrix, dtype=np.complex128)
+    if sample.ndim != 2 or sample.size == 0:
+        raise ValueError("matrix must be a nonempty two-dimensional array.")
+    d, m = sample.shape
+    if d > m:
+        raise ValueError("matrix must have at least as many columns as rows.")
+    if not np.all(np.isfinite(sample)):
+        raise ValueError("matrix must contain finite entries.")
+    squared = np.linalg.svd(sample, compute_uv=False) ** 2
+    with np.errstate(over="ignore", invalid="ignore"):
+        coefficients = np.poly(squared)  # x^d + sum a_{2i} x^{d-i}
+        series = [1.0]
+        for i in range(1, d + 1):
+            weight = math.exp(
+                math.lgamma(d - i + 1)
+                + math.lgamma(m - i + 1)
+                - math.lgamma(d + 1)
+                - math.lgamma(m + 1)
+            )
+            series.append(float(coefficients[i]) * weight)
+        logs = [0.0] * (d + 1)
+        for order in range(1, d + 1):
+            acc = series[order] * order
+            for i in range(1, order):
+                acc -= logs[i] * i * series[order - i]
+            logs[order] = acc / order
+        result = np.array([logs[k] * k for k in range(1, d + 1)], dtype=np.float64)
+    if not np.all(np.isfinite(result)):
+        raise RuntimeError("Rectangular cumulants are not finite in float64.")
+    return result
