@@ -573,3 +573,116 @@ def SymmetricFiniteSTransform(
             s_transform[k - 1] = flint_to_float(res)
 
     return s_transform
+
+
+def _rectangular_columns(columns: Any, d: int) -> int:
+    if isinstance(columns, (bool, np.bool_)):
+        raise ValueError("columns must be an integer.")
+    try:
+        m = operator.index(columns)
+    except TypeError as error:
+        raise ValueError("columns must be an integer.") from error
+    if m < d:
+        raise ValueError("columns cannot be smaller than dimension d.")
+    return m
+
+
+def _rectangular_weights(d: int, m: int) -> List[Any]:
+    """w_i = (m-i)!/(i! m!), so the cumulant series is 1 + sum (-1)^i e~_i w_i y^i."""
+    import flint
+
+    weights = [flint.fmpq(1)]
+    for i in range(1, d + 1):
+        weights.append(weights[-1] * flint.fmpq(1, i * (m - i + 1)))
+    return weights
+
+
+def rectangular_cumulants(
+    p: RealRootedPolynomial,
+    *,
+    columns: SupportsIndex,
+    d: Optional[SupportsIndex] = None,
+) -> List[Any]:
+    r"""
+    Return the exact rectangular finite free cumulants $K_2,\ldots,K_{2d}$ of p.
+    p is read as the characteristic polynomial of $AA^*$ for a $d\times m$ matrix
+    with m = `columns` >= d, so its roots are squared singular values; in the
+    notation of Cuenca (arXiv:2409.04305) these are the $(n,d)$-rectangular
+    cumulants with $n=m-d$. Writing $p=x^d+\sum_i a_{2i}x^{d-i}$,
+    $K_{2\ell}=\ell\,[y^\ell]\log\bigl(1+\sum_i a_{2i}\frac{(d-i)!(m-i)!}{d!\,m!}
+    y^i\bigr)$. They are additive under
+    `asymmetric_additive(p, q, d, columns=m)` and $K_{2\ell}$ is homogeneous of
+    degree $\ell$ in the roots. d defaults to the degree of p; a larger d embeds
+    ambient zero roots. Rational coefficients are required and the result is a
+    new list of exact FLINT rationals. No real-rootedness or sign domain is
+    checked.
+    """
+    import flint
+
+    dimension = p.degree if d is None else _moment_index(d, "d", positive=True)
+    if dimension < 1:
+        raise ValueError("d must be a positive integer.")
+    if p.degree > dimension:
+        raise ValueError("Polynomial degree cannot exceed dimension d.")
+    m = _rectangular_columns(columns, dimension)
+    normalized = p._normalized_coeffs_flint(dimension)
+    weights = _rectangular_weights(dimension, m)
+    series = [
+        (normalized[i] * weights[i]) * (-1 if i % 2 else 1)
+        for i in range(dimension + 1)
+    ]
+    logs: List[Any] = [flint.fmpq(0)] * (dimension + 1)
+    for order in range(1, dimension + 1):
+        acc = series[order] * order
+        for i in range(1, order):
+            acc -= logs[i] * i * series[order - i]
+        logs[order] = acc / order
+    return [logs[order] * order for order in range(1, dimension + 1)]
+
+
+def inverse_rectangular_cumulants(
+    cumulants: Union[Sequence[Any], NDArray[Any]],
+    *,
+    columns: SupportsIndex,
+    d: Optional[SupportsIndex] = None,
+) -> RealRootedPolynomial:
+    r"""
+    Reconstruct the monic degree-d polynomial with rectangular cumulants
+    $K_2,\ldots,K_{2d}$ for `columns` = m, the inverse of
+    `rectangular_cumulants(p, columns=m, d=d)`. The complete sequence is
+    required: d defaults to its length and, if given, must equal it. Values must
+    be rational (integers, rationals, FLINT values); floats are rejected so
+    observations are not silently promoted to exact data. Returns a new
+    RealRootedPolynomial with lazy validation: arbitrary cumulants need not give
+    real, or non-negative, roots, and neither is asserted.
+    """
+    import flint
+
+    if isinstance(cumulants, (str, bytes)):
+        raise ValueError("cumulants must be a sequence of values.")
+    values = list(cumulants)
+    if not values:
+        raise ValueError("cumulants must contain at least one value.")
+    dimension = len(values)
+    if d is not None and _moment_index(d, "d", positive=True) != dimension:
+        raise ValueError(
+            f"Full reconstruction requires exactly d cumulants; got {dimension} "
+            f"for d={operator.index(d)}."
+        )
+    m = _rectangular_columns(columns, dimension)
+    exact = []
+    for value in values:
+        if isinstance(value, (float, np.floating)):
+            raise ValueError("Exact reconstruction requires rational cumulants.")
+        exact.append(sympy_to_fmpq(value))
+    series: List[Any] = [flint.fmpq(1)]
+    for order in range(1, dimension + 1):
+        acc = flint.fmpq(0)
+        for i in range(1, order + 1):
+            acc += exact[i - 1] * series[order - i]
+        series.append(acc / order)
+    weights = _rectangular_weights(dimension, m)
+    normalized = [
+        (series[i] / weights[i]) * (-1 if i % 2 else 1) for i in range(dimension + 1)
+    ]
+    return RealRootedPolynomial.from_normalized_coeffs(normalized)

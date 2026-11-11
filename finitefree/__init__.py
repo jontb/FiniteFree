@@ -16,6 +16,7 @@ from .ensembles import (
     gue_expected_poly,
     matrix_finite_cumulants,
     matrix_moments,
+    matrix_rectangular_cumulants,
     sample_beta_hermite,
     sample_beta_laguerre,
     sample_goe,
@@ -54,6 +55,8 @@ from .transforms import (
     FiniteTTransform,
     SymmetricFiniteSTransform,
     inverse_finite_r,
+    inverse_rectangular_cumulants,
+    rectangular_cumulants,
     root_moments,
 )
 from .utils.precision import PrecisionContext
@@ -78,6 +81,9 @@ __all__ = [
     "FiniteTTransform",
     "SymmetricFiniteSTransform",
     "root_moments",
+    "rectangular_cumulants",
+    "inverse_rectangular_cumulants",
+    "matrix_rectangular_cumulants",
     "matrix_moments",
     "inverse_finite_r",
     "matrix_finite_cumulants",
