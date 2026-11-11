@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add the rectangular additive convolution: `asymmetric_additive(p, q, d,
+  columns=m)` is the expected characteristic polynomial of
+  `(A + QBR)(A + QBR)^*` for `d x m` matrices, `m >= d`. The default
+  `columns=None` is the existing square convolution, unchanged, and `weights`
+  still only dilate the inputs. Add `rectangular_cumulants` and
+  `inverse_rectangular_cumulants` for the exact cumulants that linearize it, and
+  `matrix_rectangular_cumulants` for the float64 cumulants of one rectangular
+  sample (roadmap T2).
 - Add `sample_beta_laguerre` for the compact Dumitriu-Edelman bidiagonal
   Laguerre factor at any positive real beta and real shape `n > d - 1`. Its
   normalization matches `sample_wishart` at beta 1, 2 and 4, and its expected

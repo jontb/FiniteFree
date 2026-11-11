@@ -122,6 +122,12 @@ references; they cannot be the only checks.
 
 ### T2: rectangular finite R and cumulants — second priority
 
+Status: the convolution (`asymmetric_additive(..., columns=m)`), the exact
+cumulants and their inverse, and the per-sample float64 cumulants are
+implemented. Not yet done: a rectangular finite R-transform object, numerical
+(float) reconstruction from empirical cumulants, and symmetrized singular-value
+conventions.
+
 Introduce the rectangular convolution and its cumulants together, with an
 explicit dimension pair. A useful convention to review is a `d` by `m` matrix,
 `m >= d`, with excess dimension `n = m-d` and aspect ratio `d/m`. Document how

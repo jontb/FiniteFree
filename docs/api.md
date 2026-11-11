@@ -200,7 +200,36 @@ e_k(p\uplus_d q)=\frac{k!}{d!(d-k)!}
 \sum_{i=0}^k\frac{(d-i)!(d-k+i)!}{i!(k-i)!}e_i(p)e_{k-i}(q).
 $$
 
-Optional asymmetric `weights=[a,b]` dilate the input roots before this calculation. They do not represent rank or alter dimensions. Real-root preservation uses real-rooted inputs for symmetric addition, non-negative-root inputs for asymmetric addition, and real-rooted inputs with one non-negative-root input for multiplication. The implementation permits formal coefficients without checking those domains eagerly; root requests validate reconstructed outputs.
+`asymmetric_additive(p, q, d, columns=m)` is the rectangular additive convolution of Gribinski and Marcus: for $d\times m$ matrices with $p=\chi(AA^*)$, $q=\chi(BB^*)$ and independent Haar rotations $Q$, $R$, it is the expected characteristic polynomial of $(A+QBR)(A+QBR)^*$, with
+
+$$
+e_k(p\boxplus_d^{\,m} q)=\sum_{i+j=k}\binom{k}{i}\frac{(m-i)!(m-j)!}{m!(m-k)!}e_i(p)e_j(q).
+$$
+
+`columns` is the number of columns $m\ge d$; the roots are squared singular values. The default `columns=None` means $m=d$ and is the square formula above, unchanged. In the $(n,d)$ notation of the rectangular literature, $n=m-d$.
+
+`rectangular_cumulants(p, *, columns, d=None)` returns the exact rectangular cumulants $K_2,\ldots,K_{2d}$ in Cuenca's convention (arXiv:2409.04305): with $p=x^d+\sum_i a_{2i}x^{d-i}$,
+
+$$
+K_{2\ell}=\ell\,[y^\ell]\log\Bigl(1+\sum_{i=1}^d a_{2i}\frac{(d-i)!(m-i)!}{d!\,m!}y^i\Bigr).
+$$
+
+They add under `asymmetric_additive(..., columns=m)`, and $K_{2\ell}$ is homogeneous of degree $\ell$ in the roots. `inverse_rectangular_cumulants(cumulants, *, columns, d=None)` is the exact inverse; it needs the complete rational sequence and validates geometry lazily, since arbitrary cumulants need not give non-negative real roots. `matrix_rectangular_cumulants(matrix)` is the float64 per-sample forward map for one $d\times m$ real or complex array, computed from its squared singular values. A lower-degree polynomial with `d` given embeds ambient zero roots; the $m-d$ extra zero eigenvalues of the larger Gram matrix $A^*A$ are not part of $p$. As for `matrix_finite_cumulants`, per-sample cumulants, their average and the cumulants of an averaged polynomial are different targets.
+
+```python
+from fractions import Fraction
+from finitefree import RealRootedPolynomial, inverse_rectangular_cumulants, rectangular_cumulants
+from finitefree.convolutions import asymmetric_additive
+
+p = RealRootedPolynomial.from_roots([1, 3])
+q = RealRootedPolynomial.from_roots([2, Fraction(7, 2)])
+r = asymmetric_additive(p, q, 2, columns=3)
+assert r.coeffs.tolist() == [1, Fraction(-19, 2), Fraction(52, 3)]
+summed = [a + b for a, b in zip(rectangular_cumulants(p, columns=3), rectangular_cumulants(q, columns=3))]
+assert inverse_rectangular_cumulants(summed, columns=3).coeffs.tolist() == r.coeffs.tolist()
+```
+
+Optional asymmetric `weights=[a,b]` dilate the input roots before this calculation. They do not represent rank or alter dimensions; use `columns` for the rectangular shape. Real-root preservation uses real-rooted inputs for symmetric addition, non-negative-root inputs for asymmetric addition, and real-rooted inputs with one non-negative-root input for multiplication. The implementation permits formal coefficients without checking those domains eagerly; root requests validate reconstructed outputs.
 
 ### Coefficient ownership and cached arrays
 

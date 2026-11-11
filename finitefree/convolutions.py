@@ -96,9 +96,18 @@ def asymmetric_additive(
     q: RealRootedPolynomial,
     d: int,
     weights: Optional[Sequence[Any]] = None,
+    *,
+    columns: Optional[int] = None,
 ) -> RealRootedPolynomial:
     r"""
-    Compute the factorial-weighted asymmetric additive convolution exactly.
+    Compute the asymmetric (rectangular) additive convolution exactly.
+    For $d\times m$ matrices A and B with $p=\chi(AA^*)$, $q=\chi(BB^*)$ and
+    independent Haar rotations Q, R, the result is the expected characteristic
+    polynomial of $(A+QBR)(A+QBR)^*$. `columns` is m, the number of columns,
+    with m >= d; the default m = d is the square asymmetric convolution of
+    Marcus, Spielman and Srivastava, and m > d is the rectangular convolution of
+    Gribinski and Marcus. In normalized coefficients
+    $e_k(r)=\sum_{i+j=k}\binom{k}{i}\frac{(m-i)!(m-j)!}{m!(m-k)!}e_i(p)e_j(q)$.
     Ambient d must cover both input degrees. A scaled FLINT polynomial Cauchy
     product constructs the monic output; bit cost depends on coefficient sizes.
     When weights is supplied, weights[0] and weights[1] dilate the respective
@@ -108,6 +117,14 @@ def asymmetric_additive(
     """
     if p.degree > d or q.degree > d:
         raise ValueError("Polynomial degrees cannot exceed dimension d.")
+    if columns is None:
+        m = d
+    else:
+        if isinstance(columns, bool) or not isinstance(columns, int):
+            raise ValueError("columns must be an integer.")
+        if columns < d:
+            raise ValueError("columns cannot be smaller than dimension d.")
+        m = columns
 
     if weights is not None:
         p = p.dilation(weights[0])
@@ -118,11 +135,11 @@ def asymmetric_additive(
     e_p = p._normalized_coeffs_flint(d)
     e_q = q._normalized_coeffs_flint(d)
 
-    # Compute W[i] = (d - i)! / i! sequentially in O(d)
+    # W[i] = (m - i)! / i! sequentially in O(d); m = d is the square case.
     W: list[Any] = [None] * (d + 1)
-    W[0] = flint.fmpq(math.factorial(d))
+    W[0] = flint.fmpq(math.factorial(m))
     for i in range(1, d + 1):
-        W[i] = W[i - 1] / (i * (d - i + 1))
+        W[i] = W[i - 1] / (i * (m - i + 1))
 
     A_coeffs = []
     B_coeffs = []
@@ -135,10 +152,11 @@ def asymmetric_additive(
     B_poly = flint.fmpq_poly(B_coeffs)
     C_poly = A_poly * B_poly
 
+    # e_k = k! / (m! (m - k)!) * C_k, built from 1 / (W[0] W'[k]) with
+    # W'[k] = (m - k)! / k! = W[k].
     e_res = []
-    W_d = W[d]
     for k in range(d + 1):
-        val_res = C_poly[k] * (W_d / W[k])
+        val_res = C_poly[k] / (W[0] * W[k])
         e_res.append(val_res)
 
     return RealRootedPolynomial.from_normalized_coeffs(e_res)
